@@ -31,5 +31,6 @@ Thumbs.db
 # Exclude from repo
 recipes/blackred/
 .superpowers/
+.worktrees/
 
 preview/fonts/*/
