@@ -290,7 +290,7 @@ test("default public directory serves index.html at root", async (t) => {
   const body = await response.text();
 
   assert.equal(response.status, 200);
-  assert.match(body, /BeamerForge Workbench/);
+  assert.match(body, /id="wizardApp"/);
 });
 
 test("PUT /api/theme rejects bodies over 1MB without writing state", async (t) => {
