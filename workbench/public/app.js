@@ -195,7 +195,7 @@ function setBusy(isBusy) {
   elements.backStep.disabled = isBusy || currentStep().id === "start";
   elements.nextStep.disabled = isBusy || currentStep().id === "review";
   elements.reviewGenerate.disabled = isBusy || !canGenerate;
-  elements.compileTheme.disabled = isBusy;
+  elements.compileTheme.disabled = state.busy || !wizard.canGenerate(state.statuses);
 }
 
 async function saveDraft() {
@@ -510,14 +510,19 @@ function renderPreview() {
   replaceChildren(elements.slidePreview, [slide]);
 }
 
-async function generateTheme() {
+function reviewGate() {
   refreshStatuses();
   renderSummary();
   if (!wizard.canGenerate(state.statuses)) {
     setBuildStatus("Review required before generation.");
     navigateToStep("review");
-    return;
+    return false;
   }
+  return true;
+}
+
+async function generateTheme() {
+  if (!reviewGate()) return;
 
   try {
     setBusy(true);
@@ -537,6 +542,8 @@ async function generateTheme() {
 }
 
 async function compileTheme() {
+  if (!reviewGate()) return;
+
   try {
     setBusy(true);
     setStatus("Saving");
@@ -565,7 +572,7 @@ function render() {
   elements.backStep.disabled = state.busy || step.id === "start";
   elements.nextStep.disabled = state.busy || step.id === "review";
   elements.reviewGenerate.disabled = state.busy || !wizard.canGenerate(state.statuses);
-  elements.compileTheme.disabled = state.busy;
+  elements.compileTheme.disabled = state.busy || !wizard.canGenerate(state.statuses);
 }
 
 function bindControls() {

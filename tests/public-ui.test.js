@@ -58,3 +58,14 @@ test("browser script renders wizard steps and preserves cumulative choices", () 
   assert.match(script, /canGenerate/);
   assert.doesNotMatch(script, /syncThemeFromControls/);
 });
+
+test("browser script gates compile behind wizard review", () => {
+  const script = readPublicFile("app.js");
+  assert.match(
+    script,
+    /function reviewGate\(\) \{[\s\S]*?refreshStatuses\(\);[\s\S]*?renderSummary\(\);[\s\S]*?!wizard\.canGenerate\(state\.statuses\)[\s\S]*?setBuildStatus\("Review required before generation\."\);[\s\S]*?navigateToStep\("review"\);[\s\S]*?return false;[\s\S]*?return true;[\s\S]*?\}/
+  );
+  assert.match(script, /async function compileTheme\(\) \{[\s\S]*?if \(!reviewGate\(\)\) return;[\s\S]*?\/api\/compile/);
+  assert.match(script, /elements\.compileTheme\.disabled = state\.busy \|\| !wizard\.canGenerate\(state\.statuses\);/);
+  assert.doesNotMatch(script, /elements\.compileTheme\.disabled = state\.busy;/);
+});
