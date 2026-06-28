@@ -33,6 +33,11 @@ Thumbs.db
 .superpowers/
 .worktrees/
 
+# Workbench runtime state and generated projects
+workbench/state/
+workbench/build/
+templates/
+
 # Exclude from repo
 recipes/blackred/
 

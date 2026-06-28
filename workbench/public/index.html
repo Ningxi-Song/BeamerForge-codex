@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BeamerForge Workbench</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <aside class="panel controls" aria-label="Theme controls">
+        <header class="panel-header">
+          <p class="eyebrow">BeamerForge</p>
+          <h1>Template Workbench</h1>
+        </header>
+
+        <label class="control">
+          <span>Palette</span>
+          <select id="palette"></select>
+        </label>
+        <div id="paletteSwatches" class="palette-swatches" aria-label="Palette colors"></div>
+
+        <section class="color-editor" aria-label="Custom color picker">
+          <div class="color-editor-header">
+            <span>Custom Colors</span>
+            <button id="applySchemeColors" type="button" class="secondary-button">Apply Scheme</button>
+          </div>
+
+          <div id="colorModeTabs" class="segmented-tabs" aria-label="Color picker mode">
+            <button type="button" class="tab-button is-active" data-color-mode="slider">Slider</button>
+            <button type="button" class="tab-button" data-color-mode="cube">3D Cube</button>
+            <button type="button" class="tab-button" data-color-mode="palette">Palette</button>
+          </div>
+
+          <div id="sliderPanel" class="picker-main">
+            <div class="color-preview-box" id="baseColorPreview">
+              <input id="baseColorPicker" type="color" value="#456990" aria-label="Base color">
+              <span id="previewColorLabel" class="color-label">#456990</span>
+            </div>
+
+            <div class="slider-group" aria-label="Base RGB values">
+              <div class="slider-row">
+                <label for="baseRgbSliderR" class="r-label">R</label>
+                <input id="baseRgbSliderR" type="range" min="0" max="255" value="69" aria-label="Red slider">
+                <input id="baseRgbR" type="number" min="0" max="255" value="69" aria-label="Red">
+              </div>
+              <div class="slider-row">
+                <label for="baseRgbSliderG" class="g-label">G</label>
+                <input id="baseRgbSliderG" type="range" min="0" max="255" value="105" aria-label="Green slider">
+                <input id="baseRgbG" type="number" min="0" max="255" value="105" aria-label="Green">
+              </div>
+              <div class="slider-row">
+                <label for="baseRgbSliderB" class="b-label">B</label>
+                <input id="baseRgbSliderB" type="range" min="0" max="255" value="144" aria-label="Blue slider">
+                <input id="baseRgbB" type="number" min="0" max="255" value="144" aria-label="Blue">
+              </div>
+            </div>
+
+            <div class="hex-input-row">
+              <label for="baseHexInput">HEX</label>
+              <input id="baseHexInput" type="text" value="#456990" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Base HEX color">
+            </div>
+
+            <div class="inline-actions" aria-label="Copy current color">
+              <button id="copyHexColor" type="button" class="secondary-button">Copy HEX</button>
+              <button id="copyRgbColor" type="button" class="secondary-button">Copy RGB</button>
+            </div>
+          </div>
+
+          <div id="cubePanel" class="picker-main cube-panel" hidden>
+            <div class="cube-stage">
+              <canvas id="colorCubeCanvas" width="280" height="230" aria-label="3D RGB color cube"></canvas>
+              <span id="cubeHint" class="visually-hidden">3D RGB color cube picker</span>
+            </div>
+            <div class="cube-selected-info" aria-label="Selected cube color">
+              <span id="cubeSelectedSwatch" class="cube-selected-swatch"></span>
+              <span id="cubeSelectedValues" class="cube-selected-values">#456990 | rgb(69, 105, 144)</span>
+            </div>
+          </div>
+
+          <label class="control compact-control">
+            <span>Color Combination</span>
+            <select id="colorScheme"></select>
+          </label>
+
+          <div id="schemeTabs" class="scheme-tabs" aria-label="Color combination tabs"></div>
+          <p id="schemeDescription" class="scheme-description"></p>
+          <div id="schemeSwatches" class="scheme-swatches" aria-label="Generated color scheme"></div>
+          <div id="paletteDisplay" class="palette-display" aria-label="Generated palette display"></div>
+          <div class="inline-actions" aria-label="Palette actions">
+            <button id="copyAllColors" type="button" class="secondary-button">Copy All</button>
+            <button id="savePalette" type="button" class="secondary-button">Save Palette</button>
+          </div>
+          <div class="saved-section" aria-label="Saved palettes">
+            <span>Saved Palettes</span>
+            <div id="savedPalettes" class="saved-palettes"></div>
+          </div>
+        </section>
+
+        <label class="control">
+          <span>Body Font</span>
+          <select id="bodyFont"></select>
+        </label>
+        <div id="fontGallery" class="option-gallery font-gallery" aria-label="Font style samples"></div>
+
+        <label class="control">
+          <span>Bullet Style</span>
+          <select id="bulletStyle"></select>
+        </label>
+        <div id="bulletGallery" class="option-gallery bullet-gallery" aria-label="Bullet style samples"></div>
+
+        <label class="control">
+          <span>Block Style</span>
+          <select id="blockStyle"></select>
+        </label>
+
+        <label class="control">
+          <span>Navigation</span>
+          <select id="navigationStyle"></select>
+        </label>
+
+        <label class="control">
+          <span>Template Name</span>
+          <input id="templateName" type="text" spellcheck="false" autocomplete="off" inputmode="text" placeholder="blue-academic">
+        </label>
+      </aside>
+
+      <section class="preview-zone" aria-label="Live Beamer preview">
+        <div class="preview-toolbar">
+          <div>
+            <p class="eyebrow">HTML Preview</p>
+            <h2 id="previewHeading">Live Beamer preview</h2>
+          </div>
+          <div class="preview-toolbar-actions">
+            <div id="previewModeTabs" class="segmented-tabs preview-mode-tabs" aria-label="Preview mode">
+              <button type="button" class="tab-button is-active" data-preview-mode="content">Content</button>
+              <button type="button" class="tab-button" data-preview-mode="title">Title</button>
+              <button type="button" class="tab-button" data-preview-mode="blocks">Blocks</button>
+            </div>
+            <span id="saveStatus" class="status">Loading</span>
+          </div>
+        </div>
+        <article id="slidePreview" class="slide-preview" aria-labelledby="previewHeading"></article>
+      </section>
+
+      <aside class="panel output" aria-label="Build actions">
+        <div class="actions">
+          <button id="saveTheme" type="button">Save theme.json</button>
+          <button id="generateTheme" type="button">Generate .tex/.cls</button>
+          <button id="compileTheme" type="button">Compile PDF</button>
+        </div>
+
+        <section class="status-panel" aria-label="Build output">
+          <p class="eyebrow">Build Output</p>
+          <pre id="buildStatus">No build yet.</pre>
+        </section>
+      </aside>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

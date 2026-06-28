@@ -1,0 +1,49 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { DEFAULT_THEME, validateTheme, slugifyName } = require("../schema/theme-schema");
+
+test("validates the default theme", () => {
+  const result = validateTheme(DEFAULT_THEME);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.value.identity.name, "blue-academic");
+  assert.equal(result.value.foundation.aspectRatio, "16:9");
+});
+
+test("reports field-level validation errors", () => {
+  const broken = {
+    identity: { name: "Bad Name With Spaces" },
+    foundation: { aspectRatio: "3:2" },
+    colors: { paletteId: "academic-blue", background: "white", primary: "#456990", accent: "#57C3C2", text: "#000000" },
+    fonts: { body: "palatino", title: "palatino", mode: "serif-academic" },
+    bullets: { style: "pifont-outline" },
+    blocks: { style: "rounded" },
+    navigation: { style: "page-number" },
+    titlePage: { layout: "left-curtain" },
+    contentDefaults: { sampleTitle: "" }
+  };
+  const result = validateTheme(broken);
+  assert.equal(result.ok, false);
+  assert.deepEqual(
+    result.errors.map((error) => error.path),
+    ["identity.name", "foundation.aspectRatio", "colors.background", "contentDefaults.sampleTitle"]
+  );
+});
+
+test("reports field-level errors for invalid sample bullet items", () => {
+  const broken = JSON.parse(JSON.stringify(DEFAULT_THEME));
+  broken.contentDefaults.sampleBullets = ["Good", "", {}];
+
+  const result = validateTheme(broken);
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(
+    result.errors.map((error) => error.path),
+    ["contentDefaults.sampleBullets.1", "contentDefaults.sampleBullets.2"]
+  );
+});
+
+test("slugifies names for output paths", () => {
+  assert.equal(slugifyName("Blue Academic 2026"), "blue-academic-2026");
+  assert.equal(slugifyName("___Bamboo!!!"), "bamboo");
+});
