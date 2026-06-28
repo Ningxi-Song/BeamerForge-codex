@@ -28,9 +28,12 @@
 .DS_Store
 Thumbs.db
 
-# Exclude from repo
-recipes/blackred/
+# Local agent/worktree state
+.agents/
 .superpowers/
 .worktrees/
+
+# Exclude from repo
+recipes/blackred/
 
 preview/fonts/*/
