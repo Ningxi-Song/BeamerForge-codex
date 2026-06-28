@@ -101,6 +101,45 @@ test("browser boot loads validation metadata for persisted themes", () => {
   );
 });
 
+test("color step keeps the richer custom color workbench", () => {
+  const script = readPublicFile("app.js");
+  for (const token of [
+    "COLOR_SCHEMES",
+    "renderColorStepContent",
+    "applyGeneratedScheme",
+    "baseColorPicker",
+    "baseHexInput",
+    "baseRgbSliderR",
+    "schemeTabs",
+    "schemeSwatches",
+    "paletteDisplay",
+    "savePalette",
+    "savedPalettes"
+  ]) {
+    assert.match(script, new RegExp(token));
+  }
+
+  const css = readPublicFile("styles.css");
+  for (const selector of [
+    ".color-editor",
+    ".color-preview-box",
+    ".slider-row",
+    ".scheme-tabs",
+    ".scheme-swatches",
+    ".palette-display",
+    ".saved-palettes"
+  ]) {
+    assert.match(css, new RegExp(escapeRegExp(selector)));
+  }
+});
+
+test("custom color inputs update the preview without replacing the color step", () => {
+  const script = readPublicFile("app.js");
+  assert.match(script, /function refreshColorEditorOutputs\(/);
+  assert.match(script, /setBaseColor\(rgb, \{ render: false \}\);[\s\S]*?refreshColorEditorOutputs\(\);/);
+  assert.match(script, /setBaseColor\(\{ \.\.\.state\.baseColor, \[channel\]: nextValue \}, \{ render: false \}\);/);
+});
+
 test("public CSS defines wizard layout, option cards, summary, and preview states", () => {
   const css = readPublicFile("styles.css");
   for (const selector of [
