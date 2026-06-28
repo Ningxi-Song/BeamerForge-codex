@@ -43,6 +43,57 @@ function normalizeLatexSnippet(value) {
   return String(value || "").replace(/\\n/g, "\n");
 }
 
+const PACKAGE_TITLE_FONTS = Object.freeze({
+  palatino: {
+    packageLine: "\\usepackage{palatino}",
+    family: "ppl"
+  },
+  "latin-modern": {
+    packageLine: "\\usepackage{lmodern}",
+    family: "lmr"
+  },
+  helvetica: {
+    packageLine: "\\usepackage{helvet}",
+    family: "phv"
+  },
+  times: {
+    packageLine: "\\usepackage{mathptmx}",
+    family: "ptm"
+  }
+});
+
+function titleFontSupport(bodyFont, titleFont) {
+  const empty = { setup: "", definition: "", familyOption: "" };
+  if (!bodyFont || !titleFont || bodyFont.id === titleFont.id) return empty;
+
+  const preamble = normalizeLatexSnippet(titleFont.latexPreamble);
+  const fontspecMatch = preamble.match(/\\setmainfont(\[[^\]]*\])?\{([^}]+)\}/);
+  if (fontspecMatch) {
+    const options = fontspecMatch[1] || "";
+    const fontName = fontspecMatch[2];
+    return {
+      setup: "\\usepackage{fontspec}",
+      definition: `\\newfontfamily\\bfTitleFont${options}{${fontName}}`,
+      familyOption: "family=\\bfTitleFont,"
+    };
+  }
+
+  const packageFont = PACKAGE_TITLE_FONTS[titleFont.id];
+  if (packageFont) {
+    return {
+      setup: packageFont.packageLine,
+      definition: `\\newcommand{\\bfTitleFont}{\\fontfamily{${packageFont.family}}\\selectfont}`,
+      familyOption: "family=\\bfTitleFont,"
+    };
+  }
+
+  return empty;
+}
+
+function joinLatexSnippets(snippets) {
+  return snippets.filter(Boolean).join("\n");
+}
+
 function generateMainTex(theme) {
   const identity = theme.identity;
 
@@ -75,7 +126,12 @@ function generateClassTex(theme, registry = getRegistry()) {
   const bulletPackage = choices.bullet.packageLine ? `${normalizeLatexSnippet(choices.bullet.packageLine)}\n` : "";
   const outerTheme = choices.navigation.latexOuterTheme ? `${normalizeLatexSnippet(choices.navigation.latexOuterTheme)}\n` : "";
   const footline = choices.navigation.latexFootline ? `${normalizeLatexSnippet(choices.navigation.latexFootline)}\n` : "";
-  const fontPreamble = normalizeLatexSnippet(choices.bodyFont.latexPreamble);
+  const titleFont = titleFontSupport(choices.bodyFont, choices.titleFont);
+  const fontPreamble = joinLatexSnippets([
+    titleFont.setup,
+    normalizeLatexSnippet(choices.bodyFont.latexPreamble),
+    titleFont.definition
+  ]);
   const blockTemplate = normalizeLatexSnippet(choices.block.latexTemplate);
 
   return String.raw`\NeedsTeXFormat{LaTeX2e}
@@ -108,9 +164,9 @@ ${footline}
 \setbeamercolor{block title}{fg=white,bg=bfPrimary}
 \setbeamercolor{block body}{fg=bfText,bg=bfBlockBody}
 
-\setbeamerfont{title}{series=\bfseries,size=\huge}
+\setbeamerfont{title}{${titleFont.familyOption}series=\bfseries,size=\huge}
 \setbeamerfont{subtitle}{size=\normalsize}
-\setbeamerfont{frametitle}{series=\bfseries,size=\Large}
+\setbeamerfont{frametitle}{${titleFont.familyOption}series=\bfseries,size=\Large}
 \setbeamerfont{block title}{series=\bfseries}
 
 \setbeamertemplate{itemize item}{${choices.bullet.itemTemplate}}

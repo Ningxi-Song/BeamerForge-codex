@@ -274,6 +274,12 @@ test("server serves read-only local font assets and rejects asset traversal", as
 
   const traversal = await fetch(`${baseUrl}/assets/..%5cpackage.json`);
   assert.equal(traversal.status, 404);
+
+  const packageFile = await fetch(`${baseUrl}/assets/package.json`);
+  assert.equal(packageFile.status, 404);
+
+  const gitConfig = await fetch(`${baseUrl}/assets/.git/config`);
+  assert.equal(gitConfig.status, 404);
 });
 
 test("default public directory serves index.html at root", async (t) => {

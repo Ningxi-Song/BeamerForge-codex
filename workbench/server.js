@@ -172,7 +172,21 @@ function resolveStaticPath(publicDir, requestPathname) {
   return resolvedFile;
 }
 
-function resolveAssetPath(rootDir, requestPathname) {
+function normalizeAssetPath(assetPath) {
+  return String(assetPath).replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+function allowedAssetPathsForRegistry(registry) {
+  const allowed = new Set();
+  for (const font of Object.values(registry.fonts || {})) {
+    for (const asset of font.assets || []) {
+      allowed.add(normalizeAssetPath(asset));
+    }
+  }
+  return allowed;
+}
+
+function resolveAssetPath(rootDir, requestPathname, allowedAssetPaths) {
   let decodedPathname;
   try {
     decodedPathname = decodeURIComponent(requestPathname);
@@ -184,7 +198,13 @@ function resolveAssetPath(rootDir, requestPathname) {
 
   const resolvedRootDir = path.resolve(rootDir);
   const relativeRequest = decodedPathname.replace(/^\/assets[/\\]+/, "");
-  const resolvedFile = path.resolve(resolvedRootDir, relativeRequest);
+  const normalizedRequest = normalizeAssetPath(relativeRequest);
+
+  if (!allowedAssetPaths.has(normalizedRequest)) {
+    return null;
+  }
+
+  const resolvedFile = path.resolve(resolvedRootDir, normalizedRequest);
   const relativePath = path.relative(resolvedRootDir, resolvedFile);
 
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
@@ -206,9 +226,9 @@ function serveStatic(req, res, publicDir) {
   sendText(res, 200, fs.readFileSync(filePath), contentTypeFor(filePath));
 }
 
-function serveAsset(req, res, rootDir) {
+function serveAsset(req, res, rootDir, allowedAssetPaths) {
   const url = new URL(req.url, "http://localhost");
-  const filePath = resolveAssetPath(rootDir, url.pathname);
+  const filePath = resolveAssetPath(rootDir, url.pathname, allowedAssetPaths);
 
   if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     sendText(res, 404, "Not found");
@@ -226,6 +246,7 @@ function createWorkbenchServer(options = {}) {
   const registry = options.registry || getRegistry();
   const projectWriter = options.writeTemplateProject || writeTemplateProject;
   const templateCompiler = options.compileTemplate || compileTemplate;
+  const allowedAssetPaths = allowedAssetPathsForRegistry(registry);
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -286,7 +307,7 @@ function createWorkbenchServer(options = {}) {
       }
 
       if (req.method === "GET" && url.pathname.startsWith("/assets/")) {
-        serveAsset(req, res, rootDir);
+        serveAsset(req, res, rootDir, allowedAssetPaths);
         return;
       }
 

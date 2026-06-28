@@ -57,6 +57,25 @@ test("sets Beamer sans family for bundled local fonts", () => {
   assert.match(files["theme.cls"], /\\setsansfont\[Path=font\/\]\{Orbitron\.ttf\}/);
 });
 
+test("uses a distinct title font in generated Beamer font settings", () => {
+  const theme = JSON.parse(JSON.stringify(DEFAULT_THEME));
+  theme.fonts.body = "lato";
+  theme.fonts.title = "orbitron";
+
+  const files = generateFiles(theme, getRegistry());
+
+  assert.match(files["theme.cls"], /\\setmainfont\[Path=font\/\]\{Lato\.ttf\}/);
+  assert.match(files["theme.cls"], /\\newfontfamily\\bfTitleFont\[Path=font\/\]\{Orbitron\.ttf\}/);
+  assert.match(
+    files["theme.cls"],
+    /\\setbeamerfont\{title\}\{family=\\bfTitleFont,series=\\bfseries,size=\\huge\}/
+  );
+  assert.match(
+    files["theme.cls"],
+    /\\setbeamerfont\{frametitle\}\{family=\\bfTitleFont,series=\\bfseries,size=\\Large\}/
+  );
+});
+
 test("generates navigation footlines from registry metadata", () => {
   const registry = getRegistry();
   const noneTheme = JSON.parse(JSON.stringify(DEFAULT_THEME));
