@@ -36,3 +36,25 @@ test("workbench index loads wizard state before app script", () => {
   const html = readPublicFile("index.html");
   assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
 });
+
+test("browser script renders wizard steps and preserves cumulative choices", () => {
+  const script = readPublicFile("app.js");
+  for (const name of [
+    "currentStep",
+    "navigateToStep",
+    "renderStepList",
+    "renderStepContent",
+    "renderSummary",
+    "applyChoice",
+    "saveDraft",
+    "renderPreview",
+    "generateTheme"
+  ]) {
+    assert.match(script, new RegExp(`function ${name}\\(`));
+  }
+  assert.match(script, /BeamerForgeWizard/);
+  assert.match(script, /history\.pushState/);
+  assert.match(script, /deriveStepStatuses/);
+  assert.match(script, /canGenerate/);
+  assert.doesNotMatch(script, /syncThemeFromControls/);
+});
