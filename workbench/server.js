@@ -7,6 +7,16 @@ const { writeTemplateProject } = require("../generators/project-writer");
 const { compileTemplate } = require("./build");
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
+const WIZARD_ROUTES = new Set([
+  "/start",
+  "/color",
+  "/font",
+  "/bullets",
+  "/blocks",
+  "/navigation",
+  "/title-page",
+  "/review"
+]);
 
 class HttpError extends Error {
   constructor(statusCode, message) {
@@ -216,7 +226,8 @@ function resolveAssetPath(rootDir, requestPathname, allowedAssetPaths) {
 
 function serveStatic(req, res, publicDir) {
   const url = new URL(req.url, "http://localhost");
-  const filePath = resolveStaticPath(publicDir, url.pathname);
+  const pathname = WIZARD_ROUTES.has(url.pathname) ? "/" : url.pathname;
+  const filePath = resolveStaticPath(publicDir, pathname);
 
   if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     sendText(res, 404, "Not found");

@@ -309,3 +309,26 @@ test("PUT /api/theme rejects bodies over 1MB without writing state", async (t) =
   assert.equal(body.ok, false);
   assert.equal(fs.existsSync(path.join(stateDir, "theme.json")), false);
 });
+
+test("serves the wizard shell for client-side wizard routes", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const staticRoot = tempDir("beamerforge-public-");
+  fs.writeFileSync(path.join(staticRoot, "index.html"), '<main id="wizardApp">Wizard</main>', "utf8");
+  const baseUrl = await withServer(t, { stateDir, publicDir: staticRoot });
+
+  for (const route of [
+    "/start",
+    "/color",
+    "/font",
+    "/bullets",
+    "/blocks",
+    "/navigation",
+    "/title-page",
+    "/review"
+  ]) {
+    const response = await fetch(`${baseUrl}${route}`);
+    const body = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(body, /id="wizardApp"/);
+  }
+});
