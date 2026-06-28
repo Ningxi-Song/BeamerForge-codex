@@ -20,24 +20,27 @@
   const STEP_BY_PATH = Object.freeze(Object.fromEntries(STEPS.map((step) => [step.path, step])));
 
   const REQUIRED_OPTION_PATHS = Object.freeze({
-    color: ["palettes", "colors.paletteId"],
-    font: ["fonts", "fonts.body"],
-    bullets: ["bullets", "bullets.style"],
-    blocks: ["blocks", "blocks.style"],
-    navigation: ["navigation", "navigation.style"],
-    "title-page": ["titlePages", "titlePage.layout"]
+    color: [["palettes", "colors.paletteId"]],
+    font: [
+      ["fonts", "fonts.body"],
+      ["fonts", "fonts.title"]
+    ],
+    bullets: [["bullets", "bullets.style"]],
+    blocks: [["blocks", "blocks.style"]],
+    navigation: [["navigation", "navigation.style"]],
+    "title-page": [["titlePages", "titlePage.layout"]]
   });
 
   const ERROR_STEP_PREFIXES = Object.freeze([
-    ["identity.", "start"],
-    ["foundation.", "start"],
-    ["colors.", "color"],
-    ["fonts.", "font"],
-    ["bullets.", "bullets"],
-    ["blocks.", "blocks"],
-    ["navigation.", "navigation"],
-    ["titlePage.", "title-page"],
-    ["contentDefaults.", "review"]
+    ["identity", "start"],
+    ["foundation", "start"],
+    ["colors", "color"],
+    ["fonts", "font"],
+    ["bullets", "bullets"],
+    ["blocks", "blocks"],
+    ["navigation", "navigation"],
+    ["titlePage", "title-page"],
+    ["contentDefaults", "review"]
   ]);
 
   function stepForPath(pathname) {
@@ -67,7 +70,7 @@
   }
 
   function stepForErrorPath(path) {
-    const match = ERROR_STEP_PREFIXES.find(([prefix]) => path.startsWith(prefix));
+    const match = ERROR_STEP_PREFIXES.find(([prefix]) => path === prefix || path.startsWith(`${prefix}.`));
     return match ? match[1] : "review";
   }
 
@@ -79,9 +82,9 @@
   function labelForStep(stepId, theme, registry) {
     if (stepId === "start") return theme.identity?.name || "Default template";
     if (stepId === "review") return "Ready check";
-    const requirement = REQUIRED_OPTION_PATHS[stepId];
-    if (!requirement) return "";
-    const [collectionName, fieldPath] = requirement;
+    const requirements = REQUIRED_OPTION_PATHS[stepId];
+    if (!requirements) return "";
+    const [collectionName, fieldPath] = requirements[0];
     return optionLabel(registry[collectionName], getPathValue(theme, fieldPath));
   }
 
@@ -95,8 +98,8 @@
 
     return STEPS.map((step) => {
       const messages = errorMap.get(step.id) || [];
-      const requirement = REQUIRED_OPTION_PATHS[step.id];
-      if (requirement) {
+      const requirements = REQUIRED_OPTION_PATHS[step.id] || [];
+      for (const requirement of requirements) {
         const [collectionName, fieldPath] = requirement;
         const id = getPathValue(theme, fieldPath);
         if (!registry[collectionName] || !registry[collectionName][id]) {
@@ -116,7 +119,9 @@
   }
 
   function canGenerate(statuses) {
-    return statuses.every((status) => status.state === "complete");
+    if (!Array.isArray(statuses)) return false;
+    const statusById = new Map(statuses.map((status) => [status && status.id, status]));
+    return STEPS.every((step) => statusById.get(step.id)?.state === "complete");
   }
 
   return {

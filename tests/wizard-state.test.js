@@ -37,3 +37,37 @@ test("flags invalid later choices without clearing them", () => {
   assert.equal(statuses.find((status) => status.id === "bullets").state, "needs-review");
   assert.equal(wizard.canGenerate(statuses), false);
 });
+
+test("flags invalid title font choices without clearing them", () => {
+  const theme = JSON.parse(JSON.stringify(DEFAULT_THEME));
+  theme.fonts.title = "missing-title-font";
+  const statuses = wizard.deriveStepStatuses(theme, getRegistry());
+  assert.equal(theme.fonts.title, "missing-title-font");
+  assert.equal(statuses.find((status) => status.id === "font").state, "needs-review");
+  assert.equal(wizard.canGenerate(statuses), false);
+});
+
+test("blocks generation when statuses are empty", () => {
+  assert.equal(wizard.canGenerate([]), false);
+});
+
+test("blocks generation when statuses are partial", () => {
+  const statuses = wizard.deriveStepStatuses(DEFAULT_THEME, getRegistry()).slice(0, -1);
+  assert.equal(wizard.canGenerate(statuses), false);
+});
+
+test("maps root validation error paths to their wizard steps", () => {
+  const statuses = wizard.deriveStepStatuses(DEFAULT_THEME, getRegistry(), [
+    { path: "colors", message: "colors must be an object" },
+    { path: "identity", message: "identity must be an object" }
+  ]);
+  assert.equal(statuses.find((status) => status.id === "color").state, "needs-review");
+  assert.equal(statuses.find((status) => status.id === "start").state, "needs-review");
+});
+
+test("maps unknown validation error paths to review", () => {
+  const statuses = wizard.deriveStepStatuses(DEFAULT_THEME, getRegistry(), [
+    { path: "unknown.section", message: "unknown issue" }
+  ]);
+  assert.equal(statuses.find((status) => status.id === "review").state, "needs-review");
+});
