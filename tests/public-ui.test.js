@@ -9,6 +9,10 @@ function readPublicFile(fileName) {
   return fs.readFileSync(path.join(publicDir, fileName), "utf8");
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 test("workbench index exposes cumulative wizard regions", () => {
   const html = readPublicFile("index.html");
   const requiredIds = [
@@ -68,4 +72,22 @@ test("browser script gates compile behind wizard review", () => {
   assert.match(script, /async function compileTheme\(\) \{[\s\S]*?if \(!reviewGate\(\)\) return;[\s\S]*?\/api\/compile/);
   assert.match(script, /elements\.compileTheme\.disabled = state\.busy \|\| !wizard\.canGenerate\(state\.statuses\);/);
   assert.doesNotMatch(script, /elements\.compileTheme\.disabled = state\.busy;/);
+});
+
+test("public CSS defines wizard layout, option cards, summary, and preview states", () => {
+  const css = readPublicFile("styles.css");
+  for (const selector of [
+    ".wizard-app",
+    ".wizard-rail",
+    ".decision-panel",
+    ".preview-panel",
+    ".summary-panel",
+    ".step-button.is-active",
+    ".option-card.is-selected",
+    ".summary-row[data-state=\"needs-review\"]",
+    ".slide-preview",
+    ".preview-footline"
+  ]) {
+    assert.match(css, new RegExp(escapeRegExp(selector)));
+  }
 });
