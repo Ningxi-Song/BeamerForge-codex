@@ -12,6 +12,25 @@ Vibe → Direction → Palette → Details → Template
 "I want something modern"  →  3 directions  →  3 palettes  →  fine-tune  →  .tex file
 ```
 
+## Cumulative HTML Wizard
+
+The local HTML wizard designs a Beamer template one decision at a time while keeping `theme.json` as the source of truth.
+
+```bash
+npm test
+npm start
+```
+
+Open `http://localhost:5177/start`.
+
+The wizard flow is:
+
+```text
+Default Template -> Color -> Font -> Bullets -> Blocks -> Navigation -> Title Page -> Review & Generate
+```
+
+Each step previews the accumulated choices. Users can go back to an earlier step and keep later compatible choices. Generation is blocked until every step is valid.
+
 ## Workflow
 
 ### Step 1: Tell Us the Vibe

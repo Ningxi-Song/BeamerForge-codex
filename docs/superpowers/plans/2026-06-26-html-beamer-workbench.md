@@ -8,6 +8,11 @@
 
 **Tech Stack:** Node.js 20 CommonJS, built-in `node:test`, vanilla HTML/CSS/JS, local HTTP server, XeLaTeX or `latexmk` for compile smoke tests.
 
+> Superseded UI note: Task 8's single-screen browser workbench UI has been
+> replaced by `docs/superpowers/plans/2026-06-28-cumulative-workbench-wizard.md`.
+> Foundation tasks for schema, registry, generator, server, and build remain
+> useful unless contradicted by the newer plan.
+
 ---
 
 ## Scope
