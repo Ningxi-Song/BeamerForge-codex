@@ -635,9 +635,10 @@ function registerFontFaces(registry) {
 
 async function boot() {
   setBuildStatus("Loading options and theme...");
-  const [registry, theme] = await Promise.all([api("/api/options"), api("/api/theme")]);
+  const [registry, themeResult] = await Promise.all([api("/api/options"), api("/api/theme?validated=1")]);
   state.registry = registry;
-  state.theme = clone(theme);
+  state.theme = clone(themeResult.theme);
+  state.validationErrors = Array.isArray(themeResult.errors) ? themeResult.errors : [];
   registerFontFaces(registry);
   bindControls();
   if (window.location.pathname === "/") {

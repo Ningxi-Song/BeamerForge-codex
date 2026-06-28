@@ -29,6 +29,42 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function hasObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeThemeForClient(defaultValue, savedValue) {
+  if (Array.isArray(defaultValue)) {
+    return Array.isArray(savedValue) ? clone(savedValue) : clone(defaultValue);
+  }
+
+  if (hasObject(defaultValue)) {
+    const merged = clone(defaultValue);
+    if (!hasObject(savedValue)) return merged;
+
+    for (const [key, value] of Object.entries(savedValue)) {
+      merged[key] =
+        Object.hasOwn(defaultValue, key) && hasObject(defaultValue[key])
+          ? mergeThemeForClient(defaultValue[key], value)
+          : clone(value);
+    }
+    return merged;
+  }
+
+  return savedValue === undefined ? clone(defaultValue) : clone(savedValue);
+}
+
+function validatedThemeResponse(stateDir, registry) {
+  const theme = readTheme(stateDir);
+  const validation = validateTheme(theme, { registry });
+  return {
+    ok: true,
+    valid: validation.ok,
+    theme: mergeThemeForClient(DEFAULT_THEME, theme),
+    errors: validation.errors
+  };
+}
+
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -269,6 +305,10 @@ function createWorkbenchServer(options = {}) {
       }
 
       if (req.method === "GET" && url.pathname === "/api/theme") {
+        if (url.searchParams.get("validated") === "1") {
+          sendJson(res, 200, validatedThemeResponse(stateDir, registry));
+          return;
+        }
         sendJson(res, 200, readTheme(stateDir));
         return;
       }

@@ -91,6 +91,16 @@ test("browser generation is blocked until wizard statuses are complete", () => {
   assert.doesNotMatch(script, /elements\.reviewGenerate\.disabled = state\.busy;/);
 });
 
+test("browser boot loads validation metadata for persisted themes", () => {
+  const script = readPublicFile("app.js");
+  assert.match(script, /api\("\/api\/theme\?validated=1"\)/);
+  assert.match(script, /state\.theme = clone\(themeResult\.theme\);/);
+  assert.match(
+    script,
+    /state\.validationErrors = Array\.isArray\(themeResult\.errors\) \? themeResult\.errors : \[\];/
+  );
+});
+
 test("public CSS defines wizard layout, option cards, summary, and preview states", () => {
   const css = readPublicFile("styles.css");
   for (const selector of [

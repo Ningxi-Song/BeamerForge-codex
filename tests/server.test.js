@@ -46,6 +46,37 @@ test("server exposes registry options and default theme", async (t) => {
 
   const theme = await fetch(`${baseUrl}/api/theme`).then((response) => response.json());
   assert.deepEqual(theme, DEFAULT_THEME);
+
+  const validated = await fetch(`${baseUrl}/api/theme?validated=1`).then((response) => response.json());
+  assert.equal(validated.ok, true);
+  assert.equal(validated.valid, true);
+  assert.deepEqual(validated.theme, DEFAULT_THEME);
+  assert.deepEqual(validated.errors, []);
+});
+
+test("GET /api/theme validated mode reports persisted schema errors", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  fs.mkdirSync(stateDir, { recursive: true });
+  const broken = cloneTheme();
+  delete broken.identity;
+  broken.colors.background = "not-a-color";
+  broken.contentDefaults.sampleBullets = [];
+  fs.writeFileSync(path.join(stateDir, "theme.json"), `${JSON.stringify(broken, null, 2)}\n`, "utf8");
+  const baseUrl = await withServer(t, { stateDir });
+
+  const response = await fetch(`${baseUrl}/api/theme?validated=1`);
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.valid, false);
+  const errorPaths = body.errors.map((error) => error.path);
+  assert.equal(errorPaths.includes("identity"), true);
+  assert.equal(errorPaths.includes("colors.background"), true);
+  assert.equal(errorPaths.includes("contentDefaults.sampleBullets"), true);
+  assert.equal(body.theme.identity.name, DEFAULT_THEME.identity.name);
+  assert.equal(body.theme.colors.background, "not-a-color");
+  assert.deepEqual(body.theme.contentDefaults.sampleBullets, []);
 });
 
 test("PUT /api/theme returns validation errors without writing state", async (t) => {
