@@ -1,5 +1,11 @@
 # HTML Beamer Workbench Design
 
+> Superseded product-shape note: the single-screen workbench UI described in
+> this document has been superseded by
+> `docs/superpowers/specs/2026-06-28-cumulative-workbench-wizard-design.md`.
+> The source-of-truth, generation, local server, and compile pipeline ideas
+> remain valid unless contradicted by the newer cumulative wizard design.
+
 ## Summary
 
 BeamerForge should add a local HTML workbench for designing Beamer templates.
