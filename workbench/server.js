@@ -43,10 +43,7 @@ function mergeThemeForClient(defaultValue, savedValue) {
     if (!hasObject(savedValue)) return merged;
 
     for (const [key, value] of Object.entries(savedValue)) {
-      merged[key] =
-        Object.hasOwn(defaultValue, key) && hasObject(defaultValue[key])
-          ? mergeThemeForClient(defaultValue[key], value)
-          : clone(value);
+      merged[key] = Object.hasOwn(defaultValue, key) ? mergeThemeForClient(defaultValue[key], value) : clone(value);
     }
     return merged;
   }

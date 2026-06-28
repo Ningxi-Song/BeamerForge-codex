@@ -60,7 +60,7 @@ test("GET /api/theme validated mode reports persisted schema errors", async (t) 
   const broken = cloneTheme();
   delete broken.identity;
   broken.colors.background = "not-a-color";
-  broken.contentDefaults.sampleBullets = [];
+  broken.contentDefaults.sampleBullets = { bad: true };
   fs.writeFileSync(path.join(stateDir, "theme.json"), `${JSON.stringify(broken, null, 2)}\n`, "utf8");
   const baseUrl = await withServer(t, { stateDir });
 
@@ -76,7 +76,7 @@ test("GET /api/theme validated mode reports persisted schema errors", async (t) 
   assert.equal(errorPaths.includes("contentDefaults.sampleBullets"), true);
   assert.equal(body.theme.identity.name, DEFAULT_THEME.identity.name);
   assert.equal(body.theme.colors.background, "not-a-color");
-  assert.deepEqual(body.theme.contentDefaults.sampleBullets, []);
+  assert.deepEqual(body.theme.contentDefaults.sampleBullets, DEFAULT_THEME.contentDefaults.sampleBullets);
 });
 
 test("PUT /api/theme returns validation errors without writing state", async (t) => {
