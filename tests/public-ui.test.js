@@ -140,6 +140,19 @@ test("custom color inputs update the preview without replacing the color step", 
   assert.match(script, /setBaseColor\(\{ \.\.\.state\.baseColor, \[channel\]: nextValue \}, \{ render: false \}\);/);
 });
 
+test("summary controls distinguish the current step from editable steps", () => {
+  const script = readPublicFile("app.js");
+  assert.match(script, /const activeStepId = currentStep\(\)\.id;/);
+  assert.match(script, /edit\.disabled = status\.id === activeStepId;/);
+  assert.match(script, /edit\.textContent = status\.id === activeStepId \? "Current" : "Edit";/);
+  assert.match(script, /edit\.setAttribute\("aria-label", `Edit \$\{status\.label\}`\);/);
+  assert.match(script, /if \(status\.id !== activeStepId\) \{[\s\S]*?navigateToStep\(status\.id\)[\s\S]*?\}/);
+
+  const css = readPublicFile("styles.css");
+  assert.match(css, /\.summary-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;/);
+  assert.match(css, /\.summary-row \.secondary-button\s*\{[\s\S]*width:\s*auto;/);
+});
+
 test("public CSS defines wizard layout, option cards, summary, and preview states", () => {
   const css = readPublicFile("styles.css");
   for (const selector of [

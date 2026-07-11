@@ -1,5 +1,6 @@
-const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
-const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+"use strict";
+
+const { HEX_COLOR_RE, SLUG_RE, clone, isPlainObject, slugify } = require("../lib/utils");
 
 const DEFAULT_THEME = Object.freeze({
   identity: {
@@ -54,129 +55,153 @@ const DEFAULT_THEME = Object.freeze({
   }
 });
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
+const VALID_ASPECT_RATIOS = ["16:9", "4:3"];
+const VALID_BASE_LAYOUTS = ["single"];
+const REQUIRED_HEX_FIELDS = ["background", "primary", "accent", "text"];
+const OPTIONAL_HEX_FIELDS = ["blockBody", "alert"];
+const IDENTITY_FIELDS = ["title", "subtitle", "author", "institute", "date"];
+const BULLET_MIN_COUNT = 3;
+
+const ERROR_STEP_MAP = Object.freeze([
+  ["identity", "start"],
+  ["foundation", "start"],
+  ["colors", "color"],
+  ["fonts", "font"],
+  ["bullets", "bullets"],
+  ["blocks", "blocks"],
+  ["navigation", "navigation"],
+  ["titlePage", "title-page"],
+  ["contentDefaults", "review"]
+]);
+
+class ValidationError {
+  constructor(path, message) {
+    this.path = path;
+    this.message = message;
+  }
 }
 
-function slugifyName(value) {
-  return String(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function addError(errors, path, message) {
-  errors.push({ path, message });
-}
-
-function hasObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function requireObject(theme, key, errors) {
-  if (!hasObject(theme[key])) {
-    addError(errors, key, `${key} must be an object`);
+function requireSection(theme, key, errors) {
+  if (!isPlainObject(theme[key])) {
+    errors.push(new ValidationError(key, `${key} must be an object`));
     return {};
   }
   return theme[key];
 }
 
-function requireNonEmptyString(object, path, errors) {
-  const parts = path.split(".");
-  const key = parts[parts.length - 1];
-  if (typeof object[key] !== "string" || object[key].trim() === "") {
-    addError(errors, path, `${path} must be a non-empty string`);
+function assertNonEmptyString(obj, path, errors) {
+  const key = path.split(".").pop();
+  if (typeof obj[key] !== "string" || obj[key].trim() === "") {
+    errors.push(new ValidationError(path, `${path} must be a non-empty string`));
   }
 }
 
-function requireHex(object, path, errors) {
-  const parts = path.split(".");
-  const key = parts[parts.length - 1];
-  if (typeof object[key] !== "string" || !HEX_COLOR.test(object[key])) {
-    addError(errors, path, `${path} must be a #RRGGBB color`);
+function assertHexColor(obj, path, errors) {
+  const key = path.split(".").pop();
+  if (typeof obj[key] !== "string" || !HEX_COLOR_RE.test(obj[key])) {
+    errors.push(new ValidationError(path, `${path} must be a #RRGGBB color`));
   }
 }
 
-function requireKnownId(registry, collection, id, path, errors) {
+function assertKnownOption(registry, collection, id, path, errors) {
   if (!registry) return;
   if (!registry[collection] || !registry[collection][id]) {
-    addError(errors, path, `${path} references unknown ${collection} option '${id}'`);
+    errors.push(new ValidationError(path, `${path} references unknown ${collection} option '${id}'`));
+  }
+}
+
+function validateIdentity(identity, errors) {
+  assertNonEmptyString(identity, "identity.name", errors);
+  if (typeof identity.name === "string" && !SLUG_RE.test(identity.name)) {
+    errors.push(new ValidationError("identity.name", "identity.name must be a lowercase slug"));
+  }
+  for (const field of IDENTITY_FIELDS) {
+    if (identity[field] !== undefined) assertNonEmptyString(identity, `identity.${field}`, errors);
+  }
+}
+
+function validateFoundation(foundation, errors) {
+  if (!VALID_ASPECT_RATIOS.includes(foundation.aspectRatio)) {
+    errors.push(new ValidationError("foundation.aspectRatio", "foundation.aspectRatio must be 16:9 or 4:3"));
+  }
+  if (foundation.baseLayout !== undefined && !VALID_BASE_LAYOUTS.includes(foundation.baseLayout)) {
+    errors.push(new ValidationError("foundation.baseLayout", "foundation.baseLayout must be single"));
+  }
+}
+
+function validateColors(colors, registry, errors) {
+  assertNonEmptyString(colors, "colors.paletteId", errors);
+  assertKnownOption(registry, "palettes", colors.paletteId, "colors.paletteId", errors);
+  for (const field of REQUIRED_HEX_FIELDS) assertHexColor(colors, `colors.${field}`, errors);
+  for (const field of OPTIONAL_HEX_FIELDS) {
+    if (colors[field] !== undefined) assertHexColor(colors, `colors.${field}`, errors);
+  }
+}
+
+function validateFonts(fonts, registry, errors) {
+  assertNonEmptyString(fonts, "fonts.body", errors);
+  assertNonEmptyString(fonts, "fonts.title", errors);
+  assertKnownOption(registry, "fonts", fonts.body, "fonts.body", errors);
+  assertKnownOption(registry, "fonts", fonts.title, "fonts.title", errors);
+}
+
+function validateContentDefaults(content, errors) {
+  assertNonEmptyString(content, "contentDefaults.sampleTitle", errors);
+  if (content.sampleBullets !== undefined) {
+    if (!Array.isArray(content.sampleBullets) || content.sampleBullets.length < BULLET_MIN_COUNT) {
+      errors.push(new ValidationError(
+        "contentDefaults.sampleBullets",
+        `contentDefaults.sampleBullets must contain at least ${BULLET_MIN_COUNT} bullets`
+      ));
+    }
+    if (Array.isArray(content.sampleBullets)) {
+      content.sampleBullets.forEach((bullet, i) => {
+        if (typeof bullet !== "string" || bullet.trim() === "") {
+          errors.push(new ValidationError(
+            `contentDefaults.sampleBullets.${i}`,
+            `contentDefaults.sampleBullets.${i} must be a non-empty string`
+          ));
+        }
+      });
+    }
   }
 }
 
 function validateTheme(input, options = {}) {
   const errors = [];
-  const theme = hasObject(input) ? clone(input) : {};
+  const theme = isPlainObject(input) ? clone(input) : {};
   const registry = options.registry;
 
-  const identity = requireObject(theme, "identity", errors);
-  requireNonEmptyString(identity, "identity.name", errors);
-  if (typeof identity.name === "string" && !SLUG.test(identity.name)) {
-    addError(errors, "identity.name", "identity.name must be a lowercase slug");
-  }
-  for (const key of ["title", "subtitle", "author", "institute", "date"]) {
-    if (identity[key] !== undefined) requireNonEmptyString(identity, `identity.${key}`, errors);
-  }
+  const identity = requireSection(theme, "identity", errors);
+  validateIdentity(identity, errors);
 
-  const foundation = requireObject(theme, "foundation", errors);
-  if (!["16:9", "4:3"].includes(foundation.aspectRatio)) {
-    addError(errors, "foundation.aspectRatio", "foundation.aspectRatio must be 16:9 or 4:3");
-  }
-  if (foundation.baseLayout !== undefined && !["single"].includes(foundation.baseLayout)) {
-    addError(errors, "foundation.baseLayout", "foundation.baseLayout must be single");
-  }
+  const foundation = requireSection(theme, "foundation", errors);
+  validateFoundation(foundation, errors);
 
-  const colors = requireObject(theme, "colors", errors);
-  requireNonEmptyString(colors, "colors.paletteId", errors);
-  requireKnownId(registry, "palettes", colors.paletteId, "colors.paletteId", errors);
-  for (const key of ["background", "primary", "accent", "text"]) {
-    requireHex(colors, `colors.${key}`, errors);
-  }
-  for (const key of ["blockBody", "alert"]) {
-    if (colors[key] !== undefined) requireHex(colors, `colors.${key}`, errors);
-  }
+  const colors = requireSection(theme, "colors", errors);
+  validateColors(colors, registry, errors);
 
-  const fonts = requireObject(theme, "fonts", errors);
-  requireNonEmptyString(fonts, "fonts.body", errors);
-  requireNonEmptyString(fonts, "fonts.title", errors);
-  requireKnownId(registry, "fonts", fonts.body, "fonts.body", errors);
-  requireKnownId(registry, "fonts", fonts.title, "fonts.title", errors);
+  const fonts = requireSection(theme, "fonts", errors);
+  validateFonts(fonts, registry, errors);
 
-  const bullets = requireObject(theme, "bullets", errors);
-  requireNonEmptyString(bullets, "bullets.style", errors);
-  requireKnownId(registry, "bullets", bullets.style, "bullets.style", errors);
+  const bullets = requireSection(theme, "bullets", errors);
+  assertNonEmptyString(bullets, "bullets.style", errors);
+  assertKnownOption(registry, "bullets", bullets.style, "bullets.style", errors);
 
-  const blocks = requireObject(theme, "blocks", errors);
-  requireNonEmptyString(blocks, "blocks.style", errors);
-  requireKnownId(registry, "blocks", blocks.style, "blocks.style", errors);
+  const blocks = requireSection(theme, "blocks", errors);
+  assertNonEmptyString(blocks, "blocks.style", errors);
+  assertKnownOption(registry, "blocks", blocks.style, "blocks.style", errors);
 
-  const navigation = requireObject(theme, "navigation", errors);
-  requireNonEmptyString(navigation, "navigation.style", errors);
-  requireKnownId(registry, "navigation", navigation.style, "navigation.style", errors);
+  const navigation = requireSection(theme, "navigation", errors);
+  assertNonEmptyString(navigation, "navigation.style", errors);
+  assertKnownOption(registry, "navigation", navigation.style, "navigation.style", errors);
 
-  const titlePage = requireObject(theme, "titlePage", errors);
-  requireNonEmptyString(titlePage, "titlePage.layout", errors);
-  requireKnownId(registry, "titlePages", titlePage.layout, "titlePage.layout", errors);
+  const titlePage = requireSection(theme, "titlePage", errors);
+  assertNonEmptyString(titlePage, "titlePage.layout", errors);
+  assertKnownOption(registry, "titlePages", titlePage.layout, "titlePage.layout", errors);
 
-  const contentDefaults = requireObject(theme, "contentDefaults", errors);
-  requireNonEmptyString(contentDefaults, "contentDefaults.sampleTitle", errors);
-  if (
-    contentDefaults.sampleBullets !== undefined &&
-    (!Array.isArray(contentDefaults.sampleBullets) || contentDefaults.sampleBullets.length < 3)
-  ) {
-    addError(errors, "contentDefaults.sampleBullets", "contentDefaults.sampleBullets must contain at least three bullets");
-  }
-  if (Array.isArray(contentDefaults.sampleBullets)) {
-    contentDefaults.sampleBullets.forEach((bullet, index) => {
-      if (typeof bullet !== "string" || bullet.trim() === "") {
-        addError(
-          errors,
-          `contentDefaults.sampleBullets.${index}`,
-          `contentDefaults.sampleBullets.${index} must be a non-empty string`
-        );
-      }
-    });
-  }
+  const contentDefaults = requireSection(theme, "contentDefaults", errors);
+  validateContentDefaults(contentDefaults, errors);
 
   return {
     ok: errors.length === 0,
@@ -185,8 +210,16 @@ function validateTheme(input, options = {}) {
   };
 }
 
+function errorToStepId(errorPath) {
+  const path = String(errorPath || "");
+  const match = ERROR_STEP_MAP.find(([prefix]) => path === prefix || path.startsWith(`${prefix}.`));
+  return match ? match[1] : "review";
+}
+
 module.exports = {
   DEFAULT_THEME,
+  ValidationError,
   validateTheme,
-  slugifyName
+  slugifyName: slugify,
+  errorToStepId
 };

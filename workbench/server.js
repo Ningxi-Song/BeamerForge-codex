@@ -1,3 +1,5 @@
+"use strict";
+
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -5,139 +7,74 @@ const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
 const { writeTemplateProject } = require("../generators/project-writer");
 const { compileTemplate } = require("./build");
+const { clone, isPlainObject } = require("../lib/utils");
 
-const MAX_JSON_BODY_BYTES = 1024 * 1024;
-const WIZARD_ROUTES = new Set([
-  "/start",
-  "/color",
-  "/font",
-  "/bullets",
-  "/blocks",
-  "/navigation",
-  "/title-page",
-  "/review"
-]);
+const MAX_BODY_BYTES = 1024 * 1024;
+const WIZARD_ROUTES = new Set(["/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page", "/review"]);
 
 class HttpError extends Error {
-  constructor(statusCode, message) {
+  constructor(status, message) {
     super(message);
-    this.statusCode = statusCode;
+    this.statusCode = status;
   }
 }
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function hasObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function mergeThemeForClient(defaultValue, savedValue) {
-  if (Array.isArray(defaultValue)) {
-    return Array.isArray(savedValue) ? clone(savedValue) : clone(defaultValue);
-  }
-
-  if (hasObject(defaultValue)) {
-    const merged = clone(defaultValue);
-    if (!hasObject(savedValue)) return merged;
-
-    for (const [key, value] of Object.entries(savedValue)) {
-      merged[key] = Object.hasOwn(defaultValue, key) ? mergeThemeForClient(defaultValue[key], value) : clone(value);
+function mergeThemeForClient(defaultVal, savedVal) {
+  if (Array.isArray(defaultVal)) return Array.isArray(savedVal) ? clone(savedVal) : clone(defaultVal);
+  if (isPlainObject(defaultVal)) {
+    const merged = clone(defaultVal);
+    if (!isPlainObject(savedVal)) return merged;
+    for (const [k, v] of Object.entries(savedVal)) {
+      merged[k] = Object.hasOwn(defaultVal, k) ? mergeThemeForClient(defaultVal[k], v) : clone(v);
     }
     return merged;
   }
-
-  return savedValue === undefined ? clone(defaultValue) : clone(savedValue);
-}
-
-function validatedThemeResponse(stateDir, registry) {
-  const theme = readTheme(stateDir);
-  const validation = validateTheme(theme, { registry });
-  return {
-    ok: true,
-    valid: validation.ok,
-    theme: mergeThemeForClient(DEFAULT_THEME, theme),
-    errors: validation.errors
-  };
+  return savedVal === undefined ? clone(defaultVal) : clone(savedVal);
 }
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    let totalBytes = 0;
-    let settled = false;
-
-    function fail(statusCode, message) {
-      if (settled) return;
-      settled = true;
-      reject(new HttpError(statusCode, message));
-      req.resume();
-    }
-
+    let bytes = 0;
+    let done = false;
+    const fail = (status, msg) => { if (done) return; done = true; reject(new HttpError(status, msg)); req.resume(); };
     req.on("data", (chunk) => {
-      if (settled) return;
-      totalBytes += chunk.length;
-      if (totalBytes > MAX_JSON_BODY_BYTES) {
-        fail(413, "Request body too large");
-        return;
-      }
+      if (done) return;
+      bytes += chunk.length;
+      if (bytes > MAX_BODY_BYTES) return fail(413, "Request body too large");
       chunks.push(chunk);
     });
-
     req.on("end", () => {
-      if (settled) return;
-      settled = true;
-      const body = Buffer.concat(chunks, totalBytes).toString("utf8");
-      try {
-        resolve(body ? JSON.parse(body) : {});
-      } catch (error) {
-        reject(new HttpError(400, "Invalid JSON request body"));
-      }
+      if (done) return; done = true;
+      const body = Buffer.concat(chunks, bytes).toString("utf8");
+      try { resolve(body ? JSON.parse(body) : {}); }
+      catch { reject(new HttpError(400, "Invalid JSON request body")); }
     });
-
-    req.on("error", (error) => {
-      if (settled) return;
-      settled = true;
-      reject(error);
-    });
+    req.on("error", (err) => { if (done) return; done = true; reject(err); });
   });
 }
 
 function sendJson(res, status, body) {
   const payload = JSON.stringify(body, null, 2);
-  res.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "content-length": Buffer.byteLength(payload)
-  });
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(payload) });
   res.end(payload);
 }
 
 function sendText(res, status, body, contentType = "text/plain; charset=utf-8") {
-  const payload = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
-  res.writeHead(status, {
-    "content-type": contentType,
-    "content-length": payload.length
-  });
-  res.end(payload);
+  const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+  res.writeHead(status, { "content-type": contentType, "content-length": buf.length });
+  res.end(buf);
 }
 
-function ensureDir(dir) {
-  fs.mkdirSync(dir, { recursive: true });
-}
+function ensureDir(dir) { fs.mkdirSync(dir, { recursive: true }); }
 
-function themePath(stateDir) {
-  return path.join(stateDir, "theme.json");
-}
-
-function buildStatusPath(stateDir) {
-  return path.join(stateDir, "build-status.json");
-}
+function themePath(stateDir) { return path.join(stateDir, "theme.json"); }
+function buildStatusPath(stateDir) { return path.join(stateDir, "build-status.json"); }
 
 function readTheme(stateDir) {
-  const file = themePath(stateDir);
-  if (!fs.existsSync(file)) return clone(DEFAULT_THEME);
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const f = themePath(stateDir);
+  if (!fs.existsSync(f)) return clone(DEFAULT_THEME);
+  return JSON.parse(fs.readFileSync(f, "utf8"));
 }
 
 function writeTheme(stateDir, theme) {
@@ -151,135 +88,76 @@ function writeBuildStatus(stateDir, status) {
 }
 
 function readBuildStatus(stateDir) {
-  const file = buildStatusPath(stateDir);
-  if (!fs.existsSync(file)) return { status: "idle" };
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const f = buildStatusPath(stateDir);
+  if (!fs.existsSync(f)) return { status: "idle" };
+  return JSON.parse(fs.readFileSync(f, "utf8"));
 }
 
-function invalidThemeError(errors) {
-  const error = new HttpError(400, "Invalid theme");
-  error.errors = errors;
-  return error;
+function validatedResponse(stateDir, registry) {
+  const theme = readTheme(stateDir);
+  const validation = validateTheme(theme, { registry });
+  return { ok: true, valid: validation.ok, theme: mergeThemeForClient(DEFAULT_THEME, theme), errors: validation.errors };
 }
 
 function readValidatedTheme(stateDir, registry) {
   const theme = readTheme(stateDir);
-  const validation = validateTheme(theme, { registry });
-  if (!validation.ok) {
-    throw invalidThemeError(validation.errors);
+  const v = validateTheme(theme, { registry });
+  if (!v.ok) {
+    const err = new HttpError(400, "Invalid theme");
+    err.errors = v.errors;
+    throw err;
   }
-  return validation.value;
+  return v.value;
 }
 
-function resolveTemplateDir(outputRoot, templateName) {
-  const resolvedOutputRoot = path.resolve(outputRoot);
-  const resolvedTemplateDir = path.resolve(resolvedOutputRoot, templateName);
-  const relativePath = path.relative(resolvedOutputRoot, resolvedTemplateDir);
-
-  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    throw new HttpError(400, "Template output is outside output root");
-  }
-
-  return resolvedTemplateDir;
+function resolveTemplateDir(outputRoot, name) {
+  const root = path.resolve(outputRoot);
+  const dir = path.resolve(root, name);
+  const rel = path.relative(root, dir);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) throw new HttpError(400, "Template output is outside output root");
+  return dir;
 }
 
-function contentTypeFor(filePath) {
-  if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
-  if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
-  if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
-  if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
-  if (filePath.endsWith(".ttf")) return "font/ttf";
-  return "text/plain; charset=utf-8";
+const CONTENT_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".ttf": "font/ttf"
+};
+
+function resolveStaticPath(publicDir, requestPath) {
+  let decoded;
+  try { decoded = decodeURIComponent(requestPath); } catch { return null; }
+  if (decoded.includes("\0")) return null;
+  const rel = decoded === "/" ? "index.html" : decoded.replace(/^[/\\]+/, "");
+  const abs = path.resolve(publicDir, rel);
+  const r = path.relative(publicDir, abs);
+  if (r.startsWith("..") || path.isAbsolute(r)) return null;
+  return abs;
 }
 
-function resolveStaticPath(publicDir, requestPathname) {
-  let decodedPathname;
-  try {
-    decodedPathname = decodeURIComponent(requestPathname);
-  } catch (error) {
-    return null;
-  }
+function normalizeAssetPath(p) { return String(p).replace(/\\/g, "/").replace(/^\/+/, ""); }
 
-  if (decodedPathname.includes("\0")) return null;
-
-  const resolvedPublicDir = path.resolve(publicDir);
-  const relativeRequest =
-    decodedPathname === "/" ? "index.html" : decodedPathname.replace(/^[/\\]+/, "");
-  const resolvedFile = path.resolve(resolvedPublicDir, relativeRequest);
-  const relativePath = path.relative(resolvedPublicDir, resolvedFile);
-
-  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    return null;
-  }
-
-  return resolvedFile;
-}
-
-function normalizeAssetPath(assetPath) {
-  return String(assetPath).replace(/\\/g, "/").replace(/^\/+/, "");
-}
-
-function allowedAssetPathsForRegistry(registry) {
-  const allowed = new Set();
+function allowedAssets(registry) {
+  const set = new Set();
   for (const font of Object.values(registry.fonts || {})) {
-    for (const asset of font.assets || []) {
-      allowed.add(normalizeAssetPath(asset));
-    }
+    for (const a of font.assets || []) set.add(normalizeAssetPath(a));
   }
-  return allowed;
+  return set;
 }
 
-function resolveAssetPath(rootDir, requestPathname, allowedAssetPaths) {
-  let decodedPathname;
-  try {
-    decodedPathname = decodeURIComponent(requestPathname);
-  } catch (error) {
-    return null;
-  }
-
-  if (decodedPathname.includes("\0") || !decodedPathname.startsWith("/assets/")) return null;
-
-  const resolvedRootDir = path.resolve(rootDir);
-  const relativeRequest = decodedPathname.replace(/^\/assets[/\\]+/, "");
-  const normalizedRequest = normalizeAssetPath(relativeRequest);
-
-  if (!allowedAssetPaths.has(normalizedRequest)) {
-    return null;
-  }
-
-  const resolvedFile = path.resolve(resolvedRootDir, normalizedRequest);
-  const relativePath = path.relative(resolvedRootDir, resolvedFile);
-
-  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    return null;
-  }
-
-  return resolvedFile;
-}
-
-function serveStatic(req, res, publicDir) {
-  const url = new URL(req.url, "http://localhost");
-  const pathname = WIZARD_ROUTES.has(url.pathname) ? "/" : url.pathname;
-  const filePath = resolveStaticPath(publicDir, pathname);
-
-  if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    sendText(res, 404, "Not found");
-    return;
-  }
-
-  sendText(res, 200, fs.readFileSync(filePath), contentTypeFor(filePath));
-}
-
-function serveAsset(req, res, rootDir, allowedAssetPaths) {
-  const url = new URL(req.url, "http://localhost");
-  const filePath = resolveAssetPath(rootDir, url.pathname, allowedAssetPaths);
-
-  if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    sendText(res, 404, "Not found");
-    return;
-  }
-
-  sendText(res, 200, fs.readFileSync(filePath), contentTypeFor(filePath));
+function resolveAssetFile(rootDir, requestPath, allowed) {
+  let decoded;
+  try { decoded = decodeURIComponent(requestPath); } catch { return null; }
+  if (decoded.includes("\0") || !decoded.startsWith("/assets/")) return null;
+  const rel = decoded.replace(/^\/assets[/\\]+/, "");
+  const norm = normalizeAssetPath(rel);
+  if (!allowed.has(norm)) return null;
+  const abs = path.resolve(rootDir, norm);
+  const r = path.relative(rootDir, abs);
+  if (r.startsWith("..") || path.isAbsolute(r)) return null;
+  return abs;
 }
 
 function createWorkbenchServer(options = {}) {
@@ -290,54 +168,40 @@ function createWorkbenchServer(options = {}) {
   const registry = options.registry || getRegistry();
   const projectWriter = options.writeTemplateProject || writeTemplateProject;
   const templateCompiler = options.compileTemplate || compileTemplate;
-  const allowedAssetPaths = allowedAssetPathsForRegistry(registry);
+  const allowedAssetPaths = allowedAssets(registry);
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
-
     try {
       if (req.method === "GET" && url.pathname === "/api/options") {
         sendJson(res, 200, registry);
         return;
       }
-
       if (req.method === "GET" && url.pathname === "/api/theme") {
         if (url.searchParams.get("validated") === "1") {
-          sendJson(res, 200, validatedThemeResponse(stateDir, registry));
-          return;
+          sendJson(res, 200, validatedResponse(stateDir, registry));
+        } else {
+          sendJson(res, 200, readTheme(stateDir));
         }
-        sendJson(res, 200, readTheme(stateDir));
         return;
       }
-
       if (req.method === "PUT" && url.pathname === "/api/theme") {
         const theme = await readJsonBody(req);
-        const validation = validateTheme(theme, { registry });
-        if (!validation.ok) {
-          sendJson(res, 400, { ok: false, errors: validation.errors });
-          return;
-        }
-        writeTheme(stateDir, validation.value);
-        sendJson(res, 200, { ok: true, theme: validation.value });
+        const v = validateTheme(theme, { registry });
+        if (!v.ok) { sendJson(res, 400, { ok: false, errors: v.errors }); return; }
+        writeTheme(stateDir, v.value);
+        sendJson(res, 200, { ok: true, theme: v.value });
         return;
       }
-
       if (req.method === "POST" && url.pathname === "/api/generate") {
         const theme = readValidatedTheme(stateDir, registry);
         const templateDir = resolveTemplateDir(outputRoot, theme.identity.name);
         const manifest = projectWriter(theme, templateDir, { registry, rootDir, outputRoot });
-        const status = {
-          ok: true,
-          status: "generated",
-          templateDir,
-          written: manifest.written || [],
-          copiedAssets: manifest.copiedAssets || []
-        };
+        const status = { ok: true, status: "generated", templateDir, written: manifest.written || [], copiedAssets: manifest.copiedAssets || [] };
         writeBuildStatus(stateDir, status);
         sendJson(res, 200, status);
         return;
       }
-
       if (req.method === "POST" && url.pathname === "/api/compile") {
         const theme = readValidatedTheme(stateDir, registry);
         const templateDir = resolveTemplateDir(outputRoot, theme.identity.name);
@@ -348,31 +212,31 @@ function createWorkbenchServer(options = {}) {
         sendJson(res, result.ok ? 200 : 500, status);
         return;
       }
-
       if (req.method === "GET" && url.pathname === "/api/build-status") {
         sendJson(res, 200, readBuildStatus(stateDir));
         return;
       }
-
       if (req.method === "GET" && url.pathname.startsWith("/assets/")) {
-        serveAsset(req, res, rootDir, allowedAssetPaths);
+        const filePath = resolveAssetFile(rootDir, url.pathname, allowedAssetPaths);
+        if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) { sendText(res, 404, "Not found"); return; }
+        const ext = path.extname(filePath).toLowerCase();
+        sendText(res, 200, fs.readFileSync(filePath), CONTENT_TYPES[ext] || "application/octet-stream");
         return;
       }
-
       if (req.method === "GET") {
-        serveStatic(req, res, publicDir);
+        const routePath = WIZARD_ROUTES.has(url.pathname) ? "/" : url.pathname;
+        const filePath = resolveStaticPath(publicDir, routePath);
+        if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) { sendText(res, 404, "Not found"); return; }
+        const ext = path.extname(filePath).toLowerCase();
+        sendText(res, 200, fs.readFileSync(filePath), CONTENT_TYPES[ext] || "text/plain; charset=utf-8");
         return;
       }
-
       sendText(res, 405, "Method not allowed");
     } catch (error) {
       if (res.writableEnded) return;
-      const statusCode = error.statusCode || 500;
-      if (error.errors) {
-        sendJson(res, statusCode, { ok: false, errors: error.errors });
-        return;
-      }
-      sendJson(res, statusCode, { ok: false, error: error.message });
+      const code = error.statusCode || 500;
+      if (error.errors) { sendJson(res, code, { ok: false, errors: error.errors }); return; }
+      sendJson(res, code, { ok: false, error: error.message });
     }
   });
 }
@@ -385,10 +249,6 @@ function main() {
   });
 }
 
-if (require.main === module) {
-  main();
-}
+if (require.main === module) main();
 
-module.exports = {
-  createWorkbenchServer
-};
+module.exports = { createWorkbenchServer };

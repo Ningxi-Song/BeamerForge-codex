@@ -1,88 +1,65 @@
+"use strict";
+
 const { validateTheme } = require("../schema/theme-schema");
 const { getRegistry, resolveThemeChoices } = require("../registry/options");
+const { hexWithoutHash, normalizeLatexNewlines, joinNonEmpty } = require("../lib/utils");
+
+const LATEX_SPECIAL_CHARS = {
+  "\\": "\\textbackslash{}",
+  "&": "\\&",
+  "%": "\\%",
+  "$": "\\$",
+  "#": "\\#",
+  "_": "\\_",
+  "{": "\\{",
+  "}": "\\}",
+  "~": "\\textasciitilde{}",
+  "^": "\\textasciicircum{}"
+};
 
 function escapeLatex(value) {
-  return String(value).replace(/[\\&%$#_{}~^]/g, (character) => {
-    const replacements = {
-      "\\": "\\textbackslash{}",
-      "&": "\\&",
-      "%": "\\%",
-      "$": "\\$",
-      "#": "\\#",
-      "_": "\\_",
-      "{": "\\{",
-      "}": "\\}",
-      "~": "\\textasciitilde{}",
-      "^": "\\textasciicircum{}"
-    };
-    return replacements[character];
-  });
+  return String(value).replace(/[\\&%$#_{}~^]/g, (ch) => LATEX_SPECIAL_CHARS[ch]);
 }
 
-function aspectRatioOption(aspectRatio) {
-  const options = {
-    "16:9": "aspectratio=169",
-    "4:3": "aspectratio=43"
-  };
-  return options[aspectRatio] || "";
-}
-
-function hexWithoutHash(value) {
-  return String(value).replace(/^#/, "").toUpperCase();
+function aspectRatioOption(ratio) {
+  return ratio === "16:9" ? "aspectratio=169" : ratio === "4:3" ? "aspectratio=43" : "";
 }
 
 function latexDate(value) {
   return value === "\\today" ? value : escapeLatex(value);
 }
 
-function validationMessage(errors) {
-  return errors.map((error) => `${error.path}: ${error.message}`).join("; ");
+function formatErrors(errors) {
+  return errors.map((e) => `${e.path}: ${e.message}`).join("; ");
 }
 
-function normalizeLatexSnippet(value) {
-  return String(value || "").replace(/\\n/g, "\n");
-}
-
-const PACKAGE_TITLE_FONTS = Object.freeze({
-  palatino: {
-    packageLine: "\\usepackage{palatino}",
-    family: "ppl"
-  },
-  "latin-modern": {
-    packageLine: "\\usepackage{lmodern}",
-    family: "lmr"
-  },
-  helvetica: {
-    packageLine: "\\usepackage{helvet}",
-    family: "phv"
-  },
-  times: {
-    packageLine: "\\usepackage{mathptmx}",
-    family: "ptm"
-  }
+const TITLE_FONT_PACKAGES = Object.freeze({
+  palatino: { line: "\\usepackage{palatino}", family: "ppl" },
+  "latin-modern": { line: "\\usepackage{lmodern}", family: "lmr" },
+  helvetica: { line: "\\usepackage{helvet}", family: "phv" },
+  times: { line: "\\usepackage{mathptmx}", family: "ptm" }
 });
 
-function titleFontSupport(bodyFont, titleFont) {
+function titleFontSetup(bodyFont, titleFont) {
   const empty = { setup: "", definition: "", familyOption: "" };
   if (!bodyFont || !titleFont || bodyFont.id === titleFont.id) return empty;
 
-  const preamble = normalizeLatexSnippet(titleFont.latexPreamble);
+  const preamble = normalizeLatexNewlines(titleFont.latexPreamble);
   const fontspecMatch = preamble.match(/\\setmainfont(\[[^\]]*\])?\{([^}]+)\}/);
   if (fontspecMatch) {
-    const options = fontspecMatch[1] || "";
-    const fontName = fontspecMatch[2];
+    const opts = fontspecMatch[1] || "";
     return {
       setup: "\\usepackage{fontspec}",
-      definition: `\\newfontfamily\\bfTitleFont${options}{${fontName}}`,
+      definition: `\\newfontfamily\\bfTitleFont${opts}{${fontspecMatch[2]}}`,
       familyOption: "family=\\bfTitleFont,"
     };
   }
 
-  const packageFont = PACKAGE_TITLE_FONTS[titleFont.id];
-  if (packageFont) {
+  const pkg = TITLE_FONT_PACKAGES[titleFont.id];
+  if (pkg) {
     return {
-      setup: packageFont.packageLine,
-      definition: `\\newcommand{\\bfTitleFont}{\\fontfamily{${packageFont.family}}\\selectfont}`,
+      setup: pkg.line,
+      definition: `\\newcommand{\\bfTitleFont}{\\fontfamily{${pkg.family}}\\selectfont}`,
       familyOption: "family=\\bfTitleFont,"
     };
   }
@@ -90,20 +67,65 @@ function titleFontSupport(bodyFont, titleFont) {
   return empty;
 }
 
-function joinLatexSnippets(snippets) {
-  return snippets.filter(Boolean).join("\n");
-}
+const TITLE_PAGE_TEMPLATES = {
+  "left-curtain": String.raw`\setbeamertemplate{title page}{%
+  \vbox{}
+  \vfill
+  \begin{beamercolorbox}[wd=\paperwidth,leftskip=1.2cm,rightskip=1.2cm]{title}
+    \usebeamerfont{title}\inserttitle\par
+    \vspace{0.35cm}
+    \usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par
+    \vspace{0.9cm}
+    \usebeamerfont{author}\usebeamercolor[fg]{author}\insertauthor\par
+    \vspace{0.15cm}
+    \usebeamerfont{institute}\usebeamercolor[fg]{institute}\insertinstitute\par
+    \vspace{0.15cm}
+    \usebeamerfont{date}\usebeamercolor[fg]{date}\insertdate\par
+  \end{beamercolorbox}
+  \vfill
+}`,
+  centered: String.raw`\setbeamertemplate{title page}{%
+  \vbox{}
+  \vfill
+  \begin{beamercolorbox}[wd=\paperwidth,center]{title}
+    \usebeamerfont{title}\inserttitle\par
+    \vspace{0.4cm}
+    \usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par
+    \vspace{1.2cm}
+    \usebeamerfont{author}\usebeamercolor[fg]{author}\insertauthor\par
+    \vspace{0.2cm}
+    \usebeamerfont{institute}\usebeamercolor[fg]{institute}\insertinstitute\par
+    \vspace{0.2cm}
+    \usebeamerfont{date}\usebeamercolor[fg]{date}\insertdate\par
+  \end{beamercolorbox}
+  \vfill
+}`,
+  "bottom-aligned": String.raw`\setbeamertemplate{title page}{%
+  \vbox{}
+  \vfill
+  \begin{beamercolorbox}[wd=\paperwidth,leftskip=1.2cm,rightskip=1.2cm,sep=0.8cm]{title}
+    \usebeamerfont{title}\inserttitle\par
+    \vspace{0.3cm}
+    \usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par
+    \vspace{0.6cm}
+    \usebeamerfont{author}\usebeamercolor[fg]{author}\insertauthor\par
+    \vspace{0.15cm}
+    \usebeamerfont{institute}\usebeamercolor[fg]{institute}\insertinstitute\par
+    \vspace{0.15cm}
+    \usebeamerfont{date}\usebeamercolor[fg]{date}\insertdate\par
+  \end{beamercolorbox}
+}`
+};
 
 function generateMainTex(theme) {
-  const identity = theme.identity;
-
+  const id = theme.identity;
   return `${String.raw`\documentclass[10pt]{theme}
 
-\title{`}${escapeLatex(identity.title || "")}${String.raw`}
-\subtitle{`}${escapeLatex(identity.subtitle || "")}${String.raw`}
-\author{`}${escapeLatex(identity.author || "")}${String.raw`}
-\institute{`}${escapeLatex(identity.institute || "")}${String.raw`}
-\date{`}${latexDate(identity.date || "")}${String.raw`}
+\title{`}${escapeLatex(id.title || "")}${String.raw`}
+\subtitle{`}${escapeLatex(id.subtitle || "")}${String.raw`}
+\author{`}${escapeLatex(id.author || "")}${String.raw`}
+\institute{`}${escapeLatex(id.institute || "")}${String.raw`}
+\date{`}${latexDate(id.date || "")}${String.raw`}
 
 \begin{document}
 
@@ -121,26 +143,40 @@ function generateMainTex(theme) {
 
 function generateClassTex(theme, registry = getRegistry()) {
   const choices = resolveThemeChoices(theme, registry);
-  const aspectRatio = aspectRatioOption(theme.foundation.aspectRatio);
-  const classOptions = ["10pt", aspectRatio].filter(Boolean).join(",");
-  const bulletPackage = choices.bullet.packageLine ? `${normalizeLatexSnippet(choices.bullet.packageLine)}\n` : "";
-  const outerTheme = choices.navigation.latexOuterTheme ? `${normalizeLatexSnippet(choices.navigation.latexOuterTheme)}\n` : "";
-  const footline = choices.navigation.latexFootline ? `${normalizeLatexSnippet(choices.navigation.latexFootline)}\n` : "";
-  const titleFont = titleFontSupport(choices.bodyFont, choices.titleFont);
-  const fontPreamble = joinLatexSnippets([
+  const aspect = aspectRatioOption(theme.foundation.aspectRatio);
+  const classOptions = ["10pt", aspect].filter(Boolean).join(",");
+  const bulletPkg = choices.bullet.packageLine ? `${normalizeLatexNewlines(choices.bullet.packageLine)}\n` : "";
+  const outerTheme = choices.navigation.latexOuterTheme ? `${normalizeLatexNewlines(choices.navigation.latexOuterTheme)}\n` : "";
+  const footline = choices.navigation.latexFootline ? `${normalizeLatexNewlines(choices.navigation.latexFootline)}\n` : "";
+  const titleFont = titleFontSetup(choices.bodyFont, choices.titleFont);
+  const fontPreamble = joinNonEmpty([
     titleFont.setup,
-    normalizeLatexSnippet(choices.bodyFont.latexPreamble),
+    normalizeLatexNewlines(choices.bodyFont.latexPreamble),
     titleFont.definition
   ]);
-  const blockTemplate = normalizeLatexSnippet(choices.block.latexTemplate);
+  const blockTemplate = normalizeLatexNewlines(choices.block.latexTemplate);
+  const titlePageId = theme.titlePage.layout || "left-curtain";
+  const titlePageTemplate = TITLE_PAGE_TEMPLATES[titlePageId] || TITLE_PAGE_TEMPLATES["left-curtain"];
+  const frametitleTemplate = choices.navigation.hasHeader ? String.raw`
+\setbeamertemplate{frametitle}{%
+  \nointerlineskip
+  \begin{beamercolorbox}[wd=\paperwidth,leftskip=0.3cm,rightskip=0.3cm,ht=2.2ex,dp=1.2ex]{frametitle}
+    \usebeamerfont{frametitle}\insertframetitle
+  \end{beamercolorbox}%
+  \vspace*{-0.5ex}%
+  \begin{beamercolorbox}[wd=\paperwidth,ht=0.4pt,dp=0pt]{structure}
+    \rule{\paperwidth}{0.4pt}
+  \end{beamercolorbox}%
+}
+` : "";
 
   return String.raw`\NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{theme}[2026/06/27 BeamerForge generated theme]
+\ProvidesClass{theme}[2026/06/28 BeamerForge generated theme]
 \LoadClass[${classOptions}]{beamer}
 
 \RequirePackage{xcolor}
 \RequirePackage{booktabs}
-${bulletPackage}${fontPreamble}
+${bulletPkg}${fontPreamble}
 ${outerTheme}
 ${blockTemplate}
 \setbeamertemplate{navigation symbols}{}
@@ -172,29 +208,15 @@ ${footline}
 \setbeamertemplate{itemize item}{${choices.bullet.itemTemplate}}
 \setbeamertemplate{itemize subitem}{${choices.bullet.subitemTemplate}}
 
-\setbeamertemplate{title page}{%
-  \vbox{}
-  \vfill
-  \begin{beamercolorbox}[wd=\paperwidth,leftskip=1.2cm,rightskip=1.2cm]{title}
-    \usebeamerfont{title}\inserttitle\par
-    \vspace{0.35cm}
-    \usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par
-    \vspace{0.9cm}
-    \usebeamerfont{author}\usebeamercolor[fg]{author}\insertauthor\par
-    \vspace{0.15cm}
-    \usebeamerfont{institute}\usebeamercolor[fg]{institute}\insertinstitute\par
-    \vspace{0.15cm}
-    \usebeamerfont{date}\usebeamercolor[fg]{date}\insertdate\par
-  \end{beamercolorbox}
-  \vfill
-}
+${frametitleTemplate}
+${titlePageTemplate}
 `;
 }
 
 function generateOverviewTex(theme) {
   const title = escapeLatex(theme.contentDefaults.sampleTitle);
   const bullets = theme.contentDefaults.sampleBullets
-    .map((bullet) => `  \\item ${escapeLatex(bullet)}`)
+    .map((b) => `  \\item ${escapeLatex(b)}`)
     .join("\n");
 
   return `${String.raw`\begin{frame}{`}${title}${String.raw`}
@@ -252,19 +274,16 @@ latexmk -xelatex -interaction=nonstopmode main.tex
 
 function generateFiles(theme, registry = getRegistry()) {
   const validation = validateTheme(theme, { registry });
-  if (!validation.ok) {
-    throw new Error(`Invalid theme: ${validationMessage(validation.errors)}`);
-  }
-
-  const validTheme = validation.value;
+  if (!validation.ok) throw new Error(`Invalid theme: ${formatErrors(validation.errors)}`);
+  const t = validation.value;
   return {
-    "main.tex": generateMainTex(validTheme, registry),
-    "theme.cls": generateClassTex(validTheme, registry),
-    "theme.json": `${JSON.stringify(validTheme, null, 2)}\n`,
-    "README.md": generateReadme(validTheme),
-    "content/overview.tex": generateOverviewTex(validTheme),
-    "content/figures.tex": generateFiguresTex(validTheme),
-    "content/tables.tex": generateTablesTex(validTheme)
+    "main.tex": generateMainTex(t, registry),
+    "theme.cls": generateClassTex(t, registry),
+    "theme.json": `${JSON.stringify(t, null, 2)}\n`,
+    "README.md": generateReadme(t),
+    "content/overview.tex": generateOverviewTex(t),
+    "content/figures.tex": generateFiguresTex(t),
+    "content/tables.tex": generateTablesTex(t)
   };
 }
 

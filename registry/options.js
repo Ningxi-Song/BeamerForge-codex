@@ -1,4 +1,7 @@
+"use strict";
+
 const path = require("node:path");
+const { clone } = require("../lib/utils");
 
 const PAGE_NUMBER_FOOTLINE =
   "\\setbeamertemplate{footline}{%\\n  \\hfill\\insertframenumber/\\inserttotalframenumber\\hspace{1.2em}\\vspace{0.8em}\\n}";
@@ -183,20 +186,8 @@ const FONTS = Object.freeze({
   oswald: localFont("oswald", "Oswald", "Oswald.ttf", "display-condensed", "Arial Narrow, sans-serif"),
   rajdhani: localFont("rajdhani", "Rajdhani", "Rajdhani.ttf", "display-tech", "Arial, sans-serif"),
   orbitron: localFont("orbitron", "Orbitron", "Orbitron.ttf", "display-tech", "Arial, sans-serif"),
-  "playfair-display": localFont(
-    "playfair-display",
-    "Playfair Display",
-    "Playfair_Display.ttf",
-    "display-editorial",
-    "Georgia, serif"
-  ),
-  "dm-serif-display": localFont(
-    "dm-serif-display",
-    "DM Serif Display",
-    "DM_Serif_Display.ttf",
-    "display-serif",
-    "Georgia, serif"
-  ),
+  "playfair-display": localFont("playfair-display", "Playfair Display", "Playfair_Display.ttf", "display-editorial", "Georgia, serif"),
+  "dm-serif-display": localFont("dm-serif-display", "DM Serif Display", "DM_Serif_Display.ttf", "display-serif", "Georgia, serif"),
   "abril-fatface": localFont("abril-fatface", "Abril Fatface", "Abril_Fatface.ttf", "display-serif", "Georgia, serif"),
   "zilla-slab": localFont("zilla-slab", "Zilla Slab", "Zilla_Slab.ttf", "serif-slab", "Georgia, serif"),
   "space-grotesk": localFont("space-grotesk", "Space Grotesk", "Space_Grotesk.ttf", "sans-modern", "Arial, sans-serif"),
@@ -207,108 +198,43 @@ function bullet(id, label, packageLine, itemTemplate, subitemTemplate, cssMarker
   return { id, label, packageLine, itemTemplate, subitemTemplate, cssMarker };
 }
 
-const PIFONT_PACKAGE = "\\usepackage{pifont}";
-const AMSSYMB_PACKAGE = "\\usepackage{amssymb}";
-const TIKZ_SHAPES_PACKAGE = "\\RequirePackage{tikz}\\n\\usetikzlibrary{shapes.geometric}";
+const PIFONT = "\\usepackage{pifont}";
+const AMSSYMB = "\\usepackage{amssymb}";
+const TIKZ_SHAPES = "\\RequirePackage{tikz}\\n\\usetikzlibrary{shapes.geometric}";
 
 const BULLETS = Object.freeze({
-  "pifont-outline": {
-    id: "pifont-outline",
-    label: "Pifont Outline",
-    packageLine: "\\usepackage{pifont}",
-    itemTemplate: "\\ding{109}",
-    subitemTemplate: "\\ding{119}",
-    cssMarker: "□"
-  },
-  triangle: {
-    id: "triangle",
-    label: "Triangle",
-    packageLine: "\\usepackage{amssymb}",
-    itemTemplate: "$\\blacktriangleright$",
-    subitemTemplate: "$\\triangleright$",
-    cssMarker: ">"
-  },
-  "ding-arrow": {
-    id: "ding-arrow",
-    label: "Ding Arrow",
-    packageLine: "\\usepackage{pifont}",
-    itemTemplate: "\\ding{220}",
-    subitemTemplate: "\\ding{216}",
-    cssMarker: "➜"
-  },
-  square: {
-    id: "square",
-    label: "Square",
-    packageLine: "\\usepackage{amssymb}",
-    itemTemplate: "$\\blacksquare$",
-    subitemTemplate: "$\\square$",
-    cssMarker: "■"
-  },
-  star: {
-    id: "star",
-    label: "Star",
-    packageLine: "\\usepackage{amssymb}",
-    itemTemplate: "$\\bigstar$",
-    subitemTemplate: "$\\star$",
-    cssMarker: "★"
-  },
-  diamond: {
-    id: "diamond",
-    label: "Diamond",
-    packageLine: "\\usepackage{amssymb}",
-    itemTemplate: "$\\blacklozenge$",
-    subitemTemplate: "$\\diamond$",
-    cssMarker: "◆"
-  },
-  "pifont-ding32": bullet("pifont-ding32", "Pifont Star Open", PIFONT_PACKAGE, "\\ding{32}", "\\ding{70}", "☆"),
-  "pifont-ding67": bullet("pifont-ding67", "Pifont Star Filled", PIFONT_PACKAGE, "\\ding{67}", "\\ding{32}", "★"),
-  "pifont-ding70": bullet("pifont-ding70", "Pifont Circle", PIFONT_PACKAGE, "\\ding{70}", "\\ding{108}", "●"),
-  "pifont-ding109": bullet("pifont-ding109", "Pifont Check", PIFONT_PACKAGE, "\\ding{109}", "\\ding{113}", "✓"),
-  "pifont-ding110": bullet("pifont-ding110", "Pifont Cross", PIFONT_PACKAGE, "\\ding{110}", "\\ding{114}", "✕"),
-  "pifont-ding168": bullet("pifont-ding168", "Pifont Heart", PIFONT_PACKAGE, "\\ding{168}", "\\ding{170}", "♥"),
-  "math-bullet": bullet("math-bullet", "Math Bullet", AMSSYMB_PACKAGE, "$\\bullet$", "$\\circ$", "•"),
-  "math-star": bullet("math-star", "Math Star", AMSSYMB_PACKAGE, "$\\star$", "$\\ast$", "☆"),
-  "math-asterisk": bullet("math-asterisk", "Math Asterisk", AMSSYMB_PACKAGE, "$\\ast$", "$\\cdot$", "*"),
-  "math-dagger": bullet("math-dagger", "Math Dagger", AMSSYMB_PACKAGE, "$\\dagger$", "$\\ddagger$", "†"),
-  "math-ddagger": bullet("math-ddagger", "Math Double Dagger", AMSSYMB_PACKAGE, "$\\ddagger$", "$\\dagger$", "‡"),
-  "math-oplus": bullet("math-oplus", "Math Circled Plus", AMSSYMB_PACKAGE, "$\\oplus$", "$\\odot$", "⊕"),
-  "math-ominus": bullet("math-ominus", "Math Circled Minus", AMSSYMB_PACKAGE, "$\\ominus$", "$\\oslash$", "⊖"),
-  "math-otimes": bullet("math-otimes", "Math Circled Times", AMSSYMB_PACKAGE, "$\\otimes$", "$\\oplus$", "⊗"),
-  "math-odot": bullet("math-odot", "Math Circled Dot", AMSSYMB_PACKAGE, "$\\odot$", "$\\circ$", "⊙"),
-  "math-oslash": bullet("math-oslash", "Math Circled Slash", AMSSYMB_PACKAGE, "$\\oslash$", "$\\ominus$", "⊘"),
-  "math-circledast": bullet("math-circledast", "Math Circled Asterisk", AMSSYMB_PACKAGE, "$\\circledast$", "$\\ast$", "⊛"),
-  "tikz-cross": bullet(
-    "tikz-cross",
-    "TikZ Cross",
-    "\\RequirePackage{tikz}",
-    "\\tikz[baseline=-0.5ex] \\node[inner sep=1.5pt] {\\textbf{\\times}};",
-    "$\\times$",
-    "×"
-  ),
-  "tikz-plus": bullet(
-    "tikz-plus",
-    "TikZ Plus",
-    "\\RequirePackage{tikz}",
-    "\\tikz[baseline=-0.5ex] \\node[inner sep=1.5pt] {\\textbf{+}};",
-    "$+$",
-    "+"
-  ),
-  "tikz-arrow": bullet(
-    "tikz-arrow",
-    "TikZ Arrow",
-    "\\RequirePackage{tikz}",
-    "\\tikz[baseline=-0.5ex] \\node[inner sep=1pt] {$\\rightarrow$};",
-    "$\\triangleright$",
-    "→"
-  ),
-  "tikz-octagon": bullet(
-    "tikz-octagon",
-    "TikZ Octagon",
-    TIKZ_SHAPES_PACKAGE,
+  "pifont-outline": bullet("pifont-outline", "Pifont Outline", PIFONT, "\\ding{109}", "\\ding{119}", "□"),
+  triangle: bullet("triangle", "Triangle", AMSSYMB, "$\\blacktriangleright$", "$\\triangleright$", ">"),
+  "ding-arrow": bullet("ding-arrow", "Ding Arrow", PIFONT, "\\ding{220}", "\\ding{216}", "➜"),
+  square: bullet("square", "Square", AMSSYMB, "$\\blacksquare$", "$\\square$", "■"),
+  star: bullet("star", "Star", AMSSYMB, "$\\bigstar$", "$\\star$", "★"),
+  diamond: bullet("diamond", "Diamond", AMSSYMB, "$\\blacklozenge$", "$\\diamond$", "◆"),
+  "pifont-ding32": bullet("pifont-ding32", "Pifont Star Open", PIFONT, "\\ding{32}", "\\ding{70}", "☆"),
+  "pifont-ding67": bullet("pifont-ding67", "Pifont Star Filled", PIFONT, "\\ding{67}", "\\ding{32}", "★"),
+  "pifont-ding70": bullet("pifont-ding70", "Pifont Circle", PIFONT, "\\ding{70}", "\\ding{108}", "●"),
+  "pifont-ding109": bullet("pifont-ding109", "Pifont Check", PIFONT, "\\ding{109}", "\\ding{113}", "✓"),
+  "pifont-ding110": bullet("pifont-ding110", "Pifont Cross", PIFONT, "\\ding{110}", "\\ding{114}", "✕"),
+  "pifont-ding168": bullet("pifont-ding168", "Pifont Heart", PIFONT, "\\ding{168}", "\\ding{170}", "♥"),
+  "math-bullet": bullet("math-bullet", "Math Bullet", AMSSYMB, "$\\bullet$", "$\\circ$", "•"),
+  "math-star": bullet("math-star", "Math Star", AMSSYMB, "$\\star$", "$\\ast$", "☆"),
+  "math-asterisk": bullet("math-asterisk", "Math Asterisk", AMSSYMB, "$\\ast$", "$\\cdot$", "*"),
+  "math-dagger": bullet("math-dagger", "Math Dagger", AMSSYMB, "$\\dagger$", "$\\ddagger$", "†"),
+  "math-ddagger": bullet("math-ddagger", "Math Double Dagger", AMSSYMB, "$\\ddagger$", "$\\dagger$", "‡"),
+  "math-oplus": bullet("math-oplus", "Math Circled Plus", AMSSYMB, "$\\oplus$", "$\\odot$", "⊕"),
+  "math-ominus": bullet("math-ominus", "Math Circled Minus", AMSSYMB, "$\\ominus$", "$\\oslash$", "⊖"),
+  "math-otimes": bullet("math-otimes", "Math Circled Times", AMSSYMB, "$\\otimes$", "$\\oplus$", "⊗"),
+  "math-odot": bullet("math-odot", "Math Circled Dot", AMSSYMB, "$\\odot$", "$\\circ$", "⊙"),
+  "math-oslash": bullet("math-oslash", "Math Circled Slash", AMSSYMB, "$\\oslash$", "$\\ominus$", "⊘"),
+  "math-circledast": bullet("math-circledast", "Math Circled Asterisk", AMSSYMB, "$\\circledast$", "$\\ast$", "⊛"),
+  "tikz-cross": bullet("tikz-cross", "TikZ Cross", "\\RequirePackage{tikz}",
+    "\\tikz[baseline=-0.5ex] \\node[inner sep=1.5pt] {\\textbf{\\times}};", "$\\times$", "×"),
+  "tikz-plus": bullet("tikz-plus", "TikZ Plus", "\\RequirePackage{tikz}",
+    "\\tikz[baseline=-0.5ex] \\node[inner sep=1.5pt] {\\textbf{+}};", "$+$", "+"),
+  "tikz-arrow": bullet("tikz-arrow", "TikZ Arrow", "\\RequirePackage{tikz}",
+    "\\tikz[baseline=-0.5ex] \\node[inner sep=1pt] {$\\rightarrow$};", "$\\triangleright$", "→"),
+  "tikz-octagon": bullet("tikz-octagon", "TikZ Octagon", TIKZ_SHAPES,
     "\\tikz[baseline=-0.5ex] \\node[regular polygon, regular polygon sides=8, fill=black, inner sep=1.5pt] {};",
-    "$\\circ$",
-    "⬣"
-  )
+    "$\\circ$", "⬣")
 });
 
 const BLOCKS = Object.freeze({
@@ -377,10 +303,6 @@ const TITLE_PAGES = Object.freeze({
     description: "Left-aligned title block with generous whitespace."
   }
 });
-
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
 
 function getRegistry() {
   return clone({

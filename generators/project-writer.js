@@ -1,3 +1,5 @@
+"use strict";
+
 const fs = require("node:fs");
 const path = require("node:path");
 const { validateTheme } = require("../schema/theme-schema");
@@ -16,78 +18,60 @@ function writeTextFile(filePath, content) {
 function copyFontAssets(theme, templateDir, registry, rootDir) {
   const choices = resolveThemeChoices(theme, registry);
   const assets = new Set([...choices.bodyFont.assets, ...choices.titleFont.assets]);
-
   if (assets.size === 0) return [];
 
-  const assetByBasename = new Map();
+  const seen = new Map();
   for (const asset of assets) {
-    const basename = path.basename(asset);
-    const existing = assetByBasename.get(basename);
-    if (existing && existing !== asset) {
-      throw new Error(
-        `Font asset basename collision: ${existing} and ${asset} both target ${basename}`
-      );
+    const base = path.basename(asset);
+    if (seen.has(base) && seen.get(base) !== asset) {
+      throw new Error(`Font asset basename collision: '${seen.get(base)}' and '${asset}' both resolve to '${base}'`);
     }
-    assetByBasename.set(basename, asset);
+    seen.set(base, asset);
   }
 
-  const copied = [];
   const fontDir = path.join(templateDir, "font");
   ensureDir(fontDir);
-
+  const copied = [];
   for (const asset of assets) {
-    const source = resolveAssetPath(rootDir, asset);
-    const target = path.join(fontDir, path.basename(asset));
-    fs.copyFileSync(source, target);
-    copied.push(target);
+    const src = resolveAssetPath(rootDir, asset);
+    const dest = path.join(fontDir, path.basename(asset));
+    fs.copyFileSync(src, dest);
+    copied.push(dest);
   }
-
   return copied;
 }
 
-function assertInsideOutputRoot(templateDir, outputRoot) {
+function assertInsideRoot(templateDir, outputRoot) {
   if (!outputRoot) return;
-
-  const resolvedTemplateDir = path.resolve(templateDir);
-  const resolvedOutputRoot = path.resolve(outputRoot);
-  const relativePath = path.relative(resolvedOutputRoot, resolvedTemplateDir);
-  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    throw new Error(`Template output is outside output root: ${resolvedTemplateDir}`);
+  const rel = path.relative(path.resolve(outputRoot), path.resolve(templateDir));
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error(`Template output is outside output root: ${path.resolve(templateDir)}`);
   }
 }
 
-function validationMessage(errors) {
-  return errors.map((error) => `${error.path}: ${error.message}`).join("; ");
+function formatErrors(errors) {
+  return errors.map((e) => `${e.path}: ${e.message}`).join("; ");
 }
 
 function writeTemplateProject(theme, templateDir, options = {}) {
   const registry = options.registry;
   const rootDir = options.rootDir || process.cwd();
-  assertInsideOutputRoot(templateDir, options.outputRoot);
+  assertInsideRoot(templateDir, options.outputRoot);
+
   const validation = validateTheme(theme, { registry });
-  if (!validation.ok) {
-    throw new Error(`Invalid theme: ${validationMessage(validation.errors)}`);
-  }
+  if (!validation.ok) throw new Error(`Invalid theme: ${formatErrors(validation.errors)}`);
 
   ensureDir(templateDir);
   const files = generateFiles(theme, registry);
   const written = [];
-
-  for (const [relativePath, content] of Object.entries(files)) {
-    const absolutePath = path.join(templateDir, relativePath);
-    writeTextFile(absolutePath, content);
-    written.push(absolutePath);
+  for (const [rel, content] of Object.entries(files)) {
+    const abs = path.join(templateDir, rel);
+    writeTextFile(abs, content);
+    written.push(abs);
   }
 
   const copiedAssets = copyFontAssets(theme, templateDir, registry, rootDir);
-
-  return {
-    templateDir,
-    written,
-    copiedAssets
-  };
+  return { templateDir, written, copiedAssets };
 }
 
-module.exports = {
-  writeTemplateProject
-};
+module.exports = { writeTemplateProject };
