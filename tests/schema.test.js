@@ -27,7 +27,13 @@ test("reports field-level validation errors", () => {
   assert.equal(result.ok, false);
   assert.deepEqual(
     result.errors.map((error) => error.path),
-    ["identity.name", "foundation.aspectRatio", "colors.background", "contentDefaults.sampleTitle"]
+    [
+      "identity.name",
+      "foundation.aspectRatio",
+      "colors.background",
+      "contentDefaults.sampleTitle",
+      "contentDefaults.sampleBullets"
+    ]
   );
 });
 

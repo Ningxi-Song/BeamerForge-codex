@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { DEFAULT_THEME } = require("../schema/theme-schema");
+const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
 const {
   resolveDesign,
@@ -81,6 +81,26 @@ test("resolver reports every validation path before registry lookup", () => {
     (error) => error.message.startsWith("Invalid theme: ")
       && error.message.includes("identity.title")
       && error.message.includes("navigation.style")
+  );
+});
+
+test("missing sample bullets fail validation before resolved content is cloned", () => {
+  const theme = clone(DEFAULT_THEME);
+  const registry = getRegistry();
+  delete theme.contentDefaults.sampleBullets;
+
+  const validation = validateTheme(theme, { registry });
+  assert.equal(validation.ok, false);
+  assert.deepEqual(
+    validation.errors.map((error) => error.path),
+    ["contentDefaults.sampleBullets"]
+  );
+  assert.throws(
+    () => resolveDesign(theme, registry),
+    (error) => error instanceof Error
+      && error.name === "Error"
+      && error.message.startsWith("Invalid theme: ")
+      && error.message.includes("contentDefaults.sampleBullets")
   );
 });
 

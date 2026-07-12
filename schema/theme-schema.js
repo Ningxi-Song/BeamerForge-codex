@@ -173,23 +173,21 @@ function validateFonts(fonts, registry, errors) {
 
 function validateContentDefaults(content, errors) {
   assertNonEmptyString(content, "contentDefaults.sampleTitle", errors);
-  if (content.sampleBullets !== undefined) {
-    if (!Array.isArray(content.sampleBullets) || content.sampleBullets.length < BULLET_MIN_COUNT) {
-      errors.push(new ValidationError(
-        "contentDefaults.sampleBullets",
-        `contentDefaults.sampleBullets must contain at least ${BULLET_MIN_COUNT} bullets`
-      ));
-    }
-    if (Array.isArray(content.sampleBullets)) {
-      content.sampleBullets.forEach((bullet, i) => {
-        if (typeof bullet !== "string" || bullet.trim() === "") {
-          errors.push(new ValidationError(
-            `contentDefaults.sampleBullets.${i}`,
-            `contentDefaults.sampleBullets.${i} must be a non-empty string`
-          ));
-        }
-      });
-    }
+  if (!Array.isArray(content.sampleBullets) || content.sampleBullets.length < BULLET_MIN_COUNT) {
+    errors.push(new ValidationError(
+      "contentDefaults.sampleBullets",
+      `contentDefaults.sampleBullets must contain at least ${BULLET_MIN_COUNT} bullets`
+    ));
+  }
+  if (Array.isArray(content.sampleBullets)) {
+    content.sampleBullets.forEach((bullet, i) => {
+      if (typeof bullet !== "string" || bullet.trim() === "") {
+        errors.push(new ValidationError(
+          `contentDefaults.sampleBullets.${i}`,
+          `contentDefaults.sampleBullets.${i} must be a non-empty string`
+        ));
+      }
+    });
   }
 }
 
