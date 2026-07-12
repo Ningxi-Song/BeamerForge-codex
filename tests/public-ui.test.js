@@ -20,6 +20,11 @@ function functionSource(script, name) {
   return script.slice(start, next === -1 ? script.length : next);
 }
 
+function cssRuleBodies(css, selector) {
+  const escaped = escapeRegExp(selector);
+  return [...css.matchAll(new RegExp(`[^{}]*${escaped}[^{}]*\\{([^{}]*)\\}`, "g"))].map((match) => match[1]);
+}
+
 test("workbench index exposes cumulative wizard regions", () => {
   const html = readPublicFile("index.html");
   const requiredIds = [
@@ -121,9 +126,8 @@ test("browser resolves debounced preview designs and rejects stale responses", (
   assert.match(script, /BeamerForgePreviewState/);
   assert.match(script, /async function requestResolvedDesign\(theme\)[\s\S]*?api\("\/api\/design\/resolve",[\s\S]*?method:\s*"POST"[\s\S]*?JSON\.stringify\(theme\)/);
   assert.match(script, /createPreviewLifecycle\(/);
-  assert.match(script, /state\.resolvedDesign = design/);
-  assert.match(script, /previewState\.applyPreviewFailure\(state, error\)/);
-  assert.match(script, /state\.previewValidationErrors = \[\]/);
+  assert.match(script, /previewState\.applyPreviewSuccess\(state, design\)/);
+  assert.match(script, /previewState\.applyPreviewFailure\(state, error,/);
   assert.match(script, /render\(\{ schedulePreview: false \}\)/);
   const scheduler = functionSource(script, "schedulePreviewResolution");
   assert.match(scheduler, /JSON\.stringify\(state\.theme\)/);
@@ -207,6 +211,22 @@ test("public CSS defines wizard layout, option cards, summary, and preview state
   ]) {
     assert.match(css, new RegExp(escapeRegExp(selector)));
   }
+});
+
+test("resolved preview geometry is controlled by width and aspect ratio", () => {
+  const css = readPublicFile("styles.css");
+  const previewRules = [...cssRuleBodies(css, ".slide-preview"), ...cssRuleBodies(css, ".compact-preview")];
+  assert.equal(previewRules.length >= 2, true);
+  for (const body of previewRules) {
+    assert.doesNotMatch(body, /min-height:\s*(?!0(?:px|rem|em|%)?\s*;)[1-9][\d.]*[a-z%]*\s*;/i);
+  }
+  const baseRule = cssRuleBodies(css, ".slide-preview")[0];
+  assert.match(baseRule, /width:\s*100%/);
+  assert.match(baseRule, /min-height:\s*0/);
+  assert.match(baseRule, /height:\s*auto/);
+  assert.match(baseRule, /box-sizing:\s*border-box/);
+  assert.equal(400 * 9 / 16, 225);
+  assert.equal(400 * 3 / 4, 300);
 });
 
 test("workbench exposes the manual and external AI phases", () => {

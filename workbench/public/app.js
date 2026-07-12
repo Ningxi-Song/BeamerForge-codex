@@ -33,7 +33,7 @@ const CUBE_HALF = 1;
 
 const state = {
   registry: null, theme: null, resolvedDesign: null, validationErrors: [], previewValidationErrors: [], statuses: [], busy: false,
-  previewResolution: null,
+  previewResolution: null, previewErrorActive: false, previewBuildStatusBeforeError: null,
   baseColor: { r: 69, g: 105, b: 144 }, scheme: "complementary",
   savedPalettes: [], paletteCounter: 0,
   workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null },
@@ -143,12 +143,15 @@ function initializePreviewResolution() {
   state.previewResolution = previewState.createPreviewLifecycle({
     resolve: requestResolvedDesign,
     onSuccess(design, meta) {
-      state.resolvedDesign = design;
-      state.previewValidationErrors = [];
+      const recovery = previewState.applyPreviewSuccess(state, design);
+      if (recovery.recovered) {
+        if (recovery.restoreBuildStatus !== undefined && recovery.restoreBuildStatus !== null) setBuildStatus(recovery.restoreBuildStatus);
+        setStatus("Preview current");
+      }
       if (meta.context?.render !== false) render({ schedulePreview: false });
     },
     onError(error, meta) {
-      previewState.applyPreviewFailure(state, error);
+      previewState.applyPreviewFailure(state, error, elements.buildStatus.textContent);
       setBuildStatus(error.details || error.message);
       setStatus("Preview error", "is-error");
       if (meta.context?.render !== false) render({ schedulePreview: false });
@@ -165,7 +168,8 @@ function schedulePreviewResolution() {
   const inputKey = JSON.stringify(state.theme);
   const transition = state.previewResolution.schedule(clone(state.theme), inputKey, { render: true });
   if (transition === "reuse") {
-    previewState.applyCachedReuse(state);
+    const recovery = previewState.applyCachedReuse(state);
+    if (recovery.restoreBuildStatus !== undefined && recovery.restoreBuildStatus !== null) setBuildStatus(recovery.restoreBuildStatus);
     setStatus("Preview current");
   }
   return transition;

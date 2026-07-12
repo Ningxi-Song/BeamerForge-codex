@@ -69,14 +69,34 @@
     container.style.aspectRatio = `${design.canvas.widthUnits} / ${design.canvas.heightUnits}`;
   }
 
-  function applyPreviewFailure(state, error) {
+  function applyPreviewFailure(state, error, currentBuildStatus) {
     if (Array.isArray(error?.errors) && error.errors.length > 0) state.previewValidationErrors = error.errors;
+    if (!state.previewErrorActive) state.previewBuildStatusBeforeError = currentBuildStatus;
+    state.previewErrorActive = true;
     return state.resolvedDesign;
   }
 
-  function applyCachedReuse(state) {
+  function applyPreviewSuccess(state, design) {
+    const recovery = {
+      recovered: state.previewErrorActive === true,
+      restoreBuildStatus: state.previewBuildStatusBeforeError
+    };
+    state.resolvedDesign = design;
     state.previewValidationErrors = [];
-    return state.resolvedDesign;
+    state.previewErrorActive = false;
+    state.previewBuildStatusBeforeError = null;
+    return recovery;
+  }
+
+  function applyCachedReuse(state) {
+    const recovery = {
+      recovered: state.previewErrorActive === true,
+      restoreBuildStatus: state.previewBuildStatusBeforeError
+    };
+    state.previewValidationErrors = [];
+    state.previewErrorActive = false;
+    state.previewBuildStatusBeforeError = null;
+    return recovery;
   }
 
   function trustedPreviewUrl(value, locationLike) {
@@ -90,5 +110,5 @@
     }
   }
 
-  return { createPreviewLifecycle, applyResolvedCanvas, applyPreviewFailure, applyCachedReuse, trustedPreviewUrl };
+  return { createPreviewLifecycle, applyResolvedCanvas, applyPreviewFailure, applyPreviewSuccess, applyCachedReuse, trustedPreviewUrl };
 });

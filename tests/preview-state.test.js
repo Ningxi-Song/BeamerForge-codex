@@ -7,6 +7,7 @@ const {
   createPreviewLifecycle,
   applyResolvedCanvas,
   applyPreviewFailure,
+  applyPreviewSuccess,
   applyCachedReuse,
   trustedPreviewUrl
 } = require(modulePath);
@@ -84,6 +85,53 @@ test("unstructured preview failures preserve existing field errors", () => {
   const state = { resolvedDesign: {}, previewValidationErrors: existing };
   applyPreviewFailure(state, Object.assign(new Error("offline"), { errors: [] }));
   assert.equal(state.previewValidationErrors, existing);
+});
+
+test("same-key retry success clears preview error presentation and restores build status", async () => {
+  let attempts = 0;
+  const timers = fakeTimers();
+  const state = {
+    resolvedDesign: { source: { themeHash: "last" } },
+    previewValidationErrors: [],
+    previewErrorActive: false,
+    previewBuildStatusBeforeError: null
+  };
+  const display = { status: "Saved", statusClass: "is-saved", buildStatus: "Compiled successfully" };
+  const lifecycle = createPreviewLifecycle({
+    setTimeoutFn: timers.set,
+    clearTimeoutFn: timers.clear,
+    async resolve() {
+      attempts++;
+      if (attempts === 1) throw Object.assign(new Error("invalid"), { errors: [{ path: "colors.primary" }] });
+      return { source: { themeHash: "current" } };
+    },
+    onError(error) {
+      applyPreviewFailure(state, error, display.buildStatus);
+      display.status = "Preview error";
+      display.statusClass = "is-error";
+      display.buildStatus = error.message;
+    },
+    onSuccess(design) {
+      const recovery = applyPreviewSuccess(state, design);
+      if (recovery.recovered) {
+        display.status = "Preview current";
+        display.statusClass = "";
+        display.buildStatus = recovery.restoreBuildStatus;
+      }
+    }
+  });
+
+  lifecycle.schedule({}, "same");
+  await timers.runNext();
+  assert.equal(lifecycle.schedule({}, "same"), true);
+  await timers.runNext();
+
+  assert.equal(attempts, 2);
+  assert.equal(state.resolvedDesign.source.themeHash, "current");
+  assert.deepEqual(state.previewValidationErrors, []);
+  assert.equal(display.status, "Preview current");
+  assert.equal(display.statusClass, "");
+  assert.equal(display.buildStatus, "Compiled successfully");
 });
 
 test("cached reuse clears only preview-owned errors and preserves the resolved design", () => {
