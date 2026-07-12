@@ -45,6 +45,7 @@ test("compileTemplate reports missing compiler", () => {
   });
   assert.equal(result.ok, false);
   assert.equal(result.status, "missing-compiler");
+  assert.equal(result.compilerKind, "missing");
   assert.match(result.message, /latexmk, xelatex, or tectonic/);
 });
 
@@ -81,6 +82,7 @@ test("compileTemplate returns success when fake xelatex writes a PDF", () => {
 
   assert.equal(result.ok, true);
   assert.equal(result.status, "compiled");
+  assert.equal(result.compilerKind, "xelatex");
   assert.equal(result.command, "xelatex main.tex");
   assert.equal(result.exitCode, 0);
   assert.equal(path.basename(result.pdfPath), "main.pdf");
@@ -103,6 +105,7 @@ test("compileTemplate returns a LaTeX excerpt for failed compiles", () => {
 
   assert.equal(result.ok, false);
   assert.equal(result.status, "compile-failed");
+  assert.equal(result.compilerKind, "xelatex");
   assert.equal(result.command, "xelatex main.tex");
   assert.equal(result.exitCode, 1);
   assert.match(result.excerpt, /Undefined control sequence/);
@@ -123,6 +126,7 @@ test("compileTemplate includes spawn errors when compiler produces no output", (
 
   assert.equal(result.ok, false);
   assert.equal(result.status, "compile-failed");
+  assert.equal(result.compilerKind, "xelatex");
   assert.equal(result.command, "xelatex main.tex");
   assert.equal(result.exitCode, null);
   assert.match(`${result.excerpt}\n${result.message}`, /spawn blew up/);

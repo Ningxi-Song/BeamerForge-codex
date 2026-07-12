@@ -68,6 +68,7 @@ function compileTemplate(templateDir, options = {}) {
     return {
       ok: false,
       status: "missing-compiler",
+      compilerKind: compiler.kind,
       message: MISSING_COMPILER_MESSAGE,
       logPath: null,
       excerpt: ""
@@ -108,6 +109,7 @@ function compileTemplate(templateDir, options = {}) {
     return {
       ok: true,
       status: "compiled",
+      compilerKind: compiler.kind,
       message: "Template compiled.",
       command,
       exitCode: result.status,
@@ -120,6 +122,7 @@ function compileTemplate(templateDir, options = {}) {
   return {
     ok: false,
     status: "compile-failed",
+    compilerKind: compiler.kind,
     message: spawnError ? `Template compilation failed: ${spawnError}` : "Template compilation failed.",
     command,
     exitCode: result ? result.status : null,
