@@ -1,7 +1,8 @@
 "use strict";
 
 const { validateTheme } = require("../schema/theme-schema");
-const { getRegistry, resolveThemeChoices } = require("../registry/options");
+const { getRegistry } = require("../registry/options");
+const { resolveDesign } = require("../design/resolve-design");
 const { hexWithoutHash, normalizeLatexNewlines, joinNonEmpty } = require("../lib/utils");
 
 const LATEX_SPECIAL_CHARS = {
@@ -117,8 +118,8 @@ const TITLE_PAGE_TEMPLATES = {
 }`
 };
 
-function generateMainTex(theme) {
-  const id = theme.identity;
+function generateMainTex(design) {
+  const id = design.identity;
   return `${String.raw`\documentclass[10pt]{theme}
 
 \title{`}${escapeLatex(id.title || "")}${String.raw`}
@@ -141,23 +142,23 @@ function generateMainTex(theme) {
 `}`;
 }
 
-function generateClassTex(theme, registry = getRegistry()) {
-  const choices = resolveThemeChoices(theme, registry);
-  const aspect = aspectRatioOption(theme.foundation.aspectRatio);
+function generateClassTex(design) {
+  const { bullet, block, navigation, titlePage, cornerLogo } = design.components;
+  const aspect = aspectRatioOption(design.canvas.aspectRatio);
   const classOptions = ["10pt", aspect].filter(Boolean).join(",");
-  const bulletPkg = choices.bullet.packageLine ? `${normalizeLatexNewlines(choices.bullet.packageLine)}\n` : "";
-  const outerTheme = choices.navigation.latexOuterTheme ? `${normalizeLatexNewlines(choices.navigation.latexOuterTheme)}\n` : "";
-  const footline = choices.navigation.latexFootline ? `${normalizeLatexNewlines(choices.navigation.latexFootline)}\n` : "";
-  const titleFont = titleFontSetup(choices.bodyFont, choices.titleFont);
+  const bulletPkg = bullet.latexPackages ? `${normalizeLatexNewlines(bullet.latexPackages)}\n` : "";
+  const outerTheme = navigation.latexOuterTheme ? `${normalizeLatexNewlines(navigation.latexOuterTheme)}\n` : "";
+  const footline = navigation.latexFootline ? `${normalizeLatexNewlines(navigation.latexFootline)}\n` : "";
+  const titleFont = titleFontSetup(design.typography.body, design.typography.title);
   const fontPreamble = joinNonEmpty([
     titleFont.setup,
-    normalizeLatexNewlines(choices.bodyFont.latexPreamble),
+    normalizeLatexNewlines(design.typography.body.latexPreamble),
     titleFont.definition
   ]);
-  const blockTemplate = normalizeLatexNewlines(choices.block.latexTemplate);
-  const titlePageId = theme.titlePage.layout || "left-curtain";
+  const blockTemplate = normalizeLatexNewlines(block.latexTemplate);
+  const titlePageId = titlePage.id || "left-curtain";
   const titlePageTemplate = TITLE_PAGE_TEMPLATES[titlePageId] || TITLE_PAGE_TEMPLATES["left-curtain"];
-  const frametitleTemplate = choices.navigation.hasHeader ? String.raw`
+  const frametitleTemplate = navigation.header ? String.raw`
 \setbeamertemplate{frametitle}{%
   \nointerlineskip
   \begin{beamercolorbox}[wd=\paperwidth,leftskip=0.3cm,rightskip=0.3cm,ht=2.2ex,dp=1.2ex]{frametitle}
@@ -169,13 +170,12 @@ function generateClassTex(theme, registry = getRegistry()) {
   \end{beamercolorbox}%
 }
 ` : "";
-  const logo = theme.decorations.cornerLogo;
-  const logoWidth = logo.size === "medium" ? "1.2cm" : "0.8cm";
-  const logoScale = logo.size === "medium" ? "0.24" : "0.16";
-  const logoX = logo.position === "top-left" ? "0.4cm" : String.raw`\dimexpr\paperwidth-${logoWidth}-0.4cm\relax`;
-  const logoGuardOpen = logo.scope === "content-frames" ? String.raw`\ifnum\insertframenumber>1\relax` : "";
-  const logoGuardClose = logo.scope === "content-frames" ? String.raw`\fi` : "";
-  const logoTemplate = logo.id === "none" ? "" : String.raw`
+  const logoWidth = `${cornerLogo.sizeUnits}cm`;
+  const logoScale = cornerLogo.sizeUnits === 1.2 ? "0.24" : "0.16";
+  const logoX = cornerLogo.position === "top-left" ? "0.4cm" : String.raw`\dimexpr\paperwidth-${logoWidth}-0.4cm\relax`;
+  const logoGuardOpen = cornerLogo.scope === "content-frames" ? String.raw`\ifnum\insertframenumber>1\relax` : "";
+  const logoGuardClose = cornerLogo.scope === "content-frames" ? String.raw`\fi` : "";
+  const logoTemplate = cornerLogo.id === "none" ? "" : String.raw`
 \RequirePackage{tikz}
 \RequirePackage[absolute,overlay]{textpos}
 \definecolor{bfDuckYellow}{HTML}{F4B942}
@@ -206,12 +206,12 @@ ${outerTheme}
 ${blockTemplate}
 \setbeamertemplate{navigation symbols}{}
 ${footline}
-\definecolor{bfBackground}{HTML}{${hexWithoutHash(theme.colors.background)}}
-\definecolor{bfPrimary}{HTML}{${hexWithoutHash(theme.colors.primary)}}
-\definecolor{bfAccent}{HTML}{${hexWithoutHash(theme.colors.accent)}}
-\definecolor{bfText}{HTML}{${hexWithoutHash(theme.colors.text)}}
-\definecolor{bfBlockBody}{HTML}{${hexWithoutHash(theme.colors.blockBody || "#F1F5F9")}}
-\definecolor{bfAlert}{HTML}{${hexWithoutHash(theme.colors.alert || theme.colors.accent)}}
+\definecolor{bfBackground}{HTML}{${hexWithoutHash(design.colors.background)}}
+\definecolor{bfPrimary}{HTML}{${hexWithoutHash(design.colors.primary)}}
+\definecolor{bfAccent}{HTML}{${hexWithoutHash(design.colors.accent)}}
+\definecolor{bfText}{HTML}{${hexWithoutHash(design.colors.text)}}
+\definecolor{bfBlockBody}{HTML}{${hexWithoutHash(design.colors.blockBody)}}
+\definecolor{bfAlert}{HTML}{${hexWithoutHash(design.colors.alert)}}
 
 \setbeamercolor{normal text}{fg=bfText,bg=bfBackground}
 \setbeamercolor{frametitle}{fg=bfPrimary,bg=bfBackground}
@@ -230,8 +230,8 @@ ${footline}
 \setbeamerfont{frametitle}{${titleFont.familyOption}series=\bfseries,size=\Large}
 \setbeamerfont{block title}{series=\bfseries}
 
-\setbeamertemplate{itemize item}{${choices.bullet.itemTemplate}}
-\setbeamertemplate{itemize subitem}{${choices.bullet.subitemTemplate}}
+\setbeamertemplate{itemize item}{${bullet.latexItem}}
+\setbeamertemplate{itemize subitem}{${bullet.latexSubitem}}
 
 ${frametitleTemplate}
 ${logoTemplate}
@@ -239,9 +239,9 @@ ${titlePageTemplate}
 `;
 }
 
-function generateOverviewTex(theme) {
-  const title = escapeLatex(theme.contentDefaults.sampleTitle);
-  const bullets = theme.contentDefaults.sampleBullets
+function generateOverviewTex(design) {
+  const title = escapeLatex(design.content.sampleTitle);
+  const bullets = design.content.bullets
     .map((b) => `  \\item ${escapeLatex(b)}`)
     .join("\n");
 
@@ -250,8 +250,8 @@ function generateOverviewTex(theme) {
 `}${bullets}${String.raw`
 \end{itemize}
 
-\begin{block}{Design note}
-The HTML preview and compiled PDF use the same theme tokens.
+\begin{block}{`}${escapeLatex(design.content.blockTitle)}${String.raw`}
+`}${escapeLatex(design.content.blockBody)}${String.raw`
 \end{block}
 \end{frame}
 `}`;
@@ -285,8 +285,8 @@ function generateTablesTex() {
 `;
 }
 
-function generateReadme(theme) {
-  return `# ${escapeLatex(theme.identity.title)}
+function generateReadme(design) {
+  return `# ${escapeLatex(design.identity.title)}
 
 Generated by BeamerForge.
 
@@ -298,18 +298,24 @@ latexmk -xelatex -interaction=nonstopmode main.tex
 `;
 }
 
+function generateResolvedFiles(design) {
+  return {
+    "main.tex": generateMainTex(design),
+    "theme.cls": generateClassTex(design),
+    "README.md": generateReadme(design),
+    "content/overview.tex": generateOverviewTex(design),
+    "content/figures.tex": generateFiguresTex(design),
+    "content/tables.tex": generateTablesTex(design)
+  };
+}
+
 function generateFiles(theme, registry = getRegistry()) {
   const validation = validateTheme(theme, { registry });
   if (!validation.ok) throw new Error(`Invalid theme: ${formatErrors(validation.errors)}`);
   const t = validation.value;
   return {
-    "main.tex": generateMainTex(t, registry),
-    "theme.cls": generateClassTex(t, registry),
+    ...generateResolvedFiles(resolveDesign(t, registry)),
     "theme.json": `${JSON.stringify(t, null, 2)}\n`,
-    "README.md": generateReadme(t),
-    "content/overview.tex": generateOverviewTex(t),
-    "content/figures.tex": generateFiguresTex(t),
-    "content/tables.tex": generateTablesTex(t)
   };
 }
 
@@ -318,5 +324,6 @@ module.exports = {
   aspectRatioOption,
   generateMainTex,
   generateClassTex,
+  generateResolvedFiles,
   generateFiles
 };

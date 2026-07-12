@@ -191,7 +191,7 @@ test("4:3 themes resolve to normalized canvas units", () => {
   });
 });
 
-test("medium duck logos resolve normalized size and vector identity", () => {
+test("medium duck logos resolve normalized size, vector identity, and trusted asset path", () => {
   const theme = clone(DEFAULT_THEME);
   theme.decorations.cornerLogo = {
     id: "duck",
@@ -207,8 +207,22 @@ test("medium duck logos resolve normalized size and vector identity", () => {
     sizeUnits: 1.2,
     scope: "all-frames",
     vectorId: "duck",
-    previewUrl: "/assets/elements/decorations/logos/duck.svg"
+    previewUrl: "/assets/elements/decorations/logos/duck.svg",
+    trustedAssetPath: "elements/decorations/logos/duck.svg"
   });
+});
+
+test("trusted logo asset paths are frozen and detached from the registry", () => {
+  const theme = clone(DEFAULT_THEME);
+  theme.decorations.cornerLogo.id = "duck";
+  const registry = getRegistry();
+  const design = resolveDesign(theme, registry);
+
+  registry.logos.duck.asset = "changed-after-resolution.svg";
+
+  assert.equal(design.components.cornerLogo.trustedAssetPath, "elements/decorations/logos/duck.svg");
+  assert.equal(Object.isFrozen(design.components.cornerLogo), true);
+  assert.throws(() => { design.components.cornerLogo.trustedAssetPath = "mutated.svg"; }, TypeError);
 });
 
 test("typography assets are detached from the registry", () => {

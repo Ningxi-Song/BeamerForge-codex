@@ -3,8 +3,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { validateTheme } = require("../schema/theme-schema");
-const { generateFiles } = require("./latex");
-const { resolveThemeChoices, resolveAssetPath } = require("../registry/options");
+const { generateResolvedFiles } = require("./latex");
+const { getRegistry, resolveAssetPath } = require("../registry/options");
+const { resolveDesign } = require("../design/resolve-design");
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -15,9 +16,11 @@ function writeTextFile(filePath, content) {
   fs.writeFileSync(filePath, content, "utf8");
 }
 
-function copyFontAssets(theme, templateDir, registry, rootDir) {
-  const choices = resolveThemeChoices(theme, registry);
-  const assets = new Set([...choices.bodyFont.assets, ...choices.titleFont.assets]);
+function copyFontAssets(design, templateDir, rootDir) {
+  const assets = new Set([
+    ...design.typography.body.assets,
+    ...design.typography.title.assets
+  ]);
   if (assets.size === 0) return [];
 
   const seen = new Map();
@@ -41,10 +44,10 @@ function copyFontAssets(theme, templateDir, registry, rootDir) {
   return copied;
 }
 
-function copyDecorationAssets(theme, templateDir, registry, rootDir) {
-  const logo = resolveThemeChoices(theme, registry).logo;
-  if (!logo || !logo.asset) return [];
-  const source = resolveAssetPath(rootDir, logo.asset);
+function copyDecorationAssets(design, templateDir, rootDir) {
+  const asset = design.components.cornerLogo.trustedAssetPath;
+  if (!asset) return [];
+  const source = resolveAssetPath(rootDir, asset);
   const destination = path.join(templateDir, "assets", "corner-logo.svg");
   ensureDir(path.dirname(destination));
   fs.copyFileSync(source, destination);
@@ -64,15 +67,20 @@ function formatErrors(errors) {
 }
 
 function writeTemplateProject(theme, templateDir, options = {}) {
-  const registry = options.registry;
+  const registry = options.registry || getRegistry();
   const rootDir = options.rootDir || process.cwd();
   assertInsideRoot(templateDir, options.outputRoot);
 
   const validation = validateTheme(theme, { registry });
   if (!validation.ok) throw new Error(`Invalid theme: ${formatErrors(validation.errors)}`);
+  const normalizedTheme = validation.value;
+  const design = resolveDesign(normalizedTheme, registry);
 
   ensureDir(templateDir);
-  const files = generateFiles(theme, registry);
+  const files = {
+    ...generateResolvedFiles(design),
+    "theme.json": `${JSON.stringify(normalizedTheme, null, 2)}\n`
+  };
   const written = [];
   for (const [rel, content] of Object.entries(files)) {
     const abs = path.join(templateDir, rel);
@@ -81,8 +89,8 @@ function writeTemplateProject(theme, templateDir, options = {}) {
   }
 
   const copiedAssets = [
-    ...copyFontAssets(theme, templateDir, registry, rootDir),
-    ...copyDecorationAssets(theme, templateDir, registry, rootDir)
+    ...copyFontAssets(design, templateDir, rootDir),
+    ...copyDecorationAssets(design, templateDir, rootDir)
   ];
   return { templateDir, written, copiedAssets };
 }

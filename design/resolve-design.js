@@ -94,7 +94,8 @@ function resolvedComponents(theme, choices) {
       sizeUnits: logo.size === "medium" ? 1.2 : 0.8,
       scope: logo.scope,
       vectorId: choices.logo.vectorId,
-      previewUrl: choices.logo.previewUrl
+      previewUrl: choices.logo.previewUrl,
+      trustedAssetPath: choices.logo.asset
     }
   };
 }

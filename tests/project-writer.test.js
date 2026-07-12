@@ -37,6 +37,46 @@ test("writes a complete template project", () => {
   assert.equal(fs.existsSync(path.join(outDir, "content", "overview.tex")), true);
 });
 
+test("writes a normalized complete theme.json for legacy sparse themes", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-legacy-project-"));
+  const outDir = path.join(root, "legacy-theme");
+  const theme = structuredClone(DEFAULT_THEME);
+  delete theme.identity.subtitle;
+  delete theme.colors.blockBody;
+  delete theme.colors.alert;
+  delete theme.contentDefaults.sampleBullets;
+
+  writeTemplateProject(theme, outDir, { registry: getRegistry(), rootDir: process.cwd() });
+  const writtenTheme = JSON.parse(fs.readFileSync(path.join(outDir, "theme.json"), "utf8"));
+
+  assert.equal(writtenTheme.identity.subtitle, "");
+  assert.equal(writtenTheme.colors.blockBody, theme.colors.background);
+  assert.equal(writtenTheme.colors.alert, theme.colors.accent);
+  assert.deepEqual(writtenTheme.contentDefaults.sampleBullets, DEFAULT_THEME.contentDefaults.sampleBullets);
+});
+
+test("resolves injected registry choices once before writing and copying", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-single-resolution-"));
+  const outDir = path.join(root, "single-resolution");
+  const registry = getRegistry();
+  const theme = structuredClone(DEFAULT_THEME);
+  theme.fonts.title = "times";
+  let selectedFontReads = 0;
+  const font = registry.fonts.palatino;
+  Object.defineProperty(registry.fonts, "palatino", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      selectedFontReads += 1;
+      return font;
+    }
+  });
+
+  writeTemplateProject(theme, outDir, { registry, rootDir: process.cwd() });
+
+  assert.equal(selectedFontReads, 4);
+});
+
 test("copies font assets when a font declares assets", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-font-"));
   const outDir = path.join(root, "neuton-template");
