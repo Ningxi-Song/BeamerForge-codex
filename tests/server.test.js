@@ -119,6 +119,62 @@ test("PUT /api/theme persists a valid theme", async (t) => {
   assert.equal(saved.identity.name, "server-theme");
 });
 
+test("POST /api/design/resolve returns a resolved design without persisting the theme", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const baseUrl = await withServer(t, { stateDir });
+
+  const response = await fetch(`${baseUrl}/api/design/resolve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(DEFAULT_THEME)
+  });
+  const design = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(design.colors.primary, DEFAULT_THEME.colors.primary);
+  assert.equal(design.components.bullet.id, DEFAULT_THEME.bullets.style);
+  assert.match(design.source.themeHash, /^[a-f0-9]{64}$/);
+  assert.equal(fs.existsSync(path.join(stateDir, "theme.json")), false);
+});
+
+test("POST /api/design/resolve reports actionable validation errors", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const baseUrl = await withServer(t, { stateDir });
+  const broken = cloneTheme();
+  broken.navigation.style = "missing-navigation";
+
+  const response = await fetch(`${baseUrl}/api/design/resolve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(broken)
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.match(body.error, /navigation\.style/);
+});
+
+test("POST /api/design/resolve retains JSON body error behavior", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const baseUrl = await withServer(t, { stateDir });
+
+  const invalid = await fetch(`${baseUrl}/api/design/resolve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{"
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error, "Invalid JSON request body");
+
+  const oversized = await fetch(`${baseUrl}/api/design/resolve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: `{"payload":"${"x".repeat(1024 * 1024)}"}`
+  });
+  assert.equal(oversized.status, 413);
+  assert.equal((await oversized.json()).error, "Request body too large");
+});
+
 test("POST /api/generate writes a template and passes outputRoot guard options", async (t) => {
   const stateDir = tempDir("beamerforge-server-");
   const outputRoot = tempDir("beamerforge-output-");

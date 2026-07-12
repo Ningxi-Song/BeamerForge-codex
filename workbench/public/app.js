@@ -31,7 +31,8 @@ const CUBE_GRID = 14;
 const CUBE_HALF = 1;
 
 const state = {
-  registry: null, theme: null, validationErrors: [], statuses: [], busy: false,
+  registry: null, theme: null, resolvedDesign: null, validationErrors: [], statuses: [], busy: false,
+  resolveSequence: 0, resolveInputKey: null, resolveTimer: null,
   baseColor: { r: 69, g: 105, b: 144 }, scheme: "complementary",
   savedPalettes: [], paletteCounter: 0,
   workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null },
@@ -126,6 +127,42 @@ async function api(path, opts = {}) {
     throw err;
   }
   return body;
+}
+
+async function requestResolvedDesign(theme) {
+  return api("/api/design/resolve", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(theme)
+  });
+}
+
+async function resolvePreviewDesign(theme, { render: shouldRender = true, inputKey = JSON.stringify(theme) } = {}) {
+  const sequence = ++state.resolveSequence;
+  try {
+    const design = await requestResolvedDesign(theme);
+    if (sequence !== state.resolveSequence || inputKey !== state.resolveInputKey) return null;
+    state.resolvedDesign = design;
+    if (shouldRender) renderPreview();
+    return design;
+  } catch (error) {
+    if (sequence !== state.resolveSequence || inputKey !== state.resolveInputKey) return null;
+    setBuildStatus(error.details || error.message);
+    setStatus("Preview error", "is-error");
+    return null;
+  }
+}
+
+function schedulePreviewResolution() {
+  if (!state.theme) return;
+  const inputKey = JSON.stringify(state.theme);
+  if (inputKey === state.resolveInputKey) return;
+  state.resolveInputKey = inputKey;
+  if (state.resolveTimer) clearTimeout(state.resolveTimer);
+  state.resolveTimer = setTimeout(() => {
+    state.resolveTimer = null;
+    resolvePreviewDesign(clone(state.theme), { inputKey });
+  }, 50);
 }
 
 function setStatus(text, cls = "") {
@@ -445,14 +482,27 @@ async function importAiDraft() {
     setBusy(true); const raw = document.getElementById("aiDraftJson")?.value || "";
     let draft; try { draft = JSON.parse(raw); } catch { throw new Error("AI draft is not valid JSON"); }
     await api("/api/ai/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draft) });
-    state.workflow.hasValidAiDraft = true; await loadAiComparison(); navigateToStep("ai-compare");
+    await loadAiComparison(); navigateToStep("ai-compare");
   } catch (error) { setBuildStatus(error.details || error.message); }
   finally { setBusy(false); }
 }
 
-async function loadAiComparison() {
-  state.comparison = await api("/api/ai/comparison");
-  return state.comparison;
+async function loadAiComparison(rawComparison = null) {
+  const comparison = rawComparison || await api("/api/ai/comparison");
+  state.comparison = { ...comparison, manualDesign: null, draftDesign: null };
+  try {
+    const [manualDesign, draftDesign] = await Promise.all([
+      requestResolvedDesign(comparison.manual),
+      requestResolvedDesign(comparison.draft)
+    ]);
+    state.comparison = { ...comparison, manualDesign, draftDesign };
+    state.workflow.hasValidAiDraft = true;
+    return state.comparison;
+  } catch (error) {
+    state.workflow.hasValidAiDraft = false;
+    setBuildStatus(error.details || error.message);
+    throw error;
+  }
 }
 
 function renderThemeChanges(changes) {
@@ -465,9 +515,10 @@ function renderThemeChanges(changes) {
 function renderAiCompare() {
   const wrap = document.createElement("div"); wrap.dataset.region = "ai-compare";
   if (!state.comparison) { const p = document.createElement("p"); p.textContent = "Loading comparison…"; wrap.appendChild(p); loadAiComparison().then(render).catch((error) => setBuildStatus(error.message)); return wrap; }
+  if (!state.comparison.manualDesign || !state.comparison.draftDesign) { const p = document.createElement("p"); p.textContent = "Comparison previews could not be resolved."; wrap.appendChild(p); return wrap; }
   const grid = document.createElement("div"); grid.className = "comparison-grid";
-  const manualCard = document.createElement("section"); const manualTitle = document.createElement("h3"); manualTitle.textContent = "Manual baseline"; const manualPreview = document.createElement("article"); manualPreview.id = "manual-comparison-preview"; manualPreview.className = "slide-preview compact-preview"; renderThemeInto(manualPreview, state.comparison.manual); manualCard.append(manualTitle, manualPreview);
-  const aiCard = document.createElement("section"); const aiTitle = document.createElement("h3"); aiTitle.textContent = "AI customized draft"; const aiPreview = document.createElement("article"); aiPreview.id = "ai-comparison-preview"; aiPreview.className = "slide-preview compact-preview"; renderThemeInto(aiPreview, state.comparison.draft); aiCard.append(aiTitle, aiPreview);
+  const manualCard = document.createElement("section"); const manualTitle = document.createElement("h3"); manualTitle.textContent = "Manual baseline"; const manualPreview = document.createElement("article"); manualPreview.id = "manual-comparison-preview"; manualPreview.className = "slide-preview compact-preview"; renderThemeInto(manualPreview, state.comparison.manualDesign); manualCard.append(manualTitle, manualPreview);
+  const aiCard = document.createElement("section"); const aiTitle = document.createElement("h3"); aiTitle.textContent = "AI customized draft"; const aiPreview = document.createElement("article"); aiPreview.id = "ai-comparison-preview"; aiPreview.className = "slide-preview compact-preview"; renderThemeInto(aiPreview, state.comparison.draftDesign); aiCard.append(aiTitle, aiPreview);
   grid.append(manualCard, aiCard);
   const actions = document.createElement("div"); actions.className = "inline-actions";
   const accept = document.createElement("button"); accept.type = "button"; accept.textContent = "Accept AI Version"; accept.addEventListener("click", () => selectFinalVersion("ai"));
@@ -787,69 +838,70 @@ function textColorFor(hex) {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.56 ? "#111827" : "#FFFFFF";
 }
 
-function appendHeader(parent, theme, nav) {
-  if (!nav?.hasHeader) return;
-  const h = document.createElement("div"); h.className = "preview-header"; h.style.borderColor = theme.colors.primary; h.textContent = "Section 1";
+function appendHeader(parent, design) {
+  if (!design.components.navigation.header) return;
+  const h = document.createElement("div"); h.className = "preview-header"; h.style.borderColor = design.colors.primary; h.textContent = "Section 1";
   parent.appendChild(h);
 }
 
-function appendTitle(parent, theme) {
-  const t = document.createElement("h3"); t.className = "preview-title"; t.style.color = theme.colors.primary; t.textContent = theme.contentDefaults.sampleTitle;
+function appendTitle(parent, design) {
+  const t = document.createElement("h3"); t.className = "preview-title"; t.style.color = design.colors.primary; t.style.fontFamily = design.typography.title.cssFamily; t.textContent = design.content.sampleTitle;
   parent.appendChild(t);
 }
 
-function appendList(parent, theme, bullet) {
-  const list = document.createElement("ul"); list.className = "preview-list"; list.style.setProperty("--bullet-marker", JSON.stringify(bullet?.cssMarker || ">"));
-  for (const text of theme.contentDefaults.sampleBullets || []) { const li = document.createElement("li"); li.textContent = text; list.appendChild(li); }
+function appendList(parent, design) {
+  const list = document.createElement("ul"); list.className = "preview-list"; list.style.setProperty("--bullet-marker", JSON.stringify(design.components.bullet.marker));
+  for (const text of design.content.bullets) { const li = document.createElement("li"); li.textContent = text; list.appendChild(li); }
   parent.appendChild(list);
 }
 
-function appendBlock(parent, theme, block) {
+function appendBlock(parent, design) {
   const wrap = document.createElement("div"); wrap.className = "preview-block";
-  wrap.style.borderRadius = block?.cssRadius || "0"; wrap.style.boxShadow = block?.cssShadow || "none";
-  const title = document.createElement("div"); title.className = "preview-block-title"; title.style.backgroundColor = theme.colors.primary; title.style.color = textColorFor(theme.colors.primary); title.textContent = "Takeaway";
-  const body = document.createElement("div"); body.className = "preview-block-body"; body.style.backgroundColor = theme.colors.blockBody || theme.colors.background; body.textContent = "The HTML preview uses the same cumulative theme tokens.";
+  wrap.style.borderRadius = design.components.block.cssRadius; wrap.style.boxShadow = design.components.block.cssShadow;
+  const title = document.createElement("div"); title.className = "preview-block-title"; title.style.backgroundColor = design.colors.primary; title.style.color = design.colors.primaryText; title.textContent = design.content.blockTitle;
+  const body = document.createElement("div"); body.className = "preview-block-body"; body.style.backgroundColor = design.colors.blockBody; body.textContent = design.content.blockBody;
   wrap.append(title, body); parent.appendChild(wrap);
 }
 
-function appendFootline(parent, theme, nav) {
-  if (!nav?.hasFootline) return;
-  const fl = document.createElement("div"); fl.className = "preview-footline"; fl.style.color = theme.colors.primary; fl.textContent = `${theme.identity.name} | 1 / 3`;
+function appendFootline(parent, design) {
+  if (!design.components.navigation.footline) return;
+  const fl = document.createElement("div"); fl.className = "preview-footline"; fl.style.color = design.colors.primary; fl.textContent = `${design.identity.name} | 1 / 3`;
   parent.appendChild(fl);
 }
 
-function appendCornerLogo(parent, theme) {
-  const config = theme.decorations?.cornerLogo;
-  const logo = config ? state.registry.logos?.[config.id] : null;
-  if (!logo?.previewUrl || config.id === "none") return;
+function appendCornerLogo(parent, design) {
+  const logo = design.components.cornerLogo;
+  if (logo.vectorId == null || !logo.previewUrl) return;
   const image = document.createElement("img");
-  image.className = `preview-corner-logo is-${config.position} is-${config.size}`;
+  image.className = `preview-corner-logo is-${logo.position}`;
   image.src = logo.previewUrl;
   image.alt = `${logo.label} corner logo`;
+  image.style.width = `${logo.sizeUnits * 6.25}%`;
+  image.dataset.scope = logo.scope;
   parent.appendChild(image);
 }
 
-function renderThemeInto(container, theme) {
-  if (!theme || !state.registry) return;
-  const reg = state.registry;
-  const font = reg.fonts[theme.fonts.body], bullet = reg.bullets[theme.bullets.style], block = reg.blocks[theme.blocks.style], nav = reg.navigation[theme.navigation.style];
-  container.style.backgroundColor = theme.colors.background; container.style.color = theme.colors.text;
-  container.style.fontFamily = font?.cssFamily || "Arial, sans-serif";
-  container.style.setProperty("--accent-color", theme.colors.accent);
-  container.style.setProperty("--primary-color", theme.colors.primary);
-  container.style.setProperty("--bullet-marker", JSON.stringify(bullet?.cssMarker || ">"));
-  const slide = document.createElement("div"); slide.className = "preview-slide"; appendCornerLogo(slide, theme);
-  appendHeader(slide, theme, nav); appendTitle(slide, theme); appendList(slide, theme, bullet); appendBlock(slide, theme, block); appendFootline(slide, theme, nav);
+function renderThemeInto(container, design) {
+  if (!design) return;
+  container.style.backgroundColor = design.colors.background; container.style.color = design.colors.text;
+  container.style.fontFamily = design.typography.body.cssFamily;
+  container.style.setProperty("--accent-color", design.colors.accent);
+  container.style.setProperty("--primary-color", design.colors.primary);
+  container.style.setProperty("--bullet-marker", JSON.stringify(design.components.bullet.marker));
+  const slide = document.createElement("div"); slide.className = "preview-slide"; appendCornerLogo(slide, design);
+  appendHeader(slide, design); appendTitle(slide, design); appendList(slide, design); appendBlock(slide, design); appendFootline(slide, design);
   replaceChildren(container, [slide]);
 }
 
-function previewThemeForStep() {
-  if (currentStep().id === "ai-handoff" && state.workflow.hasValidAiDraft && state.comparison) return state.comparison.draft;
-  return state.theme;
+function previewDesignForStep() {
+  if (currentStep().id === "ai-handoff" && state.workflow.hasValidAiDraft && state.comparison?.draftDesign) return state.comparison.draftDesign;
+  if (state.workflow.selectedVersion === "ai" && state.comparison?.draftDesign) return state.comparison.draftDesign;
+  if (state.workflow.selectedVersion === "manual" && state.comparison?.manualDesign) return state.comparison.manualDesign;
+  return state.resolvedDesign;
 }
 
 function renderPreview() {
-  renderThemeInto(elements.slidePreview, previewThemeForStep());
+  renderThemeInto(elements.slidePreview, previewDesignForStep());
 }
 
 function reviewGate() {
@@ -873,7 +925,7 @@ async function compileTheme() {
   finally { setBusy(false); render(); }
 }
 
-function render() { refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); updateActions(); }
+function render() { schedulePreviewResolution(); refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); updateActions(); }
 
 function bindControls() {
   elements.back.addEventListener("click", () => navigateToStep(wizard.previousStepId(currentStep().id)));
@@ -899,6 +951,7 @@ function registerFontFaces(reg) {
 
 async function boot() {
   setBuildStatus("Loading options and theme...");
+  let comparisonError = null;
   const [reg, themeResult] = await Promise.all([api("/api/options"), api("/api/theme?validated=1")]);
   state.registry = reg; state.theme = clone(themeResult.theme);
   state.validationErrors = Array.isArray(themeResult.errors) ? themeResult.errors : [];
@@ -908,16 +961,22 @@ async function boot() {
   state.workflow.hasHandoff = handoffResponse.ok;
   const comparisonResponse = await fetch("/api/ai/comparison");
   if (comparisonResponse.ok) {
-    state.comparison = await comparisonResponse.json(); state.workflow.hasValidAiDraft = true;
-    if (JSON.stringify(state.theme) === JSON.stringify(state.comparison.draft)) state.workflow.selectedVersion = "ai";
-    else if (JSON.stringify(state.theme) === JSON.stringify(state.comparison.manual)) state.workflow.selectedVersion = "manual";
+    const comparison = await comparisonResponse.json();
+    try {
+      await loadAiComparison(comparison);
+      if (JSON.stringify(state.theme) === JSON.stringify(state.comparison.draft)) state.workflow.selectedVersion = "ai";
+      else if (JSON.stringify(state.theme) === JSON.stringify(state.comparison.manual)) state.workflow.selectedVersion = "manual";
+    } catch (error) { comparisonError = error; }
   } else if (state.workflow.hasManualBaseline) {
     const baseline = await baselineResponse.json();
     if (JSON.stringify(state.theme) === JSON.stringify(baseline.theme)) state.workflow.selectedVersion = "manual";
   }
+  state.resolveInputKey = JSON.stringify(state.theme);
+  const initialDesign = await resolvePreviewDesign(clone(state.theme), { render: false, inputKey: state.resolveInputKey });
   syncBase(); registerFontFaces(reg); bindControls();
   if (window.location.pathname === "/") navigateToStep("start", { replace: true }); else render();
-  setStatus("Idle"); setBuildStatus("No build yet.");
+  if (initialDesign) setStatus("Idle");
+  if (initialDesign && !comparisonError) setBuildStatus("No build yet.");
 }
 
 boot().catch((err) => { setBuildStatus(err.details || err.message); setStatus("Error", "is-error"); });

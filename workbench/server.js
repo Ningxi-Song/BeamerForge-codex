@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
+const { resolveDesign } = require("../design/resolve-design");
 const { writeTemplateProject } = require("../generators/project-writer");
 const { compileTemplate } = require("./build");
 const { clone, isPlainObject } = require("../lib/utils");
@@ -224,6 +225,17 @@ function createWorkbenchServer(options = {}) {
         if (!v.ok) { sendJson(res, 400, { ok: false, errors: v.errors }); return; }
         writeTheme(stateDir, v.value);
         sendJson(res, 200, { ok: true, theme: v.value });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/design/resolve") {
+        const theme = await readJsonBody(req);
+        let design;
+        try {
+          design = resolveDesign(theme, registry);
+        } catch (error) {
+          throw new HttpError(400, error.message);
+        }
+        sendJson(res, 200, design);
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/manual-baseline") {

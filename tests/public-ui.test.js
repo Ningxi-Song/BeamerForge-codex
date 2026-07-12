@@ -13,6 +13,13 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function functionSource(script, name) {
+  const start = script.indexOf(`function ${name}(`);
+  assert.notEqual(start, -1, `missing function ${name}`);
+  const next = script.indexOf("\nfunction ", start + 1);
+  return script.slice(start, next === -1 ? script.length : next);
+}
+
 test("workbench index exposes cumulative wizard regions", () => {
   const html = readPublicFile("index.html");
   const requiredIds = [
@@ -39,6 +46,11 @@ test("workbench index exposes cumulative wizard regions", () => {
 test("workbench index loads wizard state before app script", () => {
   const html = readPublicFile("index.html");
   assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+});
+
+test("preview toolbar identifies the instant HTML preview", () => {
+  const html = readPublicFile("index.html");
+  assert.match(html, />Instant HTML preview</);
 });
 
 test("browser script renders wizard steps and preserves cumulative choices", () => {
@@ -99,6 +111,28 @@ test("browser boot loads validation metadata for persisted themes", () => {
     script,
     /state\.validationErrors = Array\.isArray\(themeResult\.errors\) \? themeResult\.errors : \[\];/
   );
+});
+
+test("browser resolves debounced preview designs and rejects stale responses", () => {
+  const script = readPublicFile("app.js");
+  assert.match(script, /resolvedDesign:\s*null/);
+  assert.match(script, /resolveSequence:\s*0/);
+  assert.match(script, /resolveInputKey:\s*null/);
+  assert.match(script, /resolveTimer:\s*null/);
+  assert.match(script, /async function requestResolvedDesign\(theme\)[\s\S]*?api\("\/api\/design\/resolve",[\s\S]*?method:\s*"POST"[\s\S]*?JSON\.stringify\(theme\)/);
+
+  const resolver = functionSource(script, "resolvePreviewDesign");
+  assert.match(resolver, /\+\+state\.resolveSequence/);
+  assert.match(resolver, /sequence !== state\.resolveSequence/);
+  assert.match(resolver, /inputKey !== state\.resolveInputKey/);
+  assert.match(resolver, /state\.resolvedDesign = design/);
+
+  const scheduler = functionSource(script, "schedulePreviewResolution");
+  assert.match(scheduler, /JSON\.stringify\(state\.theme\)/);
+  assert.match(scheduler, /clearTimeout\(state\.resolveTimer\)/);
+  assert.match(scheduler, /setTimeout\([\s\S]*?50\)/);
+  assert.match(functionSource(script, "render"), /schedulePreviewResolution\(\)/);
+  assert.match(functionSource(script, "boot"), /await resolvePreviewDesign\([\s\S]*?render:\s*false[\s\S]*?(?:navigateToStep|render)\(/);
 });
 
 test("color step keeps the richer custom color workbench", () => {
@@ -186,19 +220,60 @@ test("workbench exposes the manual and external AI phases", () => {
   assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.comparison-grid/);
 });
 
-test("browser preview renders trusted corner logos", () => {
+test("browser preview renders only server-resolved design fields", () => {
   const script = readPublicFile("app.js");
-  assert.match(script, /function appendCornerLogo\(/);
-  assert.match(script, /state\.registry\.logos/);
+  for (const name of ["appendHeader", "appendTitle", "appendList", "appendBlock", "appendFootline", "appendCornerLogo", "renderThemeInto"]) {
+    const source = functionSource(script, name);
+    assert.doesNotMatch(source, /state\.registry/);
+    assert.doesNotMatch(source, /state\.theme/);
+  }
+  const renderer = functionSource(script, "renderThemeInto");
+  assert.match(renderer, /design\.typography\.body\.cssFamily/);
+  assert.match(renderer, /design\.colors\.background/);
+  assert.match(renderer, /design\.colors\.accent/);
+  assert.match(renderer, /appendHeader\(slide, design\)/);
+  assert.match(functionSource(script, "appendTitle"), /design\.typography\.title\.cssFamily/);
+  assert.match(functionSource(script, "appendList"), /design\.components\.bullet\.marker/);
+  assert.match(functionSource(script, "appendList"), /design\.content\.bullets/);
+  assert.match(functionSource(script, "appendBlock"), /design\.components\.block\.cssRadius/);
+  assert.match(functionSource(script, "appendBlock"), /design\.content\.blockTitle/);
+  assert.match(functionSource(script, "appendFootline"), /design\.components\.navigation\.footline/);
+  assert.match(functionSource(script, "appendFootline"), /design\.identity\.name/);
+  const logo = functionSource(script, "appendCornerLogo");
+  assert.match(logo, /design\.components\.cornerLogo/);
+  assert.match(logo, /vectorId == null/);
+  assert.match(logo, /previewUrl/);
+  assert.match(logo, /position/);
+  assert.match(logo, /sizeUnits/);
+  assert.match(logo, /scope/);
+  assert.doesNotMatch(logo, /\.id\s*===\s*"none"/);
   assert.match(script, /preview-corner-logo/);
   const css = readPublicFile("styles.css");
   assert.match(css, /\.preview-corner-logo\.is-top-right/);
-  assert.match(css, /\.preview-corner-logo\.is-small/);
+});
+
+test("AI comparisons resolve and render paired designs", () => {
+  const script = readPublicFile("app.js");
+  assert.match(script, /comparison:\s*null/);
+  assert.match(script, /manualDesign:\s*null/);
+  assert.match(script, /draftDesign:\s*null/);
+  const loader = functionSource(script, "loadAiComparison");
+  assert.match(loader, /Promise\.all\(\[/);
+  assert.match(loader, /requestResolvedDesign\(comparison\.manual\)/);
+  assert.match(loader, /requestResolvedDesign\(comparison\.draft\)/);
+  assert.match(loader, /manualDesign/);
+  assert.match(loader, /draftDesign/);
+  assert.match(loader, /state\.comparison = \{ \.\.\.comparison, manualDesign: null, draftDesign: null \}/);
+  assert.match(loader, /state\.workflow\.hasValidAiDraft = false/);
+  assert.match(loader, /setBuildStatus\(error\.details \|\| error\.message\)/);
+  assert.match(functionSource(script, "renderAiCompare"), /state\.comparison\.manualDesign/);
+  assert.match(functionSource(script, "renderAiCompare"), /state\.comparison\.draftDesign/);
+  assert.match(functionSource(script, "boot"), /if \(initialDesign && !comparisonError\) setBuildStatus\("No build yet\."\)/);
 });
 
 test("handoff page reveals an already imported AI draft", () => {
   const script = readPublicFile("app.js");
   assert.match(script, /function renderAiHandoff\(\)[\s\S]*?state\.workflow\.hasValidAiDraft[\s\S]*?View AI Comparison[\s\S]*?navigateToStep\("ai-compare"\)/);
-  assert.match(script, /function previewThemeForStep\(\)[\s\S]*?ai-handoff[\s\S]*?state\.comparison\.draft/);
-  assert.match(script, /renderThemeInto\(elements\.slidePreview, previewThemeForStep\(\)\)/);
+  assert.match(script, /function previewDesignForStep\(\)[\s\S]*?ai-handoff[\s\S]*?state\.comparison\.draftDesign/);
+  assert.match(script, /renderThemeInto\(elements\.slidePreview, previewDesignForStep\(\)\)/);
 });
