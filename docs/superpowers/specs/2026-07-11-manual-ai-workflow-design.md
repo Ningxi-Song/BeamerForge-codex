@@ -298,11 +298,12 @@ positions, `small` or `medium` sizes, and `content-frames` or `all-frames` scope
 The initial AI request uses `duck`, `top-right`, `small`, and `content-frames` so
 the title page remains uncluttered.
 
-The logo registry owns both browser-preview metadata and the trusted repository
-asset path. The project writer copies the selected asset into generated projects.
-The LaTeX generator renders it through a Beamer background-canvas overlay with
-fixed margins and size tokens. The HTML preview renders the same asset and
-position. Semantic comparison reports logo ID, position, size, and scope changes.
+The logo registry owns browser-preview metadata and the trusted repository asset.
+The project writer copies that asset into generated projects. The LaTeX generator
+renders a fixed trusted TikZ equivalent through a Beamer background-canvas overlay
+because XeLaTeX cannot portably include SVG files. The HTML preview renders the
+catalog SVG at the same position. Semantic comparison reports logo ID, position,
+size, and scope changes.
 
 Unknown logo IDs, fields, positions, sizes, and scopes are validation errors.
 No user-authored path, SVG markup, LaTeX, or TikZ is accepted in `theme.json`.

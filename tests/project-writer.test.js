@@ -107,3 +107,13 @@ test("detects font asset basename collisions", () => {
     /Font asset basename collision/
   );
 });
+
+test("copies a trusted corner logo into the generated project", () => {
+  const theme = structuredClone(DEFAULT_THEME);
+  theme.decorations.cornerLogo = { id: "duck", position: "top-right", size: "small", scope: "content-frames" };
+  const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-logo-output-"));
+  const templateDir = path.join(outputRoot, "duck-theme");
+  const result = writeTemplateProject(theme, templateDir, { registry: getRegistry(), rootDir: process.cwd(), outputRoot });
+  assert.equal(fs.existsSync(path.join(templateDir, "assets", "corner-logo.svg")), true);
+  assert.equal(result.copiedAssets.includes(path.join(templateDir, "assets", "corner-logo.svg")), true);
+});

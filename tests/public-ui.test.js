@@ -185,3 +185,13 @@ test("workbench exposes the manual and external AI phases", () => {
   assert.match(css, /\.comparison-grid/);
   assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.comparison-grid/);
 });
+
+test("browser preview renders trusted corner logos", () => {
+  const script = readPublicFile("app.js");
+  assert.match(script, /function appendCornerLogo\(/);
+  assert.match(script, /state\.registry\.logos/);
+  assert.match(script, /preview-corner-logo/);
+  const css = readPublicFile("styles.css");
+  assert.match(css, /\.preview-corner-logo\.is-top-right/);
+  assert.match(css, /\.preview-corner-logo\.is-small/);
+});

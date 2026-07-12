@@ -811,6 +811,17 @@ function appendFootline(parent, theme, nav) {
   parent.appendChild(fl);
 }
 
+function appendCornerLogo(parent, theme) {
+  const config = theme.decorations?.cornerLogo;
+  const logo = config ? state.registry.logos?.[config.id] : null;
+  if (!logo?.previewUrl || config.id === "none") return;
+  const image = document.createElement("img");
+  image.className = `preview-corner-logo is-${config.position} is-${config.size}`;
+  image.src = logo.previewUrl;
+  image.alt = `${logo.label} corner logo`;
+  parent.appendChild(image);
+}
+
 function renderThemeInto(container, theme) {
   if (!theme || !state.registry) return;
   const reg = state.registry;
@@ -820,7 +831,7 @@ function renderThemeInto(container, theme) {
   container.style.setProperty("--accent-color", theme.colors.accent);
   container.style.setProperty("--primary-color", theme.colors.primary);
   container.style.setProperty("--bullet-marker", JSON.stringify(bullet?.cssMarker || ">"));
-  const slide = document.createElement("div"); slide.className = "preview-slide";
+  const slide = document.createElement("div"); slide.className = "preview-slide"; appendCornerLogo(slide, theme);
   appendHeader(slide, theme, nav); appendTitle(slide, theme); appendList(slide, theme, bullet); appendBlock(slide, theme, block); appendFootline(slide, theme, nav);
   replaceChildren(container, [slide]);
 }

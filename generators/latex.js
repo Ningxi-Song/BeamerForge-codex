@@ -169,6 +169,31 @@ function generateClassTex(theme, registry = getRegistry()) {
   \end{beamercolorbox}%
 }
 ` : "";
+  const logo = theme.decorations.cornerLogo;
+  const logoWidth = logo.size === "medium" ? "1.2cm" : "0.8cm";
+  const logoScale = logo.size === "medium" ? "0.24" : "0.16";
+  const logoX = logo.position === "top-left" ? "0.4cm" : String.raw`\dimexpr\paperwidth-${logoWidth}-0.4cm\relax`;
+  const logoGuardOpen = logo.scope === "content-frames" ? String.raw`\ifnum\insertframenumber>1\relax` : "";
+  const logoGuardClose = logo.scope === "content-frames" ? String.raw`\fi` : "";
+  const logoTemplate = logo.id === "none" ? "" : String.raw`
+\RequirePackage{tikz}
+\RequirePackage[absolute,overlay]{textpos}
+\definecolor{bfDuckYellow}{HTML}{F4B942}
+\definecolor{bfDuckOrange}{HTML}{E67E22}
+\setbeamertemplate{background canvas}{%
+  ${logoGuardOpen}
+  \begin{textblock*}{${logoWidth}}(${logoX},0.35cm)
+    \begin{tikzpicture}[scale=${logoScale}]
+      \fill[bfDuckYellow] (0,0) ellipse (2.3 and 1.25);
+      \fill[bfDuckYellow] (1.55,1.05) circle (0.9);
+      \fill[bfDuckOrange] (2.2,1.15) -- (3.25,0.9) -- (2.2,0.65) -- cycle;
+      \fill[black] (1.8,1.3) circle (0.11);
+      \fill[bfDuckYellow!82!black] (-1.1,0.15) ellipse (1.15 and 0.62);
+    \end{tikzpicture}
+  \end{textblock*}%
+  ${logoGuardClose}
+}
+`;
 
   return String.raw`\NeedsTeXFormat{LaTeX2e}
 \ProvidesClass{theme}[2026/06/28 BeamerForge generated theme]
@@ -209,6 +234,7 @@ ${footline}
 \setbeamertemplate{itemize subitem}{${choices.bullet.subitemTemplate}}
 
 ${frametitleTemplate}
+${logoTemplate}
 ${titlePageTemplate}
 `;
 }

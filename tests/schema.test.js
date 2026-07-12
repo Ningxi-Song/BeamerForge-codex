@@ -20,6 +20,7 @@ test("reports field-level validation errors", () => {
     blocks: { style: "rounded" },
     navigation: { style: "page-number" },
     titlePage: { layout: "left-curtain" },
+    decorations: { cornerLogo: { id: "none", position: "top-right", size: "small", scope: "content-frames" } },
     contentDefaults: { sampleTitle: "" }
   };
   const result = validateTheme(broken);
@@ -58,4 +59,14 @@ test("rejects unknown theme fields instead of silently ignoring AI code", () => 
     "rawLatex",
     "colors.unexpected"
   ]);
+});
+
+test("validates trusted corner logo decorations", () => {
+  const theme = structuredClone(DEFAULT_THEME);
+  theme.decorations.cornerLogo = { id: "duck", position: "top-right", size: "small", scope: "content-frames" };
+  assert.equal(validateTheme(theme, { registry: require("../registry/options").getRegistry() }).ok, true);
+  theme.decorations.cornerLogo.position = "center";
+  const result = validateTheme(theme, { registry: require("../registry/options").getRegistry() });
+  assert.equal(result.ok, false);
+  assert.equal(result.errors.some((error) => error.path === "decorations.cornerLogo.position"), true);
 });

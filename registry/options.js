@@ -304,6 +304,16 @@ const TITLE_PAGES = Object.freeze({
   }
 });
 
+const LOGOS = Object.freeze({
+  none: { id: "none", label: "No Logo", asset: null, previewUrl: "" },
+  duck: {
+    id: "duck",
+    label: "Duck",
+    asset: "elements/decorations/logos/duck.svg",
+    previewUrl: "/assets/elements/decorations/logos/duck.svg"
+  }
+});
+
 function getRegistry() {
   return clone({
     palettes: PALETTES,
@@ -311,7 +321,8 @@ function getRegistry() {
     bullets: BULLETS,
     blocks: BLOCKS,
     navigation: NAVIGATION,
-    titlePages: TITLE_PAGES
+    titlePages: TITLE_PAGES,
+    logos: LOGOS
   });
 }
 
@@ -323,7 +334,8 @@ function resolveThemeChoices(theme, registry = getRegistry()) {
     bullet: registry.bullets[theme.bullets.style],
     block: registry.blocks[theme.blocks.style],
     navigation: registry.navigation[theme.navigation.style],
-    titlePage: registry.titlePages[theme.titlePage.layout]
+    titlePage: registry.titlePages[theme.titlePage.layout],
+    logo: registry.logos[theme.decorations.cornerLogo.id]
   };
 }
 

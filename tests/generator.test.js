@@ -118,3 +118,13 @@ test("throws a useful error for invalid theme IDs", () => {
     /Invalid theme: .*navigation\.style/
   );
 });
+
+test("generates a trusted top-right duck logo overlay", () => {
+  const theme = structuredClone(DEFAULT_THEME);
+  theme.decorations.cornerLogo = { id: "duck", position: "top-right", size: "small", scope: "content-frames" };
+  const files = generateFiles(theme, getRegistry());
+  assert.match(files["theme.cls"], /\\begin\{tikzpicture\}/);
+  assert.doesNotMatch(files["theme.cls"], /\\includegraphics.*corner-logo\.svg/);
+  assert.match(files["theme.cls"], /background canvas/);
+  assert.match(files["theme.cls"], /0\.8cm/);
+});

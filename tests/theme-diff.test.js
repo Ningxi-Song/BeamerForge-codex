@@ -18,3 +18,11 @@ test("diffThemes reports user-facing changes and ignores identical values", () =
 test("diffThemes returns an empty list for equivalent themes", () => {
   assert.deepEqual(diffThemes(DEFAULT_THEME, structuredClone(DEFAULT_THEME)), []);
 });
+
+test("diffThemes reports corner logo changes", () => {
+  const draft = structuredClone(DEFAULT_THEME);
+  draft.decorations.cornerLogo = { id: "duck", position: "top-right", size: "small", scope: "content-frames" };
+  assert.deepEqual(diffThemes(DEFAULT_THEME, draft).filter((change) => change.path.startsWith("decorations.")), [
+    { path: "decorations.cornerLogo.id", label: "Corner logo", before: "none", after: "duck" }
+  ]);
+});

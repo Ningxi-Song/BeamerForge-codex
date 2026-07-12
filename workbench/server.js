@@ -172,6 +172,9 @@ function allowedAssets(registry) {
   for (const font of Object.values(registry.fonts || {})) {
     for (const a of font.assets || []) set.add(normalizeAssetPath(a));
   }
+  for (const logo of Object.values(registry.logos || {})) {
+    if (logo.asset) set.add(normalizeAssetPath(logo.asset));
+  }
   return set;
 }
 

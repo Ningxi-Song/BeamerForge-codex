@@ -41,6 +41,16 @@ function copyFontAssets(theme, templateDir, registry, rootDir) {
   return copied;
 }
 
+function copyDecorationAssets(theme, templateDir, registry, rootDir) {
+  const logo = resolveThemeChoices(theme, registry).logo;
+  if (!logo || !logo.asset) return [];
+  const source = resolveAssetPath(rootDir, logo.asset);
+  const destination = path.join(templateDir, "assets", "corner-logo.svg");
+  ensureDir(path.dirname(destination));
+  fs.copyFileSync(source, destination);
+  return [destination];
+}
+
 function assertInsideRoot(templateDir, outputRoot) {
   if (!outputRoot) return;
   const rel = path.relative(path.resolve(outputRoot), path.resolve(templateDir));
@@ -70,7 +80,10 @@ function writeTemplateProject(theme, templateDir, options = {}) {
     written.push(abs);
   }
 
-  const copiedAssets = copyFontAssets(theme, templateDir, registry, rootDir);
+  const copiedAssets = [
+    ...copyFontAssets(theme, templateDir, registry, rootDir),
+    ...copyDecorationAssets(theme, templateDir, registry, rootDir)
+  ];
   return { templateDir, written, copiedAssets };
 }
 

@@ -16,7 +16,11 @@ const FIELDS = Object.freeze([
   ["navigation.style", "Navigation"],
   ["titlePage.layout", "Title page"],
   ["foundation.aspectRatio", "Aspect ratio"],
-  ["foundation.baseLayout", "Base layout"]
+  ["foundation.baseLayout", "Base layout"],
+  ["decorations.cornerLogo.id", "Corner logo"],
+  ["decorations.cornerLogo.position", "Logo position"],
+  ["decorations.cornerLogo.size", "Logo size"],
+  ["decorations.cornerLogo.scope", "Logo scope"]
 ]);
 
 function valueAt(object, fieldPath) {

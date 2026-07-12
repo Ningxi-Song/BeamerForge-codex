@@ -41,6 +41,9 @@ const DEFAULT_THEME = Object.freeze({
   titlePage: {
     layout: "left-curtain"
   },
+  decorations: {
+    cornerLogo: { id: "none", position: "top-right", size: "small", scope: "content-frames" }
+  },
   contentDefaults: {
     sampleTitle: "The design keeps one idea visible per slide",
     sampleBullets: [
@@ -62,7 +65,7 @@ const OPTIONAL_HEX_FIELDS = ["blockBody", "alert"];
 const IDENTITY_FIELDS = ["title", "subtitle", "author", "institute", "date"];
 const BULLET_MIN_COUNT = 3;
 const ALLOWED_KEYS = Object.freeze({
-  root: new Set(["identity", "foundation", "colors", "fonts", "bullets", "blocks", "navigation", "titlePage", "contentDefaults", "build"]),
+  root: new Set(["identity", "foundation", "colors", "fonts", "bullets", "blocks", "navigation", "titlePage", "decorations", "contentDefaults", "build"]),
   identity: new Set(["name", "title", "subtitle", "author", "institute", "date"]),
   foundation: new Set(["aspectRatio", "baseLayout"]),
   colors: new Set(["paletteId", "background", "primary", "accent", "text", "blockBody", "alert"]),
@@ -71,6 +74,8 @@ const ALLOWED_KEYS = Object.freeze({
   blocks: new Set(["style"]),
   navigation: new Set(["style"]),
   titlePage: new Set(["layout"]),
+  decorations: new Set(["cornerLogo"]),
+  cornerLogo: new Set(["id", "position", "size", "scope"]),
   contentDefaults: new Set(["sampleTitle", "sampleBullets"]),
   build: new Set(["status", "warnings"])
 });
@@ -84,6 +89,7 @@ const ERROR_STEP_MAP = Object.freeze([
   ["blocks", "blocks"],
   ["navigation", "navigation"],
   ["titlePage", "title-page"],
+  ["decorations", "manual-review"],
   ["contentDefaults", "review"]
 ]);
 
@@ -229,6 +235,16 @@ function validateTheme(input, options = {}) {
   rejectUnknownKeys(titlePage, ALLOWED_KEYS.titlePage, "titlePage", errors);
   assertNonEmptyString(titlePage, "titlePage.layout", errors);
   assertKnownOption(registry, "titlePages", titlePage.layout, "titlePage.layout", errors);
+
+  const decorations = requireSection(theme, "decorations", errors);
+  rejectUnknownKeys(decorations, ALLOWED_KEYS.decorations, "decorations", errors);
+  const cornerLogo = requireSection(decorations, "cornerLogo", errors);
+  rejectUnknownKeys(cornerLogo, ALLOWED_KEYS.cornerLogo, "decorations.cornerLogo", errors);
+  assertNonEmptyString(cornerLogo, "decorations.cornerLogo.id", errors);
+  assertKnownOption(registry, "logos", cornerLogo.id, "decorations.cornerLogo.id", errors);
+  if (!["top-left", "top-right"].includes(cornerLogo.position)) errors.push(new ValidationError("decorations.cornerLogo.position", "must be top-left or top-right"));
+  if (!["small", "medium"].includes(cornerLogo.size)) errors.push(new ValidationError("decorations.cornerLogo.size", "must be small or medium"));
+  if (!["content-frames", "all-frames"].includes(cornerLogo.scope)) errors.push(new ValidationError("decorations.cornerLogo.scope", "must be content-frames or all-frames"));
 
   const contentDefaults = requireSection(theme, "contentDefaults", errors);
   rejectUnknownKeys(contentDefaults, ALLOWED_KEYS.contentDefaults, "contentDefaults", errors);

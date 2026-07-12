@@ -193,7 +193,12 @@ h2 { color: var(--text); font-size: 19px; line-height: 1.2; }
   background: #fff; box-shadow: var(--shadow); container-type: inline-size; font-synthesis: none;
 }
 
-.preview-slide { min-height: 100%; display: flex; flex-direction: column; background: inherit; color: inherit; }
+.preview-slide { position: relative; min-height: 100%; display: flex; flex-direction: column; background: inherit; color: inherit; }
+.preview-corner-logo { position: absolute; top: 3.5%; z-index: 3; object-fit: contain; }
+.preview-corner-logo.is-top-right { right: 3.5%; }
+.preview-corner-logo.is-top-left { left: 3.5%; }
+.preview-corner-logo.is-small { width: 7%; }
+.preview-corner-logo.is-medium { width: 10%; }
 
 .preview-header { min-height: 32px; padding: 9px 7% 7px; border-bottom: 3px solid currentColor; font-size: 1.7cqw; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
 

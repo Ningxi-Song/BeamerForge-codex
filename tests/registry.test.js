@@ -130,3 +130,10 @@ test("Neuton font assets exist and use valid fontspec order", () => {
   assert.notEqual(fontIndex, -1);
   assert.equal(optionIndex < fontIndex, true);
 });
+
+test("registry exposes trusted corner logos", () => {
+  const registry = getRegistry();
+  assert.equal(registry.logos.none.asset, null);
+  assert.equal(registry.logos.duck.asset, "elements/decorations/logos/duck.svg");
+  assert.equal(fs.existsSync(path.resolve(registry.logos.duck.asset)), true);
+});
