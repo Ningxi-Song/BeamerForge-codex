@@ -257,7 +257,18 @@ const FONTS = defineRegistryCollection({
 });
 
 function bullet(id, label, packageLine, itemTemplate, subitemTemplate, cssMarker) {
-  return { id, label, packageLine, itemTemplate, subitemTemplate, cssMarker };
+  return {
+    id,
+    label,
+    packageLine,
+    itemTemplate,
+    subitemTemplate,
+    cssMarker,
+    marker: cssMarker,
+    latexPackages: packageLine,
+    latexItem: itemTemplate,
+    latexSubitem: subitemTemplate
+  };
 }
 
 const PIFONT = "\\usepackage{pifont}";
@@ -333,21 +344,27 @@ const BLOCKS = defineRegistryCollection({
     label: "Classic",
     latexTemplate: "\\setbeamertemplate{blocks}[default]",
     cssRadius: "0",
-    cssShadow: "none"
+    cssShadow: "none",
+    radiusUnits: 0,
+    shadow: false
   },
   rounded: {
     id: "rounded",
     label: "Rounded",
     latexTemplate: "\\setbeamertemplate{blocks}[rounded][shadow=false]",
     cssRadius: "6px",
-    cssShadow: "none"
+    cssShadow: "none",
+    radiusUnits: 0.1,
+    shadow: false
   },
   shadowed: {
     id: "shadowed",
     label: "Shadowed",
     latexTemplate: "\\setbeamertemplate{blocks}[rounded][shadow=true]",
     cssRadius: "6px",
-    cssShadow: "0 10px 24px rgba(15, 23, 42, 0.18)"
+    cssShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
+    radiusUnits: 0.1,
+    shadow: true
   }
 }, {
   classic: { html: true, latex: true },
@@ -362,7 +379,9 @@ const NAVIGATION = defineRegistryCollection({
     latexOuterTheme: "",
     latexFootline: "\\setbeamertemplate{footline}{}",
     hasHeader: false,
-    hasFootline: false
+    hasFootline: false,
+    header: false,
+    footline: false
   },
   "page-number": {
     id: "page-number",
@@ -370,7 +389,9 @@ const NAVIGATION = defineRegistryCollection({
     latexOuterTheme: "",
     latexFootline: PAGE_NUMBER_FOOTLINE,
     hasHeader: false,
-    hasFootline: true
+    hasFootline: true,
+    header: false,
+    footline: true
   },
   "plain-footer": {
     id: "plain-footer",
@@ -378,7 +399,9 @@ const NAVIGATION = defineRegistryCollection({
     latexOuterTheme: "",
     latexFootline: PAGE_NUMBER_FOOTLINE,
     hasHeader: false,
-    hasFootline: true
+    hasFootline: true,
+    header: false,
+    footline: true
   },
   "soft-miniframes": {
     id: "soft-miniframes",
@@ -386,7 +409,9 @@ const NAVIGATION = defineRegistryCollection({
     latexOuterTheme: "\\useoutertheme[subsection=false]{miniframes}",
     latexFootline: PAGE_NUMBER_FOOTLINE,
     hasHeader: true,
-    hasFootline: true
+    hasFootline: true,
+    header: true,
+    footline: true
   }
 }, {
   none: { html: true, latex: true },
@@ -399,19 +424,22 @@ const TITLE_PAGES = defineRegistryCollection({
   "left-curtain": {
     id: "left-curtain",
     label: "Left Curtain",
-    description: "Left-aligned title block with generous whitespace."
+    description: "Left-aligned title block with generous whitespace.",
+    alignment: "left",
+    layout: "curtain"
   }
 }, {
   "left-curtain": { html: true, latex: true }
 });
 
 const LOGOS = defineRegistryCollection({
-  none: { id: "none", label: "No Logo", asset: null, previewUrl: "" },
+  none: { id: "none", label: "No Logo", asset: null, previewUrl: "", vectorId: null },
   duck: {
     id: "duck",
     label: "Duck",
     asset: "elements/decorations/logos/duck.svg",
-    previewUrl: "/assets/elements/decorations/logos/duck.svg"
+    previewUrl: "/assets/elements/decorations/logos/duck.svg",
+    vectorId: "duck"
   }
 }, {
   none: { html: true, latex: true },
