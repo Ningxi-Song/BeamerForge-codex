@@ -13,6 +13,8 @@ const SAFE_TOKEN_RE = /^[A-Za-z0-9._-]+$/;
 const GENERATION_ID_RE = /^[A-Za-z0-9._-]+$/;
 const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const MAX_ERROR_LENGTH = 4000;
+const MAX_TOKEN_LENGTH = 128;
+const MARKER_WIDTH = 16;
 
 function isSafeCacheKey(value) {
   return typeof value === "string" && CACHE_KEY_RE.test(value);
@@ -22,8 +24,12 @@ function makeCacheKey(themeHash, generatorVersion) {
   const hash = String(themeHash);
   const version = String(generatorVersion);
   if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("Invalid theme hash for preview cache");
-  if (!SAFE_TOKEN_RE.test(version)) throw new Error("Invalid generator version for preview cache");
+  if (!isSafeToken(version)) throw new Error("Invalid generator version for preview cache");
   return `${hash}-${version}`;
+}
+
+function isSafeToken(value) {
+  return typeof value === "string" && value.length <= MAX_TOKEN_LENGTH && SAFE_TOKEN_RE.test(value);
 }
 
 function isStrictIsoTimestamp(value) {
@@ -33,7 +39,7 @@ function isStrictIsoTimestamp(value) {
 }
 
 function safeToken(value, fallback) {
-  return typeof value === "string" && SAFE_TOKEN_RE.test(value) ? value : fallback;
+  return isSafeToken(value) ? value : fallback;
 }
 
 function escapeRegExp(value) {
@@ -51,8 +57,9 @@ function boundedDiagnostic(value, roots, fallback = "Preview compilation failed.
     }
   }
   text = text
-    .replace(/[A-Za-z]:[\\/][^\s"'<>|]*/g, "[path]")
-    .replace(/\/(?:[^/\s"'<>]+\/)+[^/\s"'<>]*/g, "[path]")
+    .replace(/\\\\(?:\?\\(?:UNC\\)?|[^\\\r\n]+\\)[^\r\n]*/gi, "[path]")
+    .replace(/[A-Za-z]:[\\/][^\r\n]*/g, "[path]")
+    .replace(/\/(?:[^/\r\n]+\/)+[^\r\n]*/g, "[path]")
     .slice(0, MAX_ERROR_LENGTH);
   return text || fallback;
 }
@@ -94,10 +101,10 @@ function validMetadata(metadata, expected) {
     && metadata.themeHash === expected.themeHash
     && metadata.generatorVersion === expected.generatorVersion
     && typeof metadata.compilerKind === "string"
-    && SAFE_TOKEN_RE.test(metadata.compilerKind)
+    && isSafeToken(metadata.compilerKind)
     && isStrictIsoTimestamp(metadata.completedAt)
     && typeof metadata.sourceVersion === "string"
-    && SAFE_TOKEN_RE.test(metadata.sourceVersion)
+    && isSafeToken(metadata.sourceVersion)
   );
 }
 
@@ -120,9 +127,10 @@ function createPreviewCache(options = {}) {
   );
   const now = options.now || (() => new Date());
   const renameSync = options.renameSync || fs.renameSync;
+  const markerOpenSync = options.markerOpenSync || fs.openSync;
   const inFlight = new Map();
 
-  if (!SAFE_TOKEN_RE.test(generatorVersion)) {
+  if (!isSafeToken(generatorVersion)) {
     throw new Error("generatorVersion must be a safe cache token");
   }
   fs.mkdirSync(cacheRoot, { recursive: true });
@@ -158,22 +166,25 @@ function createPreviewCache(options = {}) {
       if (!rootIsSafe()) return null;
       const keyDir = path.join(cacheRoot, cacheKey);
       const generationsDir = path.join(keyDir, "generations");
-      if (!isPlainDirectory(keyDir) || !isPlainDirectory(generationsDir)) return null;
-      if (!isRealPathBeneath(cacheRootReal, keyDir) || !isRealPathBeneath(cacheRootReal, generationsDir)) return null;
+      const currentDir = path.join(keyDir, "current");
+      if (!isPlainDirectory(keyDir) || !isPlainDirectory(generationsDir) || !isPlainDirectory(currentDir)) return null;
+      if (!isRealPathBeneath(cacheRootReal, keyDir) || !isRealPathBeneath(cacheRootReal, generationsDir) || !isRealPathBeneath(cacheRootReal, currentDir)) return null;
       const expected = { cacheKey, themeHash, generatorVersion: version };
-      const candidates = [];
-      for (const entry of fs.readdirSync(generationsDir, { withFileTypes: true })) {
-        const candidate = readGeneration(path.join(generationsDir, entry.name), entry.name, expected);
-        if (candidate) candidates.push(candidate);
+      const markers = fs.readdirSync(currentDir)
+        .map((name) => ({ name, match: name.match(/^(\d+)\.json$/) }))
+        .filter((item) => item.match)
+        .sort((a, b) => Number(b.match[1]) - Number(a.match[1]));
+      for (const marker of markers) {
+        const markerPath = path.join(currentDir, marker.name);
+        if (!isPlainFile(markerPath) || !isRealPathBeneath(cacheRootReal, markerPath)) continue;
+        let value;
+        try { value = JSON.parse(fs.readFileSync(markerPath, "utf8")); } catch { continue; }
+        const sequence = Number(marker.match[1]);
+        if (!Number.isSafeInteger(sequence) || !value || value.sequence !== sequence || !isSafeToken(value.generationId)) continue;
+        const generation = readGeneration(path.join(generationsDir, value.generationId), value.generationId, expected);
+        if (generation) return generation;
       }
-      candidates.sort((a, b) => {
-        if (a.metadata.completedAt !== b.metadata.completedAt) {
-          return a.metadata.completedAt > b.metadata.completedAt ? -1 : 1;
-        }
-        if (a.generationId === b.generationId) return 0;
-        return a.generationId > b.generationId ? -1 : 1;
-      });
-      return candidates[0] || null;
+      return null;
     } catch {
       return null;
     }
@@ -203,6 +214,7 @@ function createPreviewCache(options = {}) {
     if (!rootIsSafe()) throw new Error("Preview cache root is unsafe");
     const keyDir = path.join(cacheRoot, cacheKey);
     const generationsDir = path.join(keyDir, "generations");
+    const currentDir = path.join(keyDir, "current");
     if (!lstatOrNull(keyDir)) {
       try {
         fs.mkdirSync(keyDir);
@@ -226,7 +238,40 @@ function createPreviewCache(options = {}) {
     if (!isRealPathBeneath(cacheRootReal, generationsDir)) {
       throw new Error("Preview generation directory escapes the cache root");
     }
-    return generationsDir;
+    if (!lstatOrNull(currentDir)) {
+      try { fs.mkdirSync(currentDir); } catch (error) { if (error.code !== "EEXIST") throw error; }
+    }
+    if (!isPlainDirectory(currentDir) || !isRealPathBeneath(cacheRootReal, currentDir)) {
+      throw new Error("Preview current directory must not be a link");
+    }
+    return { generationsDir, currentDir };
+  }
+
+  function allocateMarker(currentDir, generationId) {
+    for (;;) {
+      let max = 0;
+      for (const name of fs.readdirSync(currentDir)) {
+        const match = name.match(/^(\d+)/);
+        if (match) max = Math.max(max, Number(match[1]) || 0);
+      }
+      const sequence = max + 1;
+      if (!Number.isSafeInteger(sequence)) throw new Error("Preview marker sequence exhausted");
+      const markerPath = path.join(currentDir, `${String(sequence).padStart(MARKER_WIDTH, "0")}.json`);
+      let fd;
+      try {
+        fd = markerOpenSync(markerPath, "wx");
+      } catch (error) {
+        if (error.code === "EEXIST") continue;
+        throw error;
+      }
+      try {
+        fs.writeSync(fd, JSON.stringify({ sequence, generationId }));
+        if (typeof fs.fsyncSync === "function") fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+      return sequence;
+    }
   }
 
   function makeGenerationId(completedAt) {
@@ -234,57 +279,44 @@ function createPreviewCache(options = {}) {
     return `gen-${completedAt.replace(/\D/g, "")}-${monotonic}-${crypto.randomUUID()}`;
   }
 
-  async function compileMiss({ bundle, cacheKey, sourceVersion, stale }) {
+  function failureDto({ status, cacheKey, themeHash, compilerKind, message, excerpt, roots }) {
+    return {
+      status,
+      cached: false,
+      cacheKey,
+      message: boundedDiagnostic(message, roots, status === "unavailable" ? "No LaTeX compiler is available." : "Preview compilation failed."),
+      ...(status === "failed" ? { excerpt: boundedDiagnostic(excerpt, roots, "") } : {}),
+      compilerKind,
+      pdfAvailable: false,
+      staleAvailable: Boolean(readReadyEntry(cacheKey, themeHash))
+    };
+  }
+
+  async function compileMiss({ bundle, cacheKey, sourceVersion }) {
     const themeHash = bundle.design.source.themeHash;
     const tempDir = fs.mkdtempSync(path.join(cacheRoot, `${cacheKey}.tmp-`));
     const roots = [cacheRoot, rootDir, tempDir];
     let compilerKind = "unknown";
     try {
-      projectWriter(bundle.theme, tempDir, {
+      await Promise.resolve(projectWriter(bundle.theme, tempDir, {
         registry,
         rootDir,
         outputRoot: cacheRoot,
         resolveDesignBundle: () => bundle
-      });
+      }));
       const result = await compiler(tempDir);
       compilerKind = safeToken(result && result.compilerKind, "unknown");
 
       if (!result || !result.ok) {
         if (result && result.status === "missing-compiler") {
-          return {
-            status: "unavailable",
-            cached: false,
-            cacheKey,
-            message: boundedDiagnostic(result.message, roots, "No LaTeX compiler is available."),
-            compilerKind: "missing",
-            pdfAvailable: false,
-            staleAvailable: Boolean(stale)
-          };
+          return failureDto({ status: "unavailable", cacheKey, themeHash, compilerKind: "missing", message: result.message, roots });
         }
-        return {
-          status: "failed",
-          cached: false,
-          cacheKey,
-          message: boundedDiagnostic(result && result.message, roots),
-          excerpt: boundedDiagnostic(result && result.excerpt, roots, ""),
-          compilerKind,
-          pdfAvailable: false,
-          staleAvailable: Boolean(stale)
-        };
+        return failureDto({ status: "failed", cacheKey, themeHash, compilerKind, message: result && result.message, excerpt: result && result.excerpt, roots });
       }
 
       const tempPdf = path.join(tempDir, "main.pdf");
       if (!isPlainFile(tempPdf) || !isRealPathBeneath(cacheRootReal, tempPdf)) {
-        return {
-          status: "failed",
-          cached: false,
-          cacheKey,
-          message: "Compiler reported success but main.pdf was not created safely.",
-          excerpt: "",
-          compilerKind,
-          pdfAvailable: false,
-          staleAvailable: Boolean(stale)
-        };
+        return failureDto({ status: "failed", cacheKey, themeHash, compilerKind, message: "Compiler reported success but main.pdf was not created safely.", excerpt: "", roots });
       }
 
       const completedAt = timestamp(now);
@@ -307,7 +339,7 @@ function createPreviewCache(options = {}) {
         { encoding: "utf8", flag: "wx" }
       );
 
-      const generationsDir = ensurePublicationDirectory(cacheKey);
+      const { generationsDir, currentDir } = ensurePublicationDirectory(cacheKey);
       const generationId = makeGenerationId(completedAt);
       const generationDir = path.join(generationsDir, generationId);
       renameSync(tempDir, generationDir);
@@ -317,18 +349,12 @@ function createPreviewCache(options = {}) {
         { cacheKey, themeHash, generatorVersion }
       );
       if (!published) throw new Error("Published preview generation failed validation");
-      return responseFromReady(published, false);
+      allocateMarker(currentDir, generationId);
+      const active = readReadyEntry(cacheKey, themeHash);
+      if (!active) throw new Error("Published preview marker failed validation");
+      return responseFromReady(active, false);
     } catch (error) {
-      return {
-        status: "failed",
-        cached: false,
-        cacheKey,
-        message: boundedDiagnostic(error && error.message, roots),
-        excerpt: "",
-        compilerKind,
-        pdfAvailable: false,
-        staleAvailable: Boolean(stale)
-      };
+      return failureDto({ status: "failed", cacheKey, themeHash, compilerKind, message: "Preview compilation failed.", excerpt: "", roots });
     } finally {
       try {
         cleanupTemp(tempDir);
@@ -353,7 +379,7 @@ function createPreviewCache(options = {}) {
     if (!force && existing) return Promise.resolve(responseFromReady(existing, true));
 
     let promise;
-    promise = compileMiss({ bundle, cacheKey, sourceVersion, stale: existing })
+    promise = compileMiss({ bundle, cacheKey, sourceVersion })
       .finally(() => {
         if (inFlight.get(cacheKey) === promise) inFlight.delete(cacheKey);
       });
