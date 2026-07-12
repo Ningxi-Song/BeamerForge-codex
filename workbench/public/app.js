@@ -326,7 +326,7 @@ function refreshColorEditorOutputs() {
   if (schemeSw) replaceChildren(schemeSw, Array.from(renderSchemeSwatches().childNodes));
   const palDisp = document.getElementById("paletteDisplay");
   if (palDisp) replaceChildren(palDisp, Array.from(renderPaletteDisplay().childNodes));
-  syncCubeColor(); renderCube(); refreshStatuses(); renderStepList(); renderSummary(); renderPreview(); updateActions();
+  syncCubeColor(); renderCube(); refreshStatuses(); renderStepList(); renderSummary(); schedulePreviewResolution(); renderPreview(); updateActions();
 }
 
 function copyText(text, msg) {
@@ -895,8 +895,6 @@ function renderThemeInto(container, design) {
 
 function previewDesignForStep() {
   if (currentStep().id === "ai-handoff" && state.workflow.hasValidAiDraft && state.comparison?.draftDesign) return state.comparison.draftDesign;
-  if (state.workflow.selectedVersion === "ai" && state.comparison?.draftDesign) return state.comparison.draftDesign;
-  if (state.workflow.selectedVersion === "manual" && state.comparison?.manualDesign) return state.comparison.manualDesign;
   return state.resolvedDesign;
 }
 

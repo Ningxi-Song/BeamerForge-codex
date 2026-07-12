@@ -131,6 +131,7 @@ test("browser resolves debounced preview designs and rejects stale responses", (
   assert.match(scheduler, /JSON\.stringify\(state\.theme\)/);
   assert.match(scheduler, /clearTimeout\(state\.resolveTimer\)/);
   assert.match(scheduler, /setTimeout\([\s\S]*?50\)/);
+  assert.doesNotMatch(scheduler, /resolvedDesign\s*=\s*null|replaceChildren|renderPreview/);
   assert.match(functionSource(script, "render"), /schedulePreviewResolution\(\)/);
   assert.match(functionSource(script, "boot"), /await resolvePreviewDesign\([\s\S]*?render:\s*false[\s\S]*?(?:navigateToStep|render)\(/);
 });
@@ -172,6 +173,7 @@ test("custom color inputs update the preview without replacing the color step", 
   assert.match(script, /function refreshColorEditorOutputs\(/);
   assert.match(script, /setBaseColor\(rgb, \{ render: false \}\);[\s\S]*?refreshColorEditorOutputs\(\);/);
   assert.match(script, /setBaseColor\(\{ \.\.\.state\.baseColor, \[channel\]: nextValue \}, \{ render: false \}\);/);
+  assert.match(functionSource(script, "refreshColorEditorOutputs"), /palDisp[\s\S]*?schedulePreviewResolution\(\);[\s\S]*?renderPreview\(\)/);
 });
 
 test("summary controls distinguish the current step from editable steps", () => {
@@ -274,6 +276,9 @@ test("AI comparisons resolve and render paired designs", () => {
 test("handoff page reveals an already imported AI draft", () => {
   const script = readPublicFile("app.js");
   assert.match(script, /function renderAiHandoff\(\)[\s\S]*?state\.workflow\.hasValidAiDraft[\s\S]*?View AI Comparison[\s\S]*?navigateToStep\("ai-compare"\)/);
-  assert.match(script, /function previewDesignForStep\(\)[\s\S]*?ai-handoff[\s\S]*?state\.comparison\.draftDesign/);
+  const chooser = functionSource(script, "previewDesignForStep");
+  assert.match(chooser, /ai-handoff[\s\S]*?state\.comparison\.draftDesign/);
+  assert.match(chooser, /return state\.resolvedDesign/);
+  assert.doesNotMatch(chooser, /selectedVersion|manualDesign/);
   assert.match(script, /renderThemeInto\(elements\.slidePreview, previewDesignForStep\(\)\)/);
 });
