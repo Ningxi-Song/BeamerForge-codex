@@ -7,7 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
-const { resolveDesign } = require("../design/resolve-design");
+const { resolveDesign, resolveDesignBundle } = require("../design/resolve-design");
 const { createPreviewCache, isSafeCacheKey } = require("../workbench/preview-cache");
 
 function tempDir(prefix = "beamerforge-preview-") {
@@ -64,6 +64,27 @@ test("identical normalized designs compile once despite different source version
   const metadata = JSON.parse(fs.readFileSync(path.join(cacheRoot, first.cacheKey, "metadata.json"), "utf8"));
   assert.equal(metadata.sourceVersion, "manual");
   assert.equal(Object.hasOwn(metadata, "pdfPath"), false);
+});
+
+test("default project writer reuses the cache service resolved bundle", async () => {
+  const cacheRoot = tempDir();
+  let resolutions = 0;
+  const service = createPreviewCache({
+    cacheRoot,
+    rootDir: process.cwd(),
+    registry: getRegistry(),
+    resolveDesignBundle(theme, registry) {
+      resolutions += 1;
+      return resolveDesignBundle(theme, registry);
+    },
+    compiler: pdfCompiler("real writer")
+  });
+
+  const result = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+
+  assert.equal(result.status, "ready");
+  assert.equal(resolutions, 1);
+  assert.equal(fs.existsSync(path.join(cacheRoot, result.cacheKey, "theme.json")), true);
 });
 
 test("sparse legacy and explicit normalized themes share one cache entry", async () => {
@@ -242,6 +263,53 @@ test("corrupt, missing, or mismatched metadata and missing PDFs are cache misses
     assert.equal(compiles, 1, defect);
   }
 });
+
+const REQUIRED_METADATA_FIELDS = [
+  "cacheKey",
+  "themeHash",
+  "generatorVersion",
+  "compilerKind",
+  "completedAt",
+  "sourceVersion"
+];
+
+for (const field of REQUIRED_METADATA_FIELDS) {
+  for (const defect of ["missing", "wrong-type"]) {
+    test(`${defect} metadata ${field} is neither resolvable nor a cache hit`, async () => {
+      const cacheRoot = tempDir();
+      let compiles = 0;
+      const service = createService({
+        cacheRoot,
+        compiler: pdfCompiler("rebuilt", () => { compiles += 1; })
+      });
+      const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+      const metadataPath = path.join(cacheRoot, ready.cacheKey, "metadata.json");
+      const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+      if (defect === "missing") delete metadata[field];
+      else metadata[field] = 42;
+      fs.writeFileSync(metadataPath, JSON.stringify(metadata));
+
+      assert.equal(service.resolvePdf(ready.cacheKey), null);
+      const rebuilt = await service.compile({ theme: cloneTheme(), sourceVersion: "selected" });
+      assert.equal(rebuilt.cached, false);
+      assert.equal(compiles, 2);
+    });
+  }
+}
+
+for (const field of ["completedAt", "sourceVersion"]) {
+  test(`blank metadata ${field} is invalid`, async () => {
+    const cacheRoot = tempDir();
+    const service = createService({ cacheRoot });
+    const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+    const metadataPath = path.join(cacheRoot, ready.cacheKey, "metadata.json");
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+    metadata[field] = "   ";
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata));
+
+    assert.equal(service.resolvePdf(ready.cacheKey), null);
+  });
+}
 
 test("resolvePdf accepts only valid ready keys and rejects unsafe or corrupt entries", async () => {
   const cacheRoot = tempDir();

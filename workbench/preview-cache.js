@@ -53,8 +53,9 @@ function readReadyEntry(cacheRoot, cacheKey, themeHash, generatorVersion) {
   if (metadata.cacheKey !== cacheKey) return null;
   if (metadata.themeHash !== themeHash) return null;
   if (metadata.generatorVersion !== generatorVersion) return null;
-  if (typeof metadata.compilerKind !== "string" || !metadata.compilerKind) return null;
-  if (typeof metadata.completedAt !== "string" || !metadata.completedAt) return null;
+  if (typeof metadata.compilerKind !== "string" || !metadata.compilerKind.trim()) return null;
+  if (typeof metadata.completedAt !== "string" || !metadata.completedAt.trim()) return null;
+  if (typeof metadata.sourceVersion !== "string" || !metadata.sourceVersion.trim()) return null;
   if (!isFile(pdfPath)) return null;
   return { entryDir, metadata, pdfPath };
 }
@@ -70,6 +71,7 @@ function createPreviewCache(options = {}) {
   const registry = options.registry || getRegistry();
   const projectWriter = options.projectWriter || writeTemplateProject;
   const compiler = options.compiler || compileTemplate;
+  const bundleResolver = options.resolveDesignBundle || resolveDesignBundle;
   const generatorVersion = String(
     options.generatorVersion === undefined ? GENERATOR_VERSION : options.generatorVersion
   );
@@ -131,7 +133,12 @@ function createPreviewCache(options = {}) {
     const finalDir = path.join(cacheRoot, cacheKey);
     const tempDir = fs.mkdtempSync(path.join(cacheRoot, `${cacheKey}.tmp-`));
     try {
-      projectWriter(bundle.theme, tempDir, { registry, rootDir, outputRoot: cacheRoot });
+      projectWriter(bundle.theme, tempDir, {
+        registry,
+        rootDir,
+        outputRoot: cacheRoot,
+        resolveDesignBundle: () => bundle
+      });
       const result = await compiler(tempDir);
       const compilerKind = boundedText(result && result.compilerKind, "unknown");
 
@@ -197,7 +204,7 @@ function createPreviewCache(options = {}) {
   }
 
   function compile({ theme, sourceVersion, force = false }) {
-    const bundle = resolveDesignBundle(theme, registry);
+    const bundle = bundleResolver(theme, registry);
     const themeHash = bundle.design.source.themeHash;
     const cacheKey = makeCacheKey(themeHash, generatorVersion);
     const existing = readyEntry(cacheKey, themeHash);
