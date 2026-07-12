@@ -484,9 +484,97 @@ test("exclusive marker collision rescans and retries the next sequence", async (
   assert.equal(ready.status, "ready");
   assert.equal(attempts, 2);
   assert.deepEqual(markerFiles(cacheRoot, ready.cacheKey), [
-    "0000000000000001.json",
+    "0000000000000001.reserve",
     "0000000000000002.json"
   ]);
+});
+
+for (const fault of ["fsync", "close"]) {
+  test(`${fault} failure after marker write leaves the old generation active`, async () => {
+    const cacheRoot = tempDir();
+    const initial = createService({ cacheRoot, compiler: pdfCompiler("old") });
+    const ready = await initial.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+    let closes = 0;
+    const service = createService({
+      cacheRoot,
+      compiler: pdfCompiler("new"),
+      fsOps: {
+        ...fs,
+        fsyncSync(fd) {
+          if (fault === "fsync") throw new Error("fsync failed");
+          return fs.fsyncSync(fd);
+        },
+        closeSync(fd) {
+          closes += 1;
+          fs.closeSync(fd);
+          if (fault === "close" && closes === 2) throw new Error("close failed");
+        }
+      }
+    });
+
+    const failed = await service.compile({ theme: cloneTheme(), sourceVersion: "selected", force: true });
+
+    assert.equal(failed.status, "failed");
+    assert.equal(failed.staleAvailable, true);
+    assert.equal(readResolvedPdf(initial, ready.cacheKey), "old");
+  });
+}
+
+test("readers see the old generation while a new marker is staging", async () => {
+  const cacheRoot = tempDir();
+  const initial = createService({ cacheRoot, compiler: pdfCompiler("old") });
+  const ready = await initial.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+  let observed;
+  let service;
+  service = createService({
+    cacheRoot,
+    compiler: pdfCompiler("new"),
+    fsOps: {
+      ...fs,
+      writeSync(fd, buffer, offset, length) {
+        if (observed === undefined) observed = readResolvedPdf(service, ready.cacheKey);
+        return fs.writeSync(fd, buffer, offset, length);
+      }
+    }
+  });
+
+  const refreshed = await service.compile({ theme: cloneTheme(), sourceVersion: "selected", force: true });
+
+  assert.equal(observed, "old");
+  assert.equal(refreshed.status, "ready");
+  assert.equal(readResolvedPdf(service, ready.cacheKey), "new");
+});
+
+test("reservation cleanup failure cannot change a successful publication", async () => {
+  const service = createService({
+    removeReservation() { throw new Error("reservation locked"); }
+  });
+  const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+
+  assert.equal(ready.status, "ready");
+  assert.equal(readResolvedPdf(service, ready.cacheKey), "pdf");
+});
+
+test("abandoned reservation and staging artifacts are inert and advance allocation", async () => {
+  const cacheRoot = tempDir();
+  let contents = "old";
+  const service = createService({
+    cacheRoot,
+    compiler: async (templateDir) => {
+      fs.writeFileSync(path.join(templateDir, "main.pdf"), contents);
+      return { ok: true, status: "compiled", compilerKind: "fake" };
+    }
+  });
+  const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+  const current = path.join(cacheRoot, ready.cacheKey, "current");
+  fs.writeFileSync(path.join(current, "0000000000000002.reserve"), "");
+  fs.writeFileSync(path.join(current, "0000000000000009.staging-crash"), JSON.stringify({ sequence: 9 }));
+  assert.equal(readResolvedPdf(service, ready.cacheKey), "old");
+  contents = "new";
+  await service.compile({ theme: cloneTheme(), sourceVersion: "selected", force: true });
+
+  assert.ok(markerFiles(cacheRoot, ready.cacheKey).includes("0000000000000003.json"));
+  assert.equal(readResolvedPdf(service, ready.cacheKey), "new");
 });
 
 test("marker publication loops until one-byte writes complete", async () => {

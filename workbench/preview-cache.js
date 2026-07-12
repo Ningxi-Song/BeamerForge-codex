@@ -138,6 +138,7 @@ function createPreviewCache(options = {}) {
   const fsOps = options.fsOps || fs;
   const renameSync = options.renameSync || fs.renameSync;
   const markerOpenSync = options.markerOpenSync || fsOps.openSync.bind(fsOps);
+  const removeReservation = options.removeReservation || ((target) => fs.rmSync(target, { force: true }));
   const inFlight = new Map();
 
   if (!isSafeToken(generatorVersion)) {
@@ -262,17 +263,18 @@ function createPreviewCache(options = {}) {
     for (;;) {
       let max = 0;
       for (const name of fs.readdirSync(currentDir)) {
-        const match = name.match(new RegExp(`^(\\d{${MARKER_WIDTH}})\\.json$`));
+        const match = name.match(new RegExp(`^(\\d{${MARKER_WIDTH}})\\.(?:json|reserve)$`));
         if (!match) continue;
         const value = Number(match[1]);
         if (Number.isSafeInteger(value)) max = Math.max(max, value);
       }
       const sequence = Math.max(max, collisionFloor) + 1;
       if (!Number.isSafeInteger(sequence)) throw new Error("Preview marker sequence exhausted");
-      const markerPath = path.join(currentDir, `${String(sequence).padStart(MARKER_WIDTH, "0")}.json`);
+      const padded = String(sequence).padStart(MARKER_WIDTH, "0");
+      const reservationPath = path.join(currentDir, `${padded}.reserve`);
       let fd;
       try {
-        fd = markerOpenSync(markerPath, "wx");
+        fd = markerOpenSync(reservationPath, "wx");
       } catch (error) {
         if (error.code === "EEXIST") {
           collisionFloor = sequence;
@@ -280,17 +282,23 @@ function createPreviewCache(options = {}) {
         }
         throw error;
       }
+      fsOps.closeSync(fd);
+      const stagingPath = path.join(currentDir, `${padded}.staging-${crypto.randomUUID()}`);
+      const markerPath = path.join(currentDir, `${padded}.json`);
+      const stagingFd = fsOps.openSync(stagingPath, "wx");
       try {
-        writeAllSync(fd, Buffer.from(JSON.stringify({ sequence, generationId })), fsOps);
-        if (typeof fsOps.fsyncSync === "function") fsOps.fsyncSync(fd);
+        writeAllSync(stagingFd, Buffer.from(JSON.stringify({ sequence, generationId })), fsOps);
+        if (typeof fsOps.fsyncSync === "function") fsOps.fsyncSync(stagingFd);
       } finally {
-        fsOps.closeSync(fd);
+        fsOps.closeSync(stagingFd);
       }
       let verified;
-      try { verified = JSON.parse(fs.readFileSync(markerPath, "utf8")); } catch { verified = null; }
+      try { verified = JSON.parse(fs.readFileSync(stagingPath, "utf8")); } catch { verified = null; }
       if (!verified || verified.sequence !== sequence || verified.generationId !== generationId) {
         throw new Error("Preview publication marker failed verification");
       }
+      fsOps.renameSync(stagingPath, markerPath);
+      try { removeReservation(reservationPath); } catch { /* best effort */ }
       return sequence;
     }
   }
