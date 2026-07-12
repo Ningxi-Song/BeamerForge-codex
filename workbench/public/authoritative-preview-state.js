@@ -41,6 +41,7 @@
 
   function createAuthoritativePreviewState(options) {
     const sendRequest = options.request;
+    const beforeRequest = options.beforeRequest || null;
     const onChange = options.onChange || (() => {});
     const records = Object.fromEntries(SOURCES.map((source) => [source, blankRecord()]));
 
@@ -67,8 +68,17 @@
       record.excerpt = null;
       notify(source);
       try {
-        const result = await sendRequest(source, force);
+        const prepared = beforeRequest ? await beforeRequest(source, { route, themeHash, force }) : null;
         if (record.sequence !== sequence || record.desiredKey !== key || record.requestKey !== key) return null;
+        const preparedHash = prepared?.themeHash || themeHash;
+        const preparedKey = `${route}:${source}:${preparedHash}`;
+        if (preparedKey !== key) {
+          record.themeHash = preparedHash;
+          record.desiredKey = preparedKey;
+          record.requestKey = preparedKey;
+        }
+        const result = await sendRequest(source, force);
+        if (record.sequence !== sequence || record.desiredKey !== preparedKey || record.requestKey !== preparedKey) return null;
         record.status = result?.status || "failed";
         record.cached = result?.cached === true;
         record.cacheKey = result?.cacheKey || null;
@@ -84,9 +94,9 @@
         notify(source);
         return record;
       } catch (error) {
-        if (record.sequence !== sequence || record.desiredKey !== key || record.requestKey !== key) return null;
+        if (record.sequence !== sequence || ![key, `${route}:${source}:${record.themeHash}`].includes(record.desiredKey) || record.requestKey !== record.desiredKey) return null;
         record.status = "failed";
-        record.message = "Authoritative preview request failed.";
+        record.message = String(error?.message || "Authoritative preview request failed.").slice(0, 4000);
         record.excerpt = null;
         record.pdfUrl = previousPdfUrl;
         record.stale = Boolean(previousPdfUrl);
@@ -100,7 +110,16 @@
       for (const source of SOURCES) {
         const record = records[source];
         if (!active.has(source)) {
-          if (record.desiredKey !== null) { record.desiredKey = null; record.sequence++; }
+          if (record.desiredKey !== null) {
+            record.desiredKey = null;
+            record.sequence++;
+            if (record.status === "pending") {
+              record.requestKey = null;
+              record.status = "idle";
+              record.stale = Boolean(record.pdfUrl);
+              notify(source);
+            }
+          }
           continue;
         }
         const themeHash = hashes[source];
@@ -108,9 +127,12 @@
           if (record.desiredKey !== null) {
             record.desiredKey = null;
             record.sequence++;
-            record.status = "idle";
-            record.stale = Boolean(record.pdfUrl);
-            notify(source);
+            if (record.status === "pending") record.requestKey = null;
+            if (record.status === "pending") {
+              record.status = "idle";
+              record.stale = Boolean(record.pdfUrl);
+              notify(source);
+            }
           }
           continue;
         }

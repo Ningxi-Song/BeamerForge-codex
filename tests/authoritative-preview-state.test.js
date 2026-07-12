@@ -70,6 +70,64 @@ test("a route with an unresolved replacement hash invalidates the desired reques
   assert.notEqual(previews.records.selected.status, "ready");
 });
 
+test("leaving during a pending request permits the same key to request again", async () => {
+  const first = deferred();
+  const second = deferred();
+  const calls = [];
+  const previews = createAuthoritativePreviewState({ request() { calls.push(true); return calls.length === 1 ? first.promise : second.promise; } });
+  previews.sync("manual-review", { manual: "same" });
+  assert.equal(previews.records.manual.status, "pending");
+  previews.sync("start", {});
+  assert.equal(previews.records.manual.status, "idle");
+  assert.equal(previews.records.manual.requestKey, null);
+  first.resolve({ status: "ready", cacheKey: `${"1".repeat(64)}-v1`, pdfUrl: `/api/preview/${"1".repeat(64)}-v1/main.pdf` });
+  await first.promise; await Promise.resolve();
+  assert.notEqual(previews.records.manual.status, "ready");
+  previews.sync("manual-review", { manual: "same" });
+  assert.equal(calls.length, 2);
+  assert.equal(previews.records.manual.status, "pending");
+  second.resolve({ status: "ready", cacheKey: `${"2".repeat(64)}-v1`, pdfUrl: `/api/preview/${"2".repeat(64)}-v1/main.pdf` });
+  await second.promise; await Promise.resolve();
+  assert.equal(previews.records.manual.status, "ready");
+});
+
+test("leaving and returning may reuse an already ready request", async () => {
+  let calls = 0;
+  const key = `${"3".repeat(64)}-v1`;
+  const previews = createAuthoritativePreviewState({ async request() { calls++; return { status: "ready", cacheKey: key, pdfUrl: `/api/preview/${key}/main.pdf` }; } });
+  previews.sync("manual-review", { manual: "same" });
+  await Promise.resolve(); await Promise.resolve();
+  previews.sync("start", {});
+  previews.sync("manual-review", { manual: "same" });
+  assert.equal(calls, 1);
+  assert.equal(previews.records.manual.status, "ready");
+});
+
+test("manual preparation finishes before compile and replaces the desired hash with the saved normalized hash", async () => {
+  const events = [];
+  const previews = createAuthoritativePreviewState({
+    async beforeRequest(source) { events.push(`save:${source}`); return { themeHash: "saved-normalized" }; },
+    async request(source) { events.push(`compile:${source}`); return { status: "failed", cacheKey: `${"4".repeat(64)}-v1` }; }
+  });
+  previews.sync("manual-review", { manual: "unsaved" });
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(events, ["save:manual", "compile:manual"]);
+  assert.equal(previews.records.manual.desiredKey, "manual-review:manual:saved-normalized");
+});
+
+test("manual preparation failure prevents compilation and records a failed state", async () => {
+  let compiles = 0;
+  const previews = createAuthoritativePreviewState({
+    async beforeRequest() { throw new Error("Theme validation failed"); },
+    async request() { compiles++; return {}; }
+  });
+  previews.sync("manual-review", { manual: "unsaved" });
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  assert.equal(compiles, 0);
+  assert.equal(previews.records.manual.status, "failed");
+  assert.match(previews.records.manual.message, /validation/i);
+});
+
 test("comparison requests remain independent when one side fails", async () => {
   const previews = createAuthoritativePreviewState({ async request(source) {
     if (source === "ai") return { status: "failed", message: "AI compile failed" };

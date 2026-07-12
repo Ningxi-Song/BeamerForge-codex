@@ -85,6 +85,18 @@ test("authoritative preview UI is route-gated and uses independent status contro
   assert.doesNotMatch(objectRule, /min-height:\s*(?!0(?:px|rem|em|%)?\s*;)[1-9]/i);
 });
 
+test("manual authoritative preview persists and resolves the normalized theme before compiling", () => {
+  const script = readPublicFile("app.js");
+  const prepare = functionSource(script, "prepareAuthoritativeRequest");
+  assert.match(prepare, /source !== "manual"/);
+  assert.match(prepare, /route !== "manual-review"/);
+  assert.match(prepare, /api\("\/api\/theme",[\s\S]*?method:\s*"PUT"[\s\S]*?JSON\.stringify\(state\.theme\)/);
+  assert.match(prepare, /requestResolvedDesign\(saved\.theme\)/);
+  assert.match(prepare, /themeHash:\s*design\.source\.themeHash/);
+  assert.doesNotMatch(prepare, /render\(/);
+  assert.match(script, /createAuthoritativePreviewState\(\{[\s\S]*?beforeRequest:\s*prepareAuthoritativeRequest[\s\S]*?request:\s*sendAuthoritativeRequest/);
+});
+
 test("browser script renders wizard steps and preserves cumulative choices", () => {
   const script = readPublicFile("app.js");
   for (const name of [

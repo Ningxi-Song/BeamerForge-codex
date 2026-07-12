@@ -39,6 +39,7 @@ const state = {
   savedPalettes: [], paletteCounter: 0,
   workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null },
   aiBrief: "", comparison: null, authoritativePreviews: { manual: null, ai: null, selected: null },
+  manualPreviewSave: { savedInputKey: null, themeHash: null, pendingInputKey: null, promise: null },
   cube: { yaw: -0.72, pitch: -0.42, dragging: false, dragMoved: false, lx: 0, ly: 0 }
 };
 
@@ -74,7 +75,49 @@ async function sendAuthoritativeRequest(source, force) {
   });
 }
 
+async function prepareAuthoritativeRequest(source, { route, themeHash }) {
+  if (source !== "manual" || route !== "manual-review" || state.workflow.hasManualBaseline) return { themeHash };
+  const inputKey = JSON.stringify(state.theme);
+  const gate = state.manualPreviewSave;
+  if (gate.savedInputKey === inputKey && gate.themeHash) return { themeHash: gate.themeHash };
+  if (gate.pendingInputKey === inputKey && gate.promise) return gate.promise;
+  gate.pendingInputKey = inputKey;
+  gate.promise = (async () => {
+    try {
+      const saved = await api("/api/theme", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(state.theme)
+      });
+      const design = await requestResolvedDesign(saved.theme);
+      const savedInputKey = JSON.stringify(saved.theme);
+      if (JSON.stringify(state.theme) === inputKey) {
+        state.theme = clone(saved.theme);
+        state.resolvedDesign = design;
+        state.validationErrors = [];
+        state.previewValidationErrors = [];
+      }
+      gate.savedInputKey = savedInputKey;
+      gate.themeHash = design.source.themeHash;
+      return { themeHash: design.source.themeHash };
+    } catch (error) {
+      if (JSON.stringify(state.theme) === inputKey && Array.isArray(error.errors)) {
+        state.validationErrors = error.errors;
+        refreshStatuses();
+      }
+      throw error;
+    } finally {
+      if (gate.pendingInputKey === inputKey) {
+        gate.pendingInputKey = null;
+        gate.promise = null;
+      }
+    }
+  })();
+  return gate.promise;
+}
+
 const authoritativeController = authoritativeState.createAuthoritativePreviewState({
+  beforeRequest: prepareAuthoritativeRequest,
   request: sendAuthoritativeRequest,
   onChange() { renderAuthoritativePreviews(); }
 });
