@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { DEFAULT_THEME } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
-const { resolveDesign } = require("../design/resolve-design");
+const { resolveDesign, resolveDesignBundle } = require("../design/resolve-design");
 const {
   generateFiles,
   generateResolvedFiles,
@@ -164,6 +164,77 @@ test("overview content includes a block so block styles are visible", () => {
   assert.match(files["content/overview.tex"], /same resolved design/);
 });
 
+test("uses resolved package title semantics for an aliased font key", () => {
+  const registry = getRegistry();
+  registry.fonts["custom-package-title"] = {
+    ...registry.fonts.times,
+    id: "not-a-known-catalog-id",
+    label: "Custom Package Title",
+    latexTitlePackage: "\\usepackage{mathptmx}",
+    latexTitleFamily: "ptm"
+  };
+  const theme = structuredClone(DEFAULT_THEME);
+  theme.fonts.title = "custom-package-title";
+
+  const files = generateFiles(theme, registry);
+
+  assert.match(files["theme.cls"], /\\usepackage\{mathptmx\}/);
+  assert.match(files["theme.cls"], /\\newcommand\{\\bfTitleFont\}\{\\fontfamily\{ptm\}\\selectfont\}/);
+});
+
+test("renders title pages by resolved layout when the catalog ID is aliased", () => {
+  const registry = getRegistry();
+  registry.titlePages.alias = {
+    ...registry.titlePages["left-curtain"],
+    id: "centered",
+    layout: "left-curtain"
+  };
+  const theme = structuredClone(DEFAULT_THEME);
+  theme.titlePage.layout = "alias";
+
+  const files = generateFiles(theme, registry);
+
+  assert.match(files["theme.cls"], /leftskip=1\.2cm,rightskip=1\.2cm/);
+});
+
+test("dispatches trusted logo rendering by resolved vector semantics", () => {
+  const registry = getRegistry();
+  registry.logos["duck-alias"] = {
+    ...registry.logos.duck,
+    id: "different-duck-catalog-id"
+  };
+  registry.logos["null-vector-alias"] = {
+    ...registry.logos.none,
+    id: "non-none-catalog-id",
+    label: "No Vector Alias"
+  };
+
+  const duckTheme = structuredClone(DEFAULT_THEME);
+  duckTheme.decorations.cornerLogo.id = "duck-alias";
+  const nullTheme = structuredClone(DEFAULT_THEME);
+  nullTheme.decorations.cornerLogo.id = "null-vector-alias";
+
+  assert.match(generateFiles(duckTheme, registry)["theme.cls"], /\\begin\{tikzpicture\}/);
+  assert.doesNotMatch(generateFiles(nullTheme, registry)["theme.cls"], /\\begin\{tikzpicture\}/);
+});
+
+test("rejects unsupported trusted vector identities", () => {
+  const registry = getRegistry();
+  registry.logos.future = {
+    ...registry.logos.duck,
+    id: "future",
+    label: "Future Vector",
+    vectorId: "future-vector"
+  };
+  const theme = structuredClone(DEFAULT_THEME);
+  theme.decorations.cornerLogo.id = "future";
+
+  assert.throws(
+    () => generateFiles(theme, registry),
+    /Unsupported trusted logo vector: future-vector/
+  );
+});
+
 test("raw wrapper serializes a normalized complete legacy theme", () => {
   const theme = structuredClone(DEFAULT_THEME);
   delete theme.identity.title;
@@ -177,6 +248,19 @@ test("raw wrapper serializes a normalized complete legacy theme", () => {
   assert.equal(serialized.colors.blockBody, theme.colors.background);
   assert.equal(serialized.colors.alert, theme.colors.accent);
   assert.deepEqual(serialized.contentDefaults.sampleBullets, DEFAULT_THEME.contentDefaults.sampleBullets);
+});
+
+test("raw wrapper invokes one resolved bundle pipeline", () => {
+  let calls = 0;
+  const files = generateFiles(DEFAULT_THEME, getRegistry(), {
+    resolveDesignBundle(theme, registry) {
+      calls += 1;
+      return resolveDesignBundle(theme, registry);
+    }
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(JSON.parse(files["theme.json"]).identity.title, DEFAULT_THEME.identity.title);
 });
 
 test("throws a useful error for invalid theme IDs", () => {

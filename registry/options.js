@@ -131,7 +131,26 @@ function localFont(id, label, fileName, mode, fallback) {
   };
 }
 
-const FONTS = defineRegistryCollection({
+const PACKAGE_TITLE_FONTS = Object.freeze({
+  palatino: { latexTitlePackage: "\\usepackage{palatino}", latexTitleFamily: "ppl" },
+  "latin-modern": { latexTitlePackage: "\\usepackage{lmodern}", latexTitleFamily: "lmr" },
+  helvetica: { latexTitlePackage: "\\usepackage{helvet}", latexTitleFamily: "phv" },
+  times: { latexTitlePackage: "\\usepackage{mathptmx}", latexTitleFamily: "ptm" }
+});
+
+function withTitleFontSemantics(fonts) {
+  return Object.fromEntries(Object.entries(fonts).map(([id, font]) => [
+    id,
+    {
+      latexTitlePackage: "",
+      latexTitleFamily: "",
+      ...font,
+      ...PACKAGE_TITLE_FONTS[id]
+    }
+  ]));
+}
+
+const FONTS = defineRegistryCollection(withTitleFontSemantics({
   palatino: {
     id: "palatino",
     label: "Palatino",
@@ -212,7 +231,7 @@ const FONTS = defineRegistryCollection({
   "zilla-slab": localFont("zilla-slab", "Zilla Slab", "Zilla_Slab.ttf", "serif-slab", "Georgia, serif"),
   "space-grotesk": localFont("space-grotesk", "Space Grotesk", "Space_Grotesk.ttf", "sans-modern", "Arial, sans-serif"),
   manrope: localFont("manrope", "Manrope", "Manrope.ttf", "sans-modern", "Arial, sans-serif")
-}, {
+}), {
   palatino: { html: true, latex: true },
   neuton: { html: true, latex: true },
   "latin-modern": { html: true, latex: true },

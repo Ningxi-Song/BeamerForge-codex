@@ -16,6 +16,8 @@ const SEMANTIC_FIELDS = [
   ["palettes", "academic-blue", "label", "must be a non-empty string"],
   ["fonts", "palatino", "cssFamily", "must be a non-empty string"],
   ["fonts", "palatino", "latexPreamble", "must be a non-empty string"],
+  ["fonts", "palatino", "latexTitlePackage", "must be a string"],
+  ["fonts", "palatino", "latexTitleFamily", "must be a string"],
   ["fonts", "palatino", "assets", "must be an array of strings"],
   ["bullets", "pifont-outline", "marker", "must be a non-empty string"],
   ["bullets", "pifont-outline", "latexPackages", "must be a string"],

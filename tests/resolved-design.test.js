@@ -6,9 +6,11 @@ const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
 const {
   resolveDesign,
+  resolveDesignBundle,
   deepFreeze,
   GENERATOR_VERSION
 } = require("../design/resolve-design");
+const { hashCanonical } = require("../lib/canonical-json");
 
 function clone(value) {
   return structuredClone(value);
@@ -125,6 +127,41 @@ test("legacy sparse themes normalize to complete detached resolved designs", () 
     design.source.themeHash,
     resolveDesign(validation.value, registry).source.themeHash
   );
+});
+
+test("resolved bundles hash and return the same normalized detached theme", () => {
+  const theme = clone(DEFAULT_THEME);
+  delete theme.identity.subtitle;
+  delete theme.colors.blockBody;
+  const bundle = resolveDesignBundle(theme, getRegistry());
+
+  assert.equal(bundle.theme.identity.subtitle, "");
+  assert.equal(bundle.theme.colors.blockBody, theme.colors.background);
+  assert.equal(bundle.design.source.themeHash, hashCanonical(bundle.theme));
+
+  theme.identity.title = "mutated input";
+  assert.equal(bundle.theme.identity.title, DEFAULT_THEME.identity.title);
+  assert.equal(bundle.design.identity.title, DEFAULT_THEME.identity.title);
+});
+
+test("a changing registry choice is snapshotted before one bundle is resolved", () => {
+  const registry = getRegistry();
+  const first = { ...registry.fonts.palatino, label: "First snapshot" };
+  const second = { ...registry.fonts.palatino, label: "Second snapshot" };
+  let next = first;
+  Object.defineProperty(registry.fonts, "palatino", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      const value = next;
+      next = next === first ? second : first;
+      return value;
+    }
+  });
+
+  const bundle = resolveDesignBundle(DEFAULT_THEME, registry);
+
+  assert.equal(bundle.design.typography.body.label, bundle.design.typography.title.label);
 });
 
 for (const field of ["title", "subtitle", "author", "institute", "date"]) {

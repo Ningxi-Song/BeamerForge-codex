@@ -28,6 +28,8 @@ const SEMANTIC_RULES = {
   fonts: {
     cssFamily: nonEmptyString,
     latexPreamble: nonEmptyString,
+    latexTitlePackage: string,
+    latexTitleFamily: string,
     assets: {
       valid: (value) => Array.isArray(value) && value.every((asset) => typeof asset === "string"),
       message: "must be an array of strings"

@@ -1,8 +1,7 @@
 "use strict";
 
-const { validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
-const { resolveDesign } = require("../design/resolve-design");
+const { resolveDesignBundle } = require("../design/resolve-design");
 const { hexWithoutHash, normalizeLatexNewlines, joinNonEmpty } = require("../lib/utils");
 
 const LATEX_SPECIAL_CHARS = {
@@ -30,20 +29,13 @@ function latexDate(value) {
   return value === "\\today" ? value : escapeLatex(value);
 }
 
-function formatErrors(errors) {
-  return errors.map((e) => `${e.path}: ${e.message}`).join("; ");
-}
-
-const TITLE_FONT_PACKAGES = Object.freeze({
-  palatino: { line: "\\usepackage{palatino}", family: "ppl" },
-  "latin-modern": { line: "\\usepackage{lmodern}", family: "lmr" },
-  helvetica: { line: "\\usepackage{helvet}", family: "phv" },
-  times: { line: "\\usepackage{mathptmx}", family: "ptm" }
-});
-
 function titleFontSetup(bodyFont, titleFont) {
   const empty = { setup: "", definition: "", familyOption: "" };
-  if (!bodyFont || !titleFont || bodyFont.id === titleFont.id) return empty;
+  if (!bodyFont || !titleFont) return empty;
+  if (
+    bodyFont.latexPreamble === titleFont.latexPreamble
+    && bodyFont.cssFamily === titleFont.cssFamily
+  ) return empty;
 
   const preamble = normalizeLatexNewlines(titleFont.latexPreamble);
   const fontspecMatch = preamble.match(/\\setmainfont(\[[^\]]*\])?\{([^}]+)\}/);
@@ -56,11 +48,10 @@ function titleFontSetup(bodyFont, titleFont) {
     };
   }
 
-  const pkg = TITLE_FONT_PACKAGES[titleFont.id];
-  if (pkg) {
+  if (titleFont.latexTitlePackage && titleFont.latexTitleFamily) {
     return {
-      setup: pkg.line,
-      definition: `\\newcommand{\\bfTitleFont}{\\fontfamily{${pkg.family}}\\selectfont}`,
+      setup: titleFont.latexTitlePackage,
+      definition: `\\newcommand{\\bfTitleFont}{\\fontfamily{${titleFont.latexTitleFamily}}\\selectfont}`,
       familyOption: "family=\\bfTitleFont,"
     };
   }
@@ -156,8 +147,8 @@ function generateClassTex(design) {
     titleFont.definition
   ]);
   const blockTemplate = normalizeLatexNewlines(block.latexTemplate);
-  const titlePageId = titlePage.id || "left-curtain";
-  const titlePageTemplate = TITLE_PAGE_TEMPLATES[titlePageId] || TITLE_PAGE_TEMPLATES["left-curtain"];
+  const titlePageTemplate = TITLE_PAGE_TEMPLATES[titlePage.layout]
+    || TITLE_PAGE_TEMPLATES["left-curtain"];
   const frametitleTemplate = navigation.header ? String.raw`
 \setbeamertemplate{frametitle}{%
   \nointerlineskip
@@ -175,7 +166,8 @@ function generateClassTex(design) {
   const logoX = cornerLogo.position === "top-left" ? "0.4cm" : String.raw`\dimexpr\paperwidth-${logoWidth}-0.4cm\relax`;
   const logoGuardOpen = cornerLogo.scope === "content-frames" ? String.raw`\ifnum\insertframenumber>1\relax` : "";
   const logoGuardClose = cornerLogo.scope === "content-frames" ? String.raw`\fi` : "";
-  const logoTemplate = cornerLogo.id === "none" ? "" : String.raw`
+  let logoTemplate = "";
+  if (cornerLogo.vectorId === "duck") logoTemplate = String.raw`
 \RequirePackage{tikz}
 \RequirePackage[absolute,overlay]{textpos}
 \definecolor{bfDuckYellow}{HTML}{F4B942}
@@ -194,6 +186,9 @@ function generateClassTex(design) {
   ${logoGuardClose}
 }
 `;
+  else if (cornerLogo.vectorId !== null) {
+    throw new Error(`Unsupported trusted logo vector: ${cornerLogo.vectorId}`);
+  }
 
   return String.raw`\NeedsTeXFormat{LaTeX2e}
 \ProvidesClass{theme}[2026/06/28 BeamerForge generated theme]
@@ -309,13 +304,12 @@ function generateResolvedFiles(design) {
   };
 }
 
-function generateFiles(theme, registry = getRegistry()) {
-  const validation = validateTheme(theme, { registry });
-  if (!validation.ok) throw new Error(`Invalid theme: ${formatErrors(validation.errors)}`);
-  const t = validation.value;
+function generateFiles(theme, registry = getRegistry(), options = {}) {
+  const bundleResolver = options.resolveDesignBundle || resolveDesignBundle;
+  const bundle = bundleResolver(theme, registry);
   return {
-    ...generateResolvedFiles(resolveDesign(t, registry)),
-    "theme.json": `${JSON.stringify(t, null, 2)}\n`,
+    ...generateResolvedFiles(bundle.design),
+    "theme.json": `${JSON.stringify(bundle.theme, null, 2)}\n`,
   };
 }
 

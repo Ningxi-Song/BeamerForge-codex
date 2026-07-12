@@ -6,6 +6,7 @@ const path = require("node:path");
 const { DEFAULT_THEME } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
 const { writeTemplateProject } = require("../generators/project-writer");
+const { resolveDesignBundle } = require("../design/resolve-design");
 const { parseArgs } = require("../generators/cli");
 
 test("parseArgs rejects missing --out value", () => {
@@ -55,26 +56,21 @@ test("writes a normalized complete theme.json for legacy sparse themes", () => {
   assert.deepEqual(writtenTheme.contentDefaults.sampleBullets, DEFAULT_THEME.contentDefaults.sampleBullets);
 });
 
-test("resolves injected registry choices once before writing and copying", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-single-resolution-"));
-  const outDir = path.join(root, "single-resolution");
-  const registry = getRegistry();
-  const theme = structuredClone(DEFAULT_THEME);
-  theme.fonts.title = "times";
-  let selectedFontReads = 0;
-  const font = registry.fonts.palatino;
-  Object.defineProperty(registry.fonts, "palatino", {
-    configurable: true,
-    enumerable: true,
-    get() {
-      selectedFontReads += 1;
-      return font;
+test("project writer invokes one resolved bundle pipeline", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-one-bundle-"));
+  const outDir = path.join(root, "one-bundle");
+  let calls = 0;
+
+  writeTemplateProject(DEFAULT_THEME, outDir, {
+    registry: getRegistry(),
+    rootDir: process.cwd(),
+    resolveDesignBundle(theme, registry) {
+      calls += 1;
+      return resolveDesignBundle(theme, registry);
     }
   });
 
-  writeTemplateProject(theme, outDir, { registry, rootDir: process.cwd() });
-
-  assert.equal(selectedFontReads, 4);
+  assert.equal(calls, 1);
 });
 
 test("copies font assets when a font declares assets", () => {
@@ -156,4 +152,38 @@ test("copies a trusted corner logo into the generated project", () => {
   const result = writeTemplateProject(theme, templateDir, { registry: getRegistry(), rootDir: process.cwd(), outputRoot });
   assert.equal(fs.existsSync(path.join(templateDir, "assets", "corner-logo.svg")), true);
   assert.equal(result.copiedAssets.includes(path.join(templateDir, "assets", "corner-logo.svg")), true);
+});
+
+test("rejects trusted font and decoration assets that escape rootDir", () => {
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-asset-root-"));
+  const rootDir = path.join(parent, "root");
+  fs.mkdirSync(rootDir);
+  const outputRoot = path.join(parent, "output");
+  fs.mkdirSync(outputRoot);
+
+  const fontRegistry = getRegistry();
+  fontRegistry.fonts["escaping-font"] = {
+    ...fontRegistry.fonts.neuton,
+    id: "escaping-font",
+    assets: ["../outside.ttf"]
+  };
+  const fontTheme = structuredClone(DEFAULT_THEME);
+  fontTheme.fonts.body = "escaping-font";
+  assert.throws(
+    () => writeTemplateProject(fontTheme, path.join(outputRoot, "font"), { registry: fontRegistry, rootDir, outputRoot }),
+    /Trusted asset path escapes rootDir/
+  );
+
+  const logoRegistry = getRegistry();
+  logoRegistry.logos["escaping-logo"] = {
+    ...logoRegistry.logos.duck,
+    id: "escaping-logo",
+    asset: "../outside.svg"
+  };
+  const logoTheme = structuredClone(DEFAULT_THEME);
+  logoTheme.decorations.cornerLogo.id = "escaping-logo";
+  assert.throws(
+    () => writeTemplateProject(logoTheme, path.join(outputRoot, "logo"), { registry: logoRegistry, rootDir, outputRoot }),
+    /Trusted asset path escapes rootDir/
+  );
 });

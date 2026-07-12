@@ -2,10 +2,9 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { validateTheme } = require("../schema/theme-schema");
 const { generateResolvedFiles } = require("./latex");
 const { getRegistry, resolveAssetPath } = require("../registry/options");
-const { resolveDesign } = require("../design/resolve-design");
+const { resolveDesignBundle } = require("../design/resolve-design");
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -14,6 +13,16 @@ function ensureDir(dir) {
 function writeTextFile(filePath, content) {
   ensureDir(path.dirname(filePath));
   fs.writeFileSync(filePath, content, "utf8");
+}
+
+function trustedSourcePath(rootDir, asset) {
+  const root = path.resolve(rootDir);
+  const source = path.resolve(resolveAssetPath(root, asset));
+  const relative = path.relative(root, source);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Trusted asset path escapes rootDir: ${asset}`);
+  }
+  return source;
 }
 
 function copyFontAssets(design, templateDir, rootDir) {
@@ -36,7 +45,7 @@ function copyFontAssets(design, templateDir, rootDir) {
   ensureDir(fontDir);
   const copied = [];
   for (const asset of assets) {
-    const src = resolveAssetPath(rootDir, asset);
+    const src = trustedSourcePath(rootDir, asset);
     const dest = path.join(fontDir, path.basename(asset));
     fs.copyFileSync(src, dest);
     copied.push(dest);
@@ -47,7 +56,7 @@ function copyFontAssets(design, templateDir, rootDir) {
 function copyDecorationAssets(design, templateDir, rootDir) {
   const asset = design.components.cornerLogo.trustedAssetPath;
   if (!asset) return [];
-  const source = resolveAssetPath(rootDir, asset);
+  const source = trustedSourcePath(rootDir, asset);
   const destination = path.join(templateDir, "assets", "corner-logo.svg");
   ensureDir(path.dirname(destination));
   fs.copyFileSync(source, destination);
@@ -62,19 +71,15 @@ function assertInsideRoot(templateDir, outputRoot) {
   }
 }
 
-function formatErrors(errors) {
-  return errors.map((e) => `${e.path}: ${e.message}`).join("; ");
-}
-
 function writeTemplateProject(theme, templateDir, options = {}) {
   const registry = options.registry || getRegistry();
   const rootDir = options.rootDir || process.cwd();
   assertInsideRoot(templateDir, options.outputRoot);
 
-  const validation = validateTheme(theme, { registry });
-  if (!validation.ok) throw new Error(`Invalid theme: ${formatErrors(validation.errors)}`);
-  const normalizedTheme = validation.value;
-  const design = resolveDesign(normalizedTheme, registry);
+  const bundleResolver = options.resolveDesignBundle || resolveDesignBundle;
+  const bundle = bundleResolver(theme, registry);
+  const normalizedTheme = bundle.theme;
+  const design = bundle.design;
 
   ensureDir(templateDir);
   const files = {

@@ -42,6 +42,8 @@ function resolvedFont(font) {
     label: font.label,
     cssFamily: font.cssFamily,
     latexPreamble: font.latexPreamble,
+    latexTitlePackage: font.latexTitlePackage,
+    latexTitleFamily: font.latexTitleFamily,
     assets: clone(font.assets)
   };
 }
@@ -132,15 +134,15 @@ function resolvedCapabilities(choices) {
   };
 }
 
-function resolveDesign(theme, registry) {
-  const validation = validateTheme(theme, { registry });
-  if (!validation.ok) {
-    throw new Error("Invalid theme: " + validation.errors.map(formatError).join("; "));
-  }
+function snapshotValue(value) {
+  if (Array.isArray(value)) return value.map(snapshotValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value).map((key) => [key, snapshotValue(value[key])])
+  );
+}
 
-  assertRegistryContract(registry);
-  const value = validation.value;
-  const choices = resolveThemeChoices(value, registry);
+function buildResolvedDesign(value, choices) {
   return deepFreeze({
     source: {
       themeHash: hashCanonical(value),
@@ -161,4 +163,24 @@ function resolveDesign(theme, registry) {
   });
 }
 
-module.exports = { resolveDesign, deepFreeze, GENERATOR_VERSION };
+function resolveDesignBundle(theme, registry) {
+  const registrySnapshot = snapshotValue(registry);
+  const validation = validateTheme(theme, { registry: registrySnapshot });
+  if (!validation.ok) {
+    throw new Error("Invalid theme: " + validation.errors.map(formatError).join("; "));
+  }
+
+  assertRegistryContract(registrySnapshot);
+  const value = validation.value;
+  const choices = resolveThemeChoices(value, registrySnapshot);
+  return {
+    theme: clone(value),
+    design: buildResolvedDesign(value, choices)
+  };
+}
+
+function resolveDesign(theme, registry) {
+  return resolveDesignBundle(theme, registry).design;
+}
+
+module.exports = { resolveDesign, resolveDesignBundle, deepFreeze, GENERATOR_VERSION };
