@@ -115,6 +115,15 @@ function timestamp(now) {
   return result;
 }
 
+function writeAllSync(fd, buffer, fsOps = fs) {
+  let offset = 0;
+  while (offset < buffer.length) {
+    const written = fsOps.writeSync(fd, buffer, offset, buffer.length - offset);
+    if (!Number.isInteger(written) || written <= 0) throw new Error("Preview marker write made no progress");
+    offset += written;
+  }
+}
+
 function createPreviewCache(options = {}) {
   const rootDir = path.resolve(options.rootDir || process.cwd());
   const cacheRoot = path.resolve(options.cacheRoot || path.join(rootDir, ".beamerforge-preview-cache"));
@@ -126,8 +135,9 @@ function createPreviewCache(options = {}) {
     options.generatorVersion === undefined ? GENERATOR_VERSION : options.generatorVersion
   );
   const now = options.now || (() => new Date());
+  const fsOps = options.fsOps || fs;
   const renameSync = options.renameSync || fs.renameSync;
-  const markerOpenSync = options.markerOpenSync || fs.openSync;
+  const markerOpenSync = options.markerOpenSync || fsOps.openSync.bind(fsOps);
   const inFlight = new Map();
 
   if (!isSafeToken(generatorVersion)) {
@@ -248,27 +258,38 @@ function createPreviewCache(options = {}) {
   }
 
   function allocateMarker(currentDir, generationId) {
+    let collisionFloor = 0;
     for (;;) {
       let max = 0;
       for (const name of fs.readdirSync(currentDir)) {
-        const match = name.match(/^(\d+)/);
-        if (match) max = Math.max(max, Number(match[1]) || 0);
+        const match = name.match(new RegExp(`^(\\d{${MARKER_WIDTH}})\\.json$`));
+        if (!match) continue;
+        const value = Number(match[1]);
+        if (Number.isSafeInteger(value)) max = Math.max(max, value);
       }
-      const sequence = max + 1;
+      const sequence = Math.max(max, collisionFloor) + 1;
       if (!Number.isSafeInteger(sequence)) throw new Error("Preview marker sequence exhausted");
       const markerPath = path.join(currentDir, `${String(sequence).padStart(MARKER_WIDTH, "0")}.json`);
       let fd;
       try {
         fd = markerOpenSync(markerPath, "wx");
       } catch (error) {
-        if (error.code === "EEXIST") continue;
+        if (error.code === "EEXIST") {
+          collisionFloor = sequence;
+          continue;
+        }
         throw error;
       }
       try {
-        fs.writeSync(fd, JSON.stringify({ sequence, generationId }));
-        if (typeof fs.fsyncSync === "function") fs.fsyncSync(fd);
+        writeAllSync(fd, Buffer.from(JSON.stringify({ sequence, generationId })), fsOps);
+        if (typeof fsOps.fsyncSync === "function") fsOps.fsyncSync(fd);
       } finally {
-        fs.closeSync(fd);
+        fsOps.closeSync(fd);
+      }
+      let verified;
+      try { verified = JSON.parse(fs.readFileSync(markerPath, "utf8")); } catch { verified = null; }
+      if (!verified || verified.sequence !== sequence || verified.generationId !== generationId) {
+        throw new Error("Preview publication marker failed verification");
       }
       return sequence;
     }
@@ -294,10 +315,12 @@ function createPreviewCache(options = {}) {
 
   async function compileMiss({ bundle, cacheKey, sourceVersion }) {
     const themeHash = bundle.design.source.themeHash;
-    const tempDir = fs.mkdtempSync(path.join(cacheRoot, `${cacheKey}.tmp-`));
-    const roots = [cacheRoot, rootDir, tempDir];
+    let tempDir = null;
+    const roots = [cacheRoot, rootDir];
     let compilerKind = "unknown";
     try {
+      tempDir = fsOps.mkdtempSync(path.join(cacheRoot, `${cacheKey}.tmp-`));
+      roots.push(tempDir);
       await Promise.resolve(projectWriter(bundle.theme, tempDir, {
         registry,
         rootDir,
@@ -357,7 +380,7 @@ function createPreviewCache(options = {}) {
       return failureDto({ status: "failed", cacheKey, themeHash, compilerKind, message: "Preview compilation failed.", excerpt: "", roots });
     } finally {
       try {
-        cleanupTemp(tempDir);
+        if (tempDir) cleanupTemp(tempDir);
       } catch {
         // Cleanup is best-effort and must not change the documented result.
       }
@@ -398,4 +421,4 @@ function createPreviewCache(options = {}) {
   return { compile, resolvePdf };
 }
 
-module.exports = { createPreviewCache, isSafeCacheKey, makeCacheKey };
+module.exports = { createPreviewCache, isSafeCacheKey, makeCacheKey, writeAllSync };

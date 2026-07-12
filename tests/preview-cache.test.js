@@ -489,6 +489,70 @@ test("exclusive marker collision rescans and retries the next sequence", async (
   ]);
 });
 
+test("marker publication loops until one-byte writes complete", async () => {
+  const cacheRoot = tempDir();
+  let writes = 0;
+  const service = createService({
+    cacheRoot,
+    fsOps: {
+      ...fs,
+      writeSync(fd, buffer, offset, length) {
+        writes += 1;
+        return fs.writeSync(fd, buffer, offset, Math.min(1, length));
+      }
+    }
+  });
+
+  const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+
+  assert.equal(ready.status, "ready");
+  assert.ok(writes > 1);
+  assert.equal(readResolvedPdf(service, ready.cacheKey), "pdf");
+});
+
+for (const fault of ["zero-progress", "silent-corruption"]) {
+  test(`${fault} marker writes fail without replacing the active generation`, async () => {
+    const cacheRoot = tempDir();
+    const initial = createService({ cacheRoot, compiler: pdfCompiler("old") });
+    const ready = await initial.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+    const service = createService({
+      cacheRoot,
+      compiler: pdfCompiler("new"),
+      fsOps: {
+        ...fs,
+        writeSync(fd, buffer, offset, length) {
+          if (fault === "zero-progress") return 0;
+          const written = fs.writeSync(fd, buffer, offset, length);
+          fs.ftruncateSync(fd, 0);
+          fs.writeSync(fd, "{");
+          return written;
+        }
+      }
+    });
+
+    const failed = await service.compile({ theme: cloneTheme(), sourceVersion: "selected", force: true });
+
+    assert.equal(failed.status, "failed");
+    assert.equal(failed.staleAvailable, true);
+    assert.equal(readResolvedPdf(initial, ready.cacheKey), "old");
+  });
+}
+
+test("temporary directory setup errors resolve to failed DTOs", async () => {
+  const service = createService({
+    fsOps: {
+      ...fs,
+      mkdtempSync() { throw new Error("temp permission denied"); }
+    }
+  });
+  const promise = service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+
+  assert.ok(promise instanceof Promise);
+  const result = await promise;
+  assert.equal(result.status, "failed");
+  assert.equal(result.staleAvailable, false);
+});
+
 test("orphan temporary directories are ignored", async () => {
   const cacheRoot = tempDir();
   const service = createService({ cacheRoot });
