@@ -106,17 +106,17 @@ test("same-key retry success clears preview error presentation and restores buil
       return { source: { themeHash: "current" } };
     },
     onError(error) {
-      applyPreviewFailure(state, error, display.buildStatus);
+      applyPreviewFailure(state, error, display.buildStatus, error.message);
       display.status = "Preview error";
       display.statusClass = "is-error";
       display.buildStatus = error.message;
     },
     onSuccess(design) {
-      const recovery = applyPreviewSuccess(state, design);
+      const recovery = applyPreviewSuccess(state, design, display.buildStatus);
       if (recovery.recovered) {
         display.status = "Preview current";
         display.statusClass = "";
-        display.buildStatus = recovery.restoreBuildStatus;
+        if (recovery.restoreBuildStatus !== null) display.buildStatus = recovery.restoreBuildStatus;
       }
     }
   });
@@ -134,20 +134,74 @@ test("same-key retry success clears preview error presentation and restores buil
   assert.equal(display.buildStatus, "Compiled successfully");
 });
 
+test("same-key retry success preserves a newer intervening build status", async () => {
+  let attempts = 0;
+  const timers = fakeTimers();
+  const state = { resolvedDesign: {}, previewValidationErrors: [], previewErrorActive: false, previewBuildStatusBeforeError: null };
+  const display = { buildStatus: "Previous build" };
+  const lifecycle = createPreviewLifecycle({
+    setTimeoutFn: timers.set,
+    clearTimeoutFn: timers.clear,
+    async resolve() {
+      attempts++;
+      if (attempts === 1) throw Object.assign(new Error("preview invalid"), { errors: [{ path: "colors.primary" }] });
+      return { source: { themeHash: "valid" } };
+    },
+    onError(error) {
+      applyPreviewFailure(state, error, display.buildStatus, error.message);
+      display.buildStatus = error.message;
+    },
+    onSuccess(design) {
+      const recovery = applyPreviewSuccess(state, design, display.buildStatus);
+      if (recovery.restoreBuildStatus !== null) display.buildStatus = recovery.restoreBuildStatus;
+    }
+  });
+  lifecycle.schedule({}, "same");
+  await timers.runNext();
+  display.buildStatus = "Generating newer build";
+  lifecycle.schedule({}, "same");
+  await timers.runNext();
+
+  assert.equal(display.buildStatus, "Generating newer build");
+  assert.equal(state.resolvedDesign.source.themeHash, "valid");
+  assert.equal(state.previewErrorActive, false);
+});
+
 test("cached reuse clears only preview-owned errors and preserves the resolved design", () => {
   const design = { source: { themeHash: "A" } };
   const serverErrors = [{ path: "identity.title" }];
   const state = {
     resolvedDesign: design,
     validationErrors: serverErrors,
-    previewValidationErrors: [{ path: "colors.primary" }]
+    previewValidationErrors: [{ path: "colors.primary" }],
+    previewErrorActive: true,
+    previewBuildStatusBeforeError: "Compiled successfully",
+    previewBuildErrorPresentation: "Preview invalid"
   };
 
-  applyCachedReuse(state);
+  const recovery = applyCachedReuse(state, "Preview invalid");
 
   assert.equal(state.resolvedDesign, design);
   assert.equal(state.validationErrors, serverErrors);
   assert.deepEqual(state.previewValidationErrors, []);
+  assert.equal(recovery.restoreBuildStatus, "Compiled successfully");
+});
+
+test("cached reuse preserves a newer intervening build status", () => {
+  const state = {
+    resolvedDesign: { source: { themeHash: "A" } },
+    previewValidationErrors: [{ path: "colors.primary" }],
+    previewErrorActive: true,
+    previewBuildStatusBeforeError: "Earlier build",
+    previewBuildErrorPresentation: "Preview invalid"
+  };
+
+  const recovery = applyCachedReuse(state, "Newer compile result");
+
+  assert.equal(recovery.restoreBuildStatus, null);
+  assert.equal(state.resolvedDesign.source.themeHash, "A");
+  assert.deepEqual(state.previewValidationErrors, []);
+  assert.equal(state.previewErrorActive, false);
 });
 
 test("same key dedupes while pending and after success", async () => {

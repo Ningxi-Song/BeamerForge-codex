@@ -69,33 +69,37 @@
     container.style.aspectRatio = `${design.canvas.widthUnits} / ${design.canvas.heightUnits}`;
   }
 
-  function applyPreviewFailure(state, error, currentBuildStatus) {
+  function applyPreviewFailure(state, error, currentBuildStatus, previewErrorPresentation) {
     if (Array.isArray(error?.errors) && error.errors.length > 0) state.previewValidationErrors = error.errors;
     if (!state.previewErrorActive) state.previewBuildStatusBeforeError = currentBuildStatus;
     state.previewErrorActive = true;
+    state.previewBuildErrorPresentation = previewErrorPresentation;
     return state.resolvedDesign;
   }
 
-  function applyPreviewSuccess(state, design) {
+  function takePreviewRecovery(state, currentBuildStatus) {
     const recovery = {
       recovered: state.previewErrorActive === true,
-      restoreBuildStatus: state.previewBuildStatusBeforeError
+      restoreBuildStatus: state.previewErrorActive === true && currentBuildStatus === state.previewBuildErrorPresentation
+        ? state.previewBuildStatusBeforeError
+        : null
     };
-    state.resolvedDesign = design;
-    state.previewValidationErrors = [];
     state.previewErrorActive = false;
     state.previewBuildStatusBeforeError = null;
+    state.previewBuildErrorPresentation = null;
     return recovery;
   }
 
-  function applyCachedReuse(state) {
-    const recovery = {
-      recovered: state.previewErrorActive === true,
-      restoreBuildStatus: state.previewBuildStatusBeforeError
-    };
+  function applyPreviewSuccess(state, design, currentBuildStatus) {
+    const recovery = takePreviewRecovery(state, currentBuildStatus);
+    state.resolvedDesign = design;
     state.previewValidationErrors = [];
-    state.previewErrorActive = false;
-    state.previewBuildStatusBeforeError = null;
+    return recovery;
+  }
+
+  function applyCachedReuse(state, currentBuildStatus) {
+    const recovery = takePreviewRecovery(state, currentBuildStatus);
+    state.previewValidationErrors = [];
     return recovery;
   }
 

@@ -33,7 +33,7 @@ const CUBE_HALF = 1;
 
 const state = {
   registry: null, theme: null, resolvedDesign: null, validationErrors: [], previewValidationErrors: [], statuses: [], busy: false,
-  previewResolution: null, previewErrorActive: false, previewBuildStatusBeforeError: null,
+  previewResolution: null, previewErrorActive: false, previewBuildStatusBeforeError: null, previewBuildErrorPresentation: null,
   baseColor: { r: 69, g: 105, b: 144 }, scheme: "complementary",
   savedPalettes: [], paletteCounter: 0,
   workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null },
@@ -143,16 +143,18 @@ function initializePreviewResolution() {
   state.previewResolution = previewState.createPreviewLifecycle({
     resolve: requestResolvedDesign,
     onSuccess(design, meta) {
-      const recovery = previewState.applyPreviewSuccess(state, design);
+      const recovery = previewState.applyPreviewSuccess(state, design, elements.buildStatus.textContent);
       if (recovery.recovered) {
-        if (recovery.restoreBuildStatus !== undefined && recovery.restoreBuildStatus !== null) setBuildStatus(recovery.restoreBuildStatus);
+        if (recovery.restoreBuildStatus !== null) setBuildStatus(recovery.restoreBuildStatus);
         setStatus("Preview current");
       }
       if (meta.context?.render !== false) render({ schedulePreview: false });
     },
     onError(error, meta) {
-      previewState.applyPreviewFailure(state, error, elements.buildStatus.textContent);
-      setBuildStatus(error.details || error.message);
+      const previewError = error.details || error.message;
+      const previewErrorPresentation = buildStatusText(previewError);
+      previewState.applyPreviewFailure(state, error, elements.buildStatus.textContent, previewErrorPresentation);
+      setBuildStatus(previewError);
       setStatus("Preview error", "is-error");
       if (meta.context?.render !== false) render({ schedulePreview: false });
     }
@@ -168,8 +170,8 @@ function schedulePreviewResolution() {
   const inputKey = JSON.stringify(state.theme);
   const transition = state.previewResolution.schedule(clone(state.theme), inputKey, { render: true });
   if (transition === "reuse") {
-    const recovery = previewState.applyCachedReuse(state);
-    if (recovery.restoreBuildStatus !== undefined && recovery.restoreBuildStatus !== null) setBuildStatus(recovery.restoreBuildStatus);
+    const recovery = previewState.applyCachedReuse(state, elements.buildStatus.textContent);
+    if (recovery.restoreBuildStatus !== null) setBuildStatus(recovery.restoreBuildStatus);
     setStatus("Preview current");
   }
   return transition;
@@ -180,7 +182,8 @@ function setStatus(text, cls = "") {
   elements.saveStatus.textContent = text;
 }
 
-function setBuildStatus(v) { elements.buildStatus.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2); }
+function buildStatusText(v) { return typeof v === "string" ? v : JSON.stringify(v, null, 2); }
+function setBuildStatus(v) { elements.buildStatus.textContent = buildStatusText(v); }
 function setBusy(b) { state.busy = b; updateActions(); }
 
 function updateActions() {
