@@ -313,6 +313,18 @@ test("server serves read-only local font assets and rejects asset traversal", as
   assert.equal(gitConfig.status, 404);
 });
 
+test("server serves trusted SVG logo assets with an SVG content type", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const baseUrl = await withServer(t, { stateDir });
+
+  const response = await fetch(`${baseUrl}/assets/elements/decorations/logos/duck.svg`);
+  const body = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/svg+xml");
+  assert.match(body, /<svg\b/);
+});
+
 test("default public directory serves index.html at root", async (t) => {
   const stateDir = tempDir("beamerforge-server-");
   const baseUrl = await withServer(t, { stateDir });

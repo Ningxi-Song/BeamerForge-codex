@@ -151,6 +151,7 @@ const CONTENT_TYPES = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
   ".ttf": "font/ttf"
 };
 
