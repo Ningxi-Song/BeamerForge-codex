@@ -2,11 +2,79 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { DEFAULT_THEME } = require("../schema/theme-schema");
 const { getRegistry, defineRegistryCollection } = require("../registry/options");
 const { validateRegistryContract, assertRegistryContract } = require("../design/registry-contract");
+const { resolveDesign } = require("../design/resolve-design");
 
 test("every selectable registry option declares HTML and LaTeX support", () => {
   assert.deepEqual(validateRegistryContract(getRegistry()), []);
+});
+
+const SEMANTIC_FIELDS = [
+  ["palettes", "academic-blue", "id", "must be a non-empty string"],
+  ["palettes", "academic-blue", "label", "must be a non-empty string"],
+  ["fonts", "palatino", "cssFamily", "must be a non-empty string"],
+  ["fonts", "palatino", "latexPreamble", "must be a non-empty string"],
+  ["fonts", "palatino", "assets", "must be an array of strings"],
+  ["bullets", "pifont-outline", "marker", "must be a non-empty string"],
+  ["bullets", "pifont-outline", "latexPackages", "must be a string"],
+  ["bullets", "pifont-outline", "latexItem", "must be a non-empty string"],
+  ["bullets", "pifont-outline", "latexSubitem", "must be a non-empty string"],
+  ["blocks", "rounded", "radiusUnits", "must be a finite number"],
+  ["blocks", "rounded", "shadow", "must be a boolean"],
+  ["blocks", "rounded", "cssRadius", "must be a string"],
+  ["blocks", "rounded", "cssShadow", "must be a string"],
+  ["blocks", "rounded", "latexTemplate", "must be a string"],
+  ["navigation", "page-number", "header", "must be a boolean"],
+  ["navigation", "page-number", "footline", "must be a boolean"],
+  ["navigation", "page-number", "latexOuterTheme", "must be a string"],
+  ["navigation", "page-number", "latexFootline", "must be a string"],
+  ["titlePages", "left-curtain", "alignment", "must be a non-empty string"],
+  ["titlePages", "left-curtain", "layout", "must be a non-empty string"],
+  ["logos", "duck", "vectorId", "must be null or a non-empty string"],
+  ["logos", "duck", "previewUrl", "must be a string"],
+  ["logos", "duck", "asset", "must be null or a string"]
+];
+
+for (const [collection, id, field, message] of SEMANTIC_FIELDS) {
+  for (const variant of ["deleted", "wrong type"]) {
+    test(`${collection}.${id}.${field} rejects ${variant}`, () => {
+      const registry = getRegistry();
+      if (variant === "deleted") delete registry[collection][id][field];
+      else registry[collection][id][field] = field === "radiusUnits" ? "42" : 42;
+
+      assert.deepEqual(validateRegistryContract(registry), [
+        { collection, id, field, message }
+      ]);
+      const expected = new Error(
+        `Invalid registry renderer contract: ${collection}.${id}.${field}: ${message}`
+      );
+      assert.throws(() => assertRegistryContract(registry), expected);
+      assert.throws(() => resolveDesign(DEFAULT_THEME, registry), expected);
+    });
+  }
+}
+
+test("registry semantic validation checks non-empty strings and font asset entries", () => {
+  const registry = getRegistry();
+  registry.logos.duck.label = "   ";
+  registry.fonts.neuton.assets = ["valid.ttf", 42];
+
+  assert.deepEqual(validateRegistryContract(registry), [
+    {
+      collection: "fonts",
+      id: "neuton",
+      field: "assets",
+      message: "must be an array of strings"
+    },
+    {
+      collection: "logos",
+      id: "duck",
+      field: "label",
+      message: "must be a non-empty string"
+    }
+  ]);
 });
 
 test("registry contract identifies the collection, ID, and missing renderer", () => {

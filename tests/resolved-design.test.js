@@ -74,7 +74,7 @@ test("deepFreeze recursively freezes arrays and object members", () => {
 test("resolver reports every validation path before registry lookup", () => {
   const theme = clone(DEFAULT_THEME);
   theme.navigation.style = "missing";
-  theme.identity.title = "";
+  theme.identity.title = 42;
 
   assert.throws(
     () => resolveDesign(theme, getRegistry()),
@@ -84,67 +84,82 @@ test("resolver reports every validation path before registry lookup", () => {
   );
 });
 
-test("missing sample bullets fail validation before resolved content is cloned", () => {
+test("legacy sparse themes normalize to complete detached resolved designs", () => {
   const theme = clone(DEFAULT_THEME);
   const registry = getRegistry();
+  for (const field of ["title", "subtitle", "author", "institute", "date"]) {
+    delete theme.identity[field];
+  }
+  delete theme.colors.blockBody;
+  delete theme.colors.alert;
   delete theme.contentDefaults.sampleBullets;
 
   const validation = validateTheme(theme, { registry });
+  assert.equal(validation.ok, true);
+  assert.deepEqual(validation.value.identity, {
+    name: DEFAULT_THEME.identity.name,
+    title: "",
+    subtitle: "",
+    author: "",
+    institute: "",
+    date: ""
+  });
+  assert.equal(validation.value.colors.blockBody, theme.colors.background);
+  assert.equal(validation.value.colors.alert, theme.colors.accent);
+  assert.deepEqual(
+    validation.value.contentDefaults.sampleBullets,
+    DEFAULT_THEME.contentDefaults.sampleBullets
+  );
+  assert.notEqual(
+    validation.value.contentDefaults.sampleBullets,
+    DEFAULT_THEME.contentDefaults.sampleBullets
+  );
+
+  const design = resolveDesign(theme, registry);
+  const serialized = JSON.parse(JSON.stringify(design));
+  assert.deepEqual(serialized.identity, validation.value.identity);
+  assert.equal(serialized.colors.blockBody, theme.colors.background);
+  assert.equal(serialized.colors.alert, theme.colors.accent);
+  assert.deepEqual(serialized.content.bullets, DEFAULT_THEME.contentDefaults.sampleBullets);
+  assert.equal(
+    design.source.themeHash,
+    resolveDesign(validation.value, registry).source.themeHash
+  );
+});
+
+for (const field of ["title", "subtitle", "author", "institute", "date"]) {
+  test(`present non-string identity.${field} keeps its exact validation path`, () => {
+    const theme = clone(DEFAULT_THEME);
+    theme.identity[field] = 42;
+    const validation = validateTheme(theme, { registry: getRegistry() });
+
+    assert.equal(validation.ok, false);
+    assert.deepEqual(validation.errors.map((error) => error.path), [`identity.${field}`]);
+  });
+}
+
+for (const field of ["blockBody", "alert"]) {
+  test(`present non-color colors.${field} keeps its exact validation path`, () => {
+    const theme = clone(DEFAULT_THEME);
+    theme.colors[field] = 42;
+    const validation = validateTheme(theme, { registry: getRegistry() });
+
+    assert.equal(validation.ok, false);
+    assert.deepEqual(validation.errors.map((error) => error.path), [`colors.${field}`]);
+  });
+}
+
+test("present non-array sample bullets keep their exact validation path", () => {
+  const theme = clone(DEFAULT_THEME);
+  theme.contentDefaults.sampleBullets = "not an array";
+  const validation = validateTheme(theme, { registry: getRegistry() });
+
   assert.equal(validation.ok, false);
   assert.deepEqual(
     validation.errors.map((error) => error.path),
     ["contentDefaults.sampleBullets"]
   );
-  assert.throws(
-    () => resolveDesign(theme, registry),
-    (error) => error instanceof Error
-      && error.name === "Error"
-      && error.message.startsWith("Invalid theme: ")
-      && error.message.includes("contentDefaults.sampleBullets")
-  );
 });
-
-for (const field of ["title", "subtitle", "author", "institute", "date"]) {
-  test(`missing identity.${field} fails validation and resolution`, () => {
-    const theme = clone(DEFAULT_THEME);
-    const registry = getRegistry();
-    delete theme.identity[field];
-
-    const validation = validateTheme(theme, { registry });
-    assert.equal(validation.ok, false);
-    assert.deepEqual(
-      validation.errors.map((error) => error.path),
-      [`identity.${field}`]
-    );
-    assert.throws(
-      () => resolveDesign(theme, registry),
-      (error) => error.name === "Error"
-        && error.message.startsWith("Invalid theme: ")
-        && error.message.includes(`identity.${field}`)
-    );
-  });
-}
-
-for (const field of ["blockBody", "alert"]) {
-  test(`missing colors.${field} fails validation and resolution`, () => {
-    const theme = clone(DEFAULT_THEME);
-    const registry = getRegistry();
-    delete theme.colors[field];
-
-    const validation = validateTheme(theme, { registry });
-    assert.equal(validation.ok, false);
-    assert.deepEqual(
-      validation.errors.map((error) => error.path),
-      [`colors.${field}`]
-    );
-    assert.throws(
-      () => resolveDesign(theme, registry),
-      (error) => error.name === "Error"
-        && error.message.startsWith("Invalid theme: ")
-        && error.message.includes(`colors.${field}`)
-    );
-  });
-}
 
 test("serialized resolved identity and colors contain every contract field", () => {
   const serialized = JSON.parse(JSON.stringify(resolveDesign(DEFAULT_THEME, getRegistry())));

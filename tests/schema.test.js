@@ -29,17 +29,10 @@ test("reports field-level validation errors", () => {
     result.errors.map((error) => error.path),
     [
       "identity.name",
-      "identity.title",
-      "identity.subtitle",
-      "identity.author",
-      "identity.institute",
-      "identity.date",
       "foundation.aspectRatio",
       "colors.background",
       "colors.blockBody",
-      "colors.alert",
-      "contentDefaults.sampleTitle",
-      "contentDefaults.sampleBullets"
+      "contentDefaults.sampleTitle"
     ]
   );
 });

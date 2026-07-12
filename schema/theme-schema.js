@@ -121,6 +121,13 @@ function assertNonEmptyString(obj, path, errors) {
   }
 }
 
+function assertString(obj, path, errors) {
+  const key = path.split(".").pop();
+  if (typeof obj[key] !== "string") {
+    errors.push(new ValidationError(path, `${path} must be a string`));
+  }
+}
+
 function assertHexColor(obj, path, errors) {
   const key = path.split(".").pop();
   if (typeof obj[key] !== "string" || !HEX_COLOR_RE.test(obj[key])) {
@@ -141,7 +148,7 @@ function validateIdentity(identity, errors) {
     errors.push(new ValidationError("identity.name", "identity.name must be a lowercase slug"));
   }
   for (const field of IDENTITY_FIELDS) {
-    assertNonEmptyString(identity, `identity.${field}`, errors);
+    assertString(identity, `identity.${field}`, errors);
   }
 }
 
@@ -187,9 +194,31 @@ function validateContentDefaults(content, errors) {
   }
 }
 
+function normalizeLegacyTheme(input) {
+  const theme = isPlainObject(input) ? clone(input) : {};
+
+  if (isPlainObject(theme.identity)) {
+    for (const field of IDENTITY_FIELDS) {
+      if (theme.identity[field] === undefined) theme.identity[field] = "";
+    }
+  }
+  if (isPlainObject(theme.colors)) {
+    if (theme.colors.blockBody === undefined) theme.colors.blockBody = theme.colors.background;
+    if (theme.colors.alert === undefined) theme.colors.alert = theme.colors.accent;
+  }
+  if (
+    isPlainObject(theme.contentDefaults)
+    && theme.contentDefaults.sampleBullets === undefined
+  ) {
+    theme.contentDefaults.sampleBullets = clone(DEFAULT_THEME.contentDefaults.sampleBullets);
+  }
+
+  return theme;
+}
+
 function validateTheme(input, options = {}) {
   const errors = [];
-  const theme = isPlainObject(input) ? clone(input) : {};
+  const theme = normalizeLegacyTheme(input);
   const registry = options.registry;
 
   rejectUnknownKeys(theme, ALLOWED_KEYS.root, "", errors);
@@ -262,6 +291,7 @@ function errorToStepId(errorPath) {
 module.exports = {
   DEFAULT_THEME,
   ValidationError,
+  normalizeLegacyTheme,
   validateTheme,
   slugifyName: slugify,
   errorToStepId
