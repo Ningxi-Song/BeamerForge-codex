@@ -5,14 +5,19 @@
   "use strict";
 
   const STEPS = Object.freeze([
-    { id: "start", path: "/start", label: "Default Template", section: null },
-    { id: "color", path: "/color", label: "Color", section: "colors" },
-    { id: "font", path: "/font", label: "Font", section: "fonts" },
-    { id: "bullets", path: "/bullets", label: "Bullets", section: "bullets" },
-    { id: "blocks", path: "/blocks", label: "Blocks", section: "blocks" },
-    { id: "navigation", path: "/navigation", label: "Navigation", section: "navigation" },
-    { id: "title-page", path: "/title-page", label: "Title Page", section: "titlePage" },
-    { id: "review", path: "/review", label: "Review & Generate", section: null }
+    { id: "start", path: "/start", label: "Default Template", section: null, phase: "manual" },
+    { id: "color", path: "/color", label: "Color", section: "colors", phase: "manual" },
+    { id: "font", path: "/font", label: "Font", section: "fonts", phase: "manual" },
+    { id: "bullets", path: "/bullets", label: "Bullets", section: "bullets", phase: "manual" },
+    { id: "blocks", path: "/blocks", label: "Blocks", section: "blocks", phase: "manual" },
+    { id: "navigation", path: "/navigation", label: "Navigation", section: "navigation", phase: "manual" },
+    { id: "title-page", path: "/title-page", label: "Title Page", section: "titlePage", phase: "manual" },
+    { id: "manual-review", path: "/manual-review", label: "Manual Review", section: null, phase: "manual" },
+    { id: "ai-customize", path: "/ai-customize", label: "AI Brief", section: null, phase: "ai" },
+    { id: "ai-handoff", path: "/ai-handoff", label: "AI Handoff", section: null, phase: "ai" },
+    { id: "ai-import", path: "/ai-import", label: "Import Draft", section: null, phase: "ai" },
+    { id: "ai-compare", path: "/ai-compare", label: "Compare", section: null, phase: "ai" },
+    { id: "final-review", path: "/final-review", label: "Final Review", section: null, phase: "final" }
   ]);
 
   const BY_ID = Object.freeze(Object.fromEntries(STEPS.map((s) => [s.id, s])));
@@ -30,7 +35,7 @@
   const ERROR_MAP = Object.freeze([
     ["identity", "start"], ["foundation", "start"], ["colors", "color"],
     ["fonts", "font"], ["bullets", "bullets"], ["blocks", "blocks"],
-    ["navigation", "navigation"], ["titlePage", "title-page"], ["contentDefaults", "review"]
+    ["navigation", "navigation"], ["titlePage", "title-page"], ["contentDefaults", "manual-review"]
   ]);
 
   function get(obj, p) { return p.split(".").reduce((v, k) => (v ? v[k] : undefined), obj); }
@@ -44,7 +49,7 @@
   function stepForError(errorPath) {
     const p = String(errorPath || "");
     const m = ERROR_MAP.find(([prefix]) => p === prefix || p.startsWith(`${prefix}.`));
-    return m ? m[1] : "review";
+    return m ? m[1] : "manual-review";
   }
 
   function optionLabel(collection, id) {
@@ -54,7 +59,7 @@
 
   function labelForStep(stepId, theme, registry) {
     if (stepId === "start") return theme.identity?.name || "Default template";
-    if (stepId === "review") return "Ready check";
+    if (stepId === "manual-review") return "Ready check";
     const req = REQUIRED[stepId];
     if (!req) return "";
     const [coll, field] = req[0];
@@ -90,8 +95,20 @@
   function canGenerate(statuses) {
     if (!Array.isArray(statuses)) return false;
     const map = new Map(statuses.map((s) => [s && s.id, s]));
-    return STEPS.every((step) => map.get(step.id)?.state === "complete");
+    return STEPS.filter((step) => step.phase === "manual").every((step) => map.get(step.id)?.state === "complete");
   }
 
-  return { STEPS, stepForPath, nextStepId, previousStepId, sectionForStep, deriveStepStatuses, canGenerate };
+  function canEnterStep(stepId, workflow = {}) {
+    if (stepId === "ai-customize" || stepId === "ai-handoff") return Boolean(workflow.hasManualBaseline);
+    if (stepId === "ai-import") return Boolean(workflow.hasHandoff);
+    if (stepId === "ai-compare") return Boolean(workflow.hasValidAiDraft);
+    if (stepId === "final-review") return ["manual", "ai"].includes(workflow.selectedVersion);
+    return true;
+  }
+
+  function canFinalize(workflow = {}) {
+    return ["manual", "ai"].includes(workflow.selectedVersion);
+  }
+
+  return { STEPS, stepForPath, nextStepId, previousStepId, sectionForStep, deriveStepStatuses, canGenerate, canEnterStep, canFinalize };
 });

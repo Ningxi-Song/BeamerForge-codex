@@ -67,10 +67,10 @@ test("browser script gates compile behind wizard review", () => {
   const script = readPublicFile("app.js");
   assert.match(
     script,
-    /function reviewGate\(\) \{[\s\S]*?refreshStatuses\(\);[\s\S]*?renderSummary\(\);[\s\S]*?!wizard\.canGenerate\(state\.statuses\)[\s\S]*?setBuildStatus\("Review required before generation\."\);[\s\S]*?navigateToStep\("review"\);[\s\S]*?return false;[\s\S]*?return true;[\s\S]*?\}/
+    /function reviewGate\(\) \{[\s\S]*?refreshStatuses\(\);[\s\S]*?renderSummary\(\);[\s\S]*?!wizard\.canGenerate\(state\.statuses\)[\s\S]*?setBuildStatus\("Review required before generation\."\);[\s\S]*?navigateToStep\("manual-review"\);[\s\S]*?return false;[\s\S]*?!wizard\.canFinalize\(state\.workflow\)[\s\S]*?return false;[\s\S]*?return true;[\s\S]*?\}/
   );
   assert.match(script, /async function compileTheme\(\) \{[\s\S]*?if \(!reviewGate\(\)\) return;[\s\S]*?\/api\/compile/);
-  assert.match(script, /elements\.compileTheme\.disabled = state\.busy \|\| !wizard\.canGenerate\(state\.statuses\);/);
+  assert.match(script, /elements\.compileTheme\.disabled = state\.busy \|\| !wizard\.canFinalize\(state\.workflow\);/);
   assert.doesNotMatch(script, /elements\.compileTheme\.disabled = state\.busy;/);
 });
 
@@ -78,7 +78,7 @@ test("browser generation is blocked until wizard statuses are complete", () => {
   const script = readPublicFile("app.js");
   assert.match(
     script,
-    /function reviewGate\(\) \{[\s\S]*?refreshStatuses\(\);[\s\S]*?renderSummary\(\);[\s\S]*?!wizard\.canGenerate\(state\.statuses\)[\s\S]*?setBuildStatus\("Review required before generation\."\);[\s\S]*?navigateToStep\("review"\);[\s\S]*?return false;[\s\S]*?return true;[\s\S]*?\}/
+    /function reviewGate\(\) \{[\s\S]*?refreshStatuses\(\);[\s\S]*?renderSummary\(\);[\s\S]*?!wizard\.canGenerate\(state\.statuses\)[\s\S]*?setBuildStatus\("Review required before generation\."\);[\s\S]*?navigateToStep\("manual-review"\);[\s\S]*?return false;[\s\S]*?!wizard\.canFinalize\(state\.workflow\)[\s\S]*?return false;[\s\S]*?return true;[\s\S]*?\}/
   );
   assert.match(
     script,
@@ -86,7 +86,7 @@ test("browser generation is blocked until wizard statuses are complete", () => {
   );
   assert.match(
     script,
-    /elements\.reviewGenerate\.disabled = [^;\n]*!wizard\.canGenerate\(state\.statuses\)[^;\n]*;/
+    /elements\.reviewGenerate\.disabled = [^;\n]*!wizard\.canFinalize\(state\.workflow\)[^;\n]*;/
   );
   assert.doesNotMatch(script, /elements\.reviewGenerate\.disabled = state\.busy;/);
 });
@@ -169,4 +169,19 @@ test("public CSS defines wizard layout, option cards, summary, and preview state
   ]) {
     assert.match(css, new RegExp(escapeRegExp(selector)));
   }
+});
+
+test("workbench exposes the manual and external AI phases", () => {
+  const html = readPublicFile("index.html");
+  assert.match(html, /data-region="phase-progress"/);
+  const script = readPublicFile("app.js");
+  for (const token of [
+    "freezeManualBaseline", "exportAiHandoff", "importAiDraft", "loadAiComparison",
+    "selectFinalVersion", "renderThemeChanges", "renderPhaseProgress", "FormData",
+    "/api/manual-baseline", "/api/ai/handoff", "/api/ai/import", "/api/ai/comparison",
+    "/api/ai/accept", "/api/ai/restore", "webkitRelativePath"
+  ]) assert.match(script, new RegExp(escapeRegExp(token)));
+  const css = readPublicFile("styles.css");
+  assert.match(css, /\.comparison-grid/);
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.comparison-grid/);
 });

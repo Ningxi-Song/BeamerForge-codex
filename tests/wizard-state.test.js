@@ -7,7 +7,10 @@ const { getRegistry } = require("../registry/options");
 test("defines the cumulative wizard route order", () => {
   assert.deepEqual(
     wizard.STEPS.map((step) => step.path),
-    ["/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page", "/review"]
+    [
+      "/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page",
+      "/manual-review", "/ai-customize", "/ai-handoff", "/ai-import", "/ai-compare", "/final-review"
+    ]
   );
   assert.equal(wizard.stepForPath("/font").id, "font");
   assert.equal(wizard.nextStepId("font"), "bullets");
@@ -21,7 +24,7 @@ test("maps each decision step to one theme section", () => {
   assert.equal(wizard.sectionForStep("blocks"), "blocks");
   assert.equal(wizard.sectionForStep("navigation"), "navigation");
   assert.equal(wizard.sectionForStep("title-page"), "titlePage");
-  assert.equal(wizard.sectionForStep("review"), null);
+  assert.equal(wizard.sectionForStep("manual-review"), null);
 });
 
 test("marks default theme steps complete", () => {
@@ -52,7 +55,7 @@ test("blocks generation when statuses are empty", () => {
 });
 
 test("blocks generation when statuses are partial", () => {
-  const statuses = wizard.deriveStepStatuses(DEFAULT_THEME, getRegistry()).slice(0, -1);
+  const statuses = wizard.deriveStepStatuses(DEFAULT_THEME, getRegistry()).filter((status) => status.id !== "title-page");
   assert.equal(wizard.canGenerate(statuses), false);
 });
 
@@ -69,5 +72,21 @@ test("maps unknown validation error paths to review", () => {
   const statuses = wizard.deriveStepStatuses(DEFAULT_THEME, getRegistry(), [
     { path: "unknown.section", message: "unknown issue" }
   ]);
-  assert.equal(statuses.find((status) => status.id === "review").state, "needs-review");
+  assert.equal(statuses.find((status) => status.id === "manual-review").state, "needs-review");
+});
+
+test("gates AI and final routes by workflow prerequisites", () => {
+  assert.equal(wizard.canEnterStep("ai-customize", {}), false);
+  assert.equal(wizard.canEnterStep("ai-customize", { hasManualBaseline: true }), true);
+  assert.equal(wizard.canEnterStep("ai-import", { hasHandoff: true }), true);
+  assert.equal(wizard.canEnterStep("ai-compare", { hasValidAiDraft: true }), true);
+  assert.equal(wizard.canEnterStep("final-review", { selectedVersion: "manual" }), true);
+  assert.equal(wizard.canEnterStep("final-review", { selectedVersion: "ai" }), true);
+  assert.equal(wizard.canEnterStep("final-review", { selectedVersion: null }), false);
+});
+
+test("canFinalize requires an explicit manual or AI selection", () => {
+  assert.equal(wizard.canFinalize({ selectedVersion: "manual" }), true);
+  assert.equal(wizard.canFinalize({ selectedVersion: "ai" }), true);
+  assert.equal(wizard.canFinalize({}), false);
 });

@@ -10,7 +10,12 @@ const STEP_DESC = Object.freeze({
   blocks: "Choose how Beamer blocks frame emphasized content.",
   navigation: "Choose whether slides use headers, footlines, and page numbers.",
   "title-page": "Choose the title slide layout.",
-  review: "Review every accumulated choice before generating or compiling the template."
+  "manual-review": "Confirm the manual design, then generate it directly or freeze it as the protected AI baseline.",
+  "ai-customize": "Describe the desired refinement and attach optional image or Beamer references.",
+  "ai-handoff": "Export the local package for Codex or another external AI agent.",
+  "ai-import": "Paste the complete ai-draft-theme.json returned by the external agent.",
+  "ai-compare": "Compare the protected manual baseline with the validated AI draft.",
+  "final-review": "Generate or compile the explicitly selected version."
 });
 
 const COLOR_SCHEMES = Object.freeze({
@@ -29,6 +34,8 @@ const state = {
   registry: null, theme: null, validationErrors: [], statuses: [], busy: false,
   baseColor: { r: 69, g: 105, b: 144 }, scheme: "complementary",
   savedPalettes: [], paletteCounter: 0,
+  workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null },
+  aiBrief: "", comparison: null,
   cube: { yaw: -0.72, pitch: -0.42, dragging: false, dragMoved: false, lx: 0, ly: 0 }
 };
 
@@ -37,6 +44,7 @@ let cubeResizeBound = false;
 
 const elements = {
   app: document.getElementById("wizardApp"),
+  phaseProgress: document.getElementById("phaseProgress"),
   stepList: document.getElementById("stepList"),
   stepTitle: document.getElementById("stepTitle"),
   stepDesc: document.getElementById("stepDescription"),
@@ -58,6 +66,7 @@ function stepById(id) { return wizard.STEPS.find((s) => s.id === id) || wizard.S
 
 function navigateToStep(id, opts = {}) {
   const s = stepById(id);
+  if (!wizard.canEnterStep(s.id, state.workflow)) return;
   if (opts.replace) window.history.replaceState({ stepId: s.id }, "", s.path);
   else window.history.pushState({ stepId: s.id }, "", s.path);
   render();
@@ -85,7 +94,7 @@ function errorStep(err) {
   if (p === "blocks" || p.startsWith("blocks.")) return "blocks";
   if (p === "navigation" || p.startsWith("navigation.")) return "navigation";
   if (p === "titlePage" || p.startsWith("titlePage.")) return "title-page";
-  return "review";
+  return "manual-review";
 }
 
 function applyChoice(stepId, optId) {
@@ -129,9 +138,11 @@ function setBusy(b) { state.busy = b; updateActions(); }
 
 function updateActions() {
   elements.back.disabled = state.busy || currentStep().id === "start";
-  elements.next.disabled = state.busy || currentStep().id === "review";
-  elements.reviewGenerate.disabled = state.busy || !wizard.canGenerate(state.statuses);
-  elements.compileTheme.disabled = state.busy || !wizard.canGenerate(state.statuses);
+  const step = currentStep();
+  const nextId = wizard.nextStepId(step.id);
+  elements.next.disabled = state.busy || step.id === "final-review" || !wizard.canEnterStep(nextId, state.workflow);
+  elements.reviewGenerate.disabled = state.busy || !wizard.canFinalize(state.workflow);
+  elements.compileTheme.disabled = state.busy || !wizard.canFinalize(state.workflow);
 }
 
 async function saveDraft() {
@@ -355,7 +366,122 @@ function renderReview() {
     for (const s of issues) { const li = document.createElement("li"); li.textContent = `${s.label}: ${s.messages.join("; ") || "Needs review"}`; list.appendChild(li); }
     frag.appendChild(list);
   }
+  if (ready) {
+    const actions = document.createElement("div"); actions.className = "inline-actions";
+    const continueAi = document.createElement("button"); continueAi.type = "button"; continueAi.id = "freezeManualDesign"; continueAi.textContent = "Save Manual Design & Continue to AI";
+    continueAi.addEventListener("click", freezeManualBaseline);
+    const keepManual = document.createElement("button"); keepManual.type = "button"; keepManual.className = "secondary-button"; keepManual.textContent = "Use Manual Version";
+    keepManual.addEventListener("click", async () => { await freezeManualBaseline({ navigate: false }); await selectFinalVersion("manual"); });
+    actions.append(continueAi, keepManual); frag.appendChild(actions);
+  }
   return frag;
+}
+
+function renderPhaseProgress() {
+  const phase = currentStep().phase;
+  elements.phaseProgress.textContent = phase === "manual" ? "Phase 1 of 2 · Manual design" : phase === "ai" ? "Phase 2 of 2 · AI customization" : "Final selection";
+}
+
+async function freezeManualBaseline(options = {}) {
+  try {
+    setBusy(true); await saveDraft();
+    const result = await api("/api/manual-baseline", { method: "POST" });
+    state.workflow.hasManualBaseline = true;
+    state.workflow.selectedVersion = "manual";
+    state.theme = clone(result.theme);
+    if (options.navigate !== false) navigateToStep("ai-customize"); else render();
+  } catch (error) { setBuildStatus(error.details || error.message); }
+  finally { setBusy(false); }
+}
+
+function renderAiCustomize() {
+  const wrap = document.createElement("div"); wrap.className = "ai-form"; wrap.dataset.region = "ai-customize";
+  const brief = document.createElement("textarea"); brief.id = "ai-brief"; brief.rows = 7; brief.placeholder = "Example: Make this warmer, more editorial, and slightly more spacious."; brief.value = state.aiBrief;
+  brief.addEventListener("input", () => { state.aiBrief = brief.value; });
+  const images = document.createElement("input"); images.id = "image-references"; images.type = "file"; images.accept = "image/*,.pdf,.svg"; images.multiple = true;
+  const beamer = document.createElement("input"); beamer.id = "beamer-references"; beamer.type = "file"; beamer.multiple = true; beamer.setAttribute("webkitdirectory", "");
+  const submit = document.createElement("button"); submit.type = "button"; submit.textContent = "Export AI Handoff"; submit.addEventListener("click", exportAiHandoff);
+  wrap.append(fieldLabel("Customization brief"), brief, fieldLabel("Images or slide references"), images, fieldLabel("Beamer project folder"), beamer, submit);
+  return wrap;
+}
+
+async function exportAiHandoff() {
+  try {
+    setBusy(true);
+    const form = new FormData(); form.set("brief", state.aiBrief);
+    const files = [...(document.getElementById("image-references")?.files || []), ...(document.getElementById("beamer-references")?.files || [])];
+    const relativePaths = [];
+    for (const file of files) { form.append("references", file, file.name); relativePaths.push(file.webkitRelativePath || file.name); }
+    form.set("relativePaths", JSON.stringify(relativePaths));
+    const result = await api("/api/ai/handoff", { method: "POST", body: form });
+    state.workflow.hasHandoff = true; setBuildStatus(result); navigateToStep("ai-handoff");
+  } catch (error) { setBuildStatus(error.details || error.message); }
+  finally { setBusy(false); }
+}
+
+function renderAiHandoff() {
+  const wrap = document.createElement("div"); wrap.dataset.region = "ai-handoff";
+  const text = document.createElement("p"); text.id = "handoff-status"; text.textContent = "The handoff is ready. Ask the external agent to read the folder and create ai-draft-theme.json, then continue to import.";
+  const next = document.createElement("button"); next.type = "button"; next.textContent = "Import AI Draft"; next.addEventListener("click", () => navigateToStep("ai-import"));
+  wrap.append(text, next); return wrap;
+}
+
+function renderAiImport() {
+  const wrap = document.createElement("div"); wrap.dataset.region = "ai-import";
+  const input = document.createElement("textarea"); input.id = "aiDraftJson"; input.rows = 14; input.placeholder = "Paste the complete ai-draft-theme.json here";
+  const submit = document.createElement("button"); submit.type = "button"; submit.textContent = "Validate and Compare"; submit.addEventListener("click", importAiDraft);
+  wrap.append(fieldLabel("AI draft JSON"), input, submit); return wrap;
+}
+
+async function importAiDraft() {
+  try {
+    setBusy(true); const raw = document.getElementById("aiDraftJson")?.value || "";
+    let draft; try { draft = JSON.parse(raw); } catch { throw new Error("AI draft is not valid JSON"); }
+    await api("/api/ai/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draft) });
+    state.workflow.hasValidAiDraft = true; await loadAiComparison(); navigateToStep("ai-compare");
+  } catch (error) { setBuildStatus(error.details || error.message); }
+  finally { setBusy(false); }
+}
+
+async function loadAiComparison() {
+  state.comparison = await api("/api/ai/comparison");
+  return state.comparison;
+}
+
+function renderThemeChanges(changes) {
+  const list = document.createElement("ul"); list.id = "ai-change-list"; list.className = "change-list";
+  if (changes.length === 0) { const item = document.createElement("li"); item.textContent = "No effective design changes found."; list.appendChild(item); }
+  for (const change of changes) { const item = document.createElement("li"); item.textContent = `${change.label}: ${change.before} → ${change.after}`; list.appendChild(item); }
+  return list;
+}
+
+function renderAiCompare() {
+  const wrap = document.createElement("div"); wrap.dataset.region = "ai-compare";
+  if (!state.comparison) { const p = document.createElement("p"); p.textContent = "Loading comparison…"; wrap.appendChild(p); loadAiComparison().then(render).catch((error) => setBuildStatus(error.message)); return wrap; }
+  const grid = document.createElement("div"); grid.className = "comparison-grid";
+  const manualCard = document.createElement("section"); const manualTitle = document.createElement("h3"); manualTitle.textContent = "Manual baseline"; const manualPreview = document.createElement("article"); manualPreview.id = "manual-comparison-preview"; manualPreview.className = "slide-preview compact-preview"; renderThemeInto(manualPreview, state.comparison.manual); manualCard.append(manualTitle, manualPreview);
+  const aiCard = document.createElement("section"); const aiTitle = document.createElement("h3"); aiTitle.textContent = "AI customized draft"; const aiPreview = document.createElement("article"); aiPreview.id = "ai-comparison-preview"; aiPreview.className = "slide-preview compact-preview"; renderThemeInto(aiPreview, state.comparison.draft); aiCard.append(aiTitle, aiPreview);
+  grid.append(manualCard, aiCard);
+  const actions = document.createElement("div"); actions.className = "inline-actions";
+  const accept = document.createElement("button"); accept.type = "button"; accept.textContent = "Accept AI Version"; accept.addEventListener("click", () => selectFinalVersion("ai"));
+  const revise = document.createElement("button"); revise.type = "button"; revise.className = "secondary-button"; revise.textContent = "Continue Revising"; revise.addEventListener("click", () => navigateToStep("ai-handoff"));
+  const manual = document.createElement("button"); manual.type = "button"; manual.className = "secondary-button"; manual.textContent = "Keep Manual Version"; manual.addEventListener("click", () => selectFinalVersion("manual"));
+  actions.append(accept, revise, manual); wrap.append(grid, renderThemeChanges(state.comparison.changes), actions); return wrap;
+}
+
+async function selectFinalVersion(version) {
+  try {
+    setBusy(true); const endpoint = version === "ai" ? "/api/ai/accept" : "/api/ai/restore";
+    const result = await api(endpoint, { method: "POST" }); state.workflow.selectedVersion = version; state.theme = clone(result.theme); navigateToStep("final-review");
+  } catch (error) { setBuildStatus(error.details || error.message); }
+  finally { setBusy(false); }
+}
+
+function renderFinalReview() {
+  const wrap = document.createElement("div"); wrap.dataset.region = "final-review";
+  const p = document.createElement("p"); p.textContent = `Selected version: ${state.workflow.selectedVersion || "none"}. Use Generate Template or Compile PDF in the summary panel.`;
+  const restore = document.createElement("button"); restore.type = "button"; restore.className = "secondary-button"; restore.textContent = "Restore Manual Baseline"; restore.addEventListener("click", () => selectFinalVersion("manual"));
+  wrap.append(p, restore); return wrap;
 }
 
 function fieldLabel(text) { const l = document.createElement("span"); l.className = "field-label"; l.textContent = text; return l; }
@@ -638,7 +764,12 @@ function renderStepContent() {
   elements.stepTitle.textContent = step.label;
   elements.stepDesc.textContent = STEP_DESC[step.id] || "";
   if (step.id === "start") { replaceChildren(elements.stepContent, [renderStart()]); return; }
-  if (step.id === "review") { replaceChildren(elements.stepContent, [renderReview()]); return; }
+  if (step.id === "manual-review") { replaceChildren(elements.stepContent, [renderReview()]); return; }
+  if (step.id === "ai-customize") { replaceChildren(elements.stepContent, [renderAiCustomize()]); return; }
+  if (step.id === "ai-handoff") { replaceChildren(elements.stepContent, [renderAiHandoff()]); return; }
+  if (step.id === "ai-import") { replaceChildren(elements.stepContent, [renderAiImport()]); return; }
+  if (step.id === "ai-compare") { replaceChildren(elements.stepContent, [renderAiCompare()]); return; }
+  if (step.id === "final-review") { replaceChildren(elements.stepContent, [renderFinalReview()]); return; }
   if (step.id === "color") { replaceChildren(elements.stepContent, [renderColorStepContent()]); initCube(); return; }
   replaceChildren(elements.stepContent, [renderOptionCards(step.id)]);
 }
@@ -680,23 +811,28 @@ function appendFootline(parent, theme, nav) {
   parent.appendChild(fl);
 }
 
-function renderPreview() {
-  if (!state.theme || !state.registry) return;
-  const theme = state.theme, reg = state.registry;
+function renderThemeInto(container, theme) {
+  if (!theme || !state.registry) return;
+  const reg = state.registry;
   const font = reg.fonts[theme.fonts.body], bullet = reg.bullets[theme.bullets.style], block = reg.blocks[theme.blocks.style], nav = reg.navigation[theme.navigation.style];
-  elements.slidePreview.style.backgroundColor = theme.colors.background; elements.slidePreview.style.color = theme.colors.text;
-  elements.slidePreview.style.fontFamily = font?.cssFamily || "Arial, sans-serif";
-  elements.slidePreview.style.setProperty("--accent-color", theme.colors.accent);
-  elements.slidePreview.style.setProperty("--primary-color", theme.colors.primary);
-  elements.slidePreview.style.setProperty("--bullet-marker", JSON.stringify(bullet?.cssMarker || ">"));
+  container.style.backgroundColor = theme.colors.background; container.style.color = theme.colors.text;
+  container.style.fontFamily = font?.cssFamily || "Arial, sans-serif";
+  container.style.setProperty("--accent-color", theme.colors.accent);
+  container.style.setProperty("--primary-color", theme.colors.primary);
+  container.style.setProperty("--bullet-marker", JSON.stringify(bullet?.cssMarker || ">"));
   const slide = document.createElement("div"); slide.className = "preview-slide";
   appendHeader(slide, theme, nav); appendTitle(slide, theme); appendList(slide, theme, bullet); appendBlock(slide, theme, block); appendFootline(slide, theme, nav);
-  replaceChildren(elements.slidePreview, [slide]);
+  replaceChildren(container, [slide]);
+}
+
+function renderPreview() {
+  renderThemeInto(elements.slidePreview, state.theme);
 }
 
 function reviewGate() {
   refreshStatuses(); renderSummary();
-  if (!wizard.canGenerate(state.statuses)) { setBuildStatus("Review required before generation."); navigateToStep("review"); return false; }
+  if (!wizard.canGenerate(state.statuses)) { setBuildStatus("Review required before generation."); navigateToStep("manual-review"); return false; }
+  if (!wizard.canFinalize(state.workflow)) { setBuildStatus("Choose the manual or AI version before generation."); return false; }
   return true;
 }
 
@@ -714,7 +850,7 @@ async function compileTheme() {
   finally { setBusy(false); render(); }
 }
 
-function render() { refreshStatuses(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); updateActions(); }
+function render() { refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); updateActions(); }
 
 function bindControls() {
   elements.back.addEventListener("click", () => navigateToStep(wizard.previousStepId(currentStep().id)));
@@ -743,6 +879,19 @@ async function boot() {
   const [reg, themeResult] = await Promise.all([api("/api/options"), api("/api/theme?validated=1")]);
   state.registry = reg; state.theme = clone(themeResult.theme);
   state.validationErrors = Array.isArray(themeResult.errors) ? themeResult.errors : [];
+  const baselineResponse = await fetch("/api/manual-baseline");
+  state.workflow.hasManualBaseline = baselineResponse.ok;
+  const handoffResponse = await fetch("/api/ai/handoff");
+  state.workflow.hasHandoff = handoffResponse.ok;
+  const comparisonResponse = await fetch("/api/ai/comparison");
+  if (comparisonResponse.ok) {
+    state.comparison = await comparisonResponse.json(); state.workflow.hasValidAiDraft = true;
+    if (JSON.stringify(state.theme) === JSON.stringify(state.comparison.draft)) state.workflow.selectedVersion = "ai";
+    else if (JSON.stringify(state.theme) === JSON.stringify(state.comparison.manual)) state.workflow.selectedVersion = "manual";
+  } else if (state.workflow.hasManualBaseline) {
+    const baseline = await baselineResponse.json();
+    if (JSON.stringify(state.theme) === JSON.stringify(baseline.theme)) state.workflow.selectedVersion = "manual";
+  }
   syncBase(); registerFontFaces(reg); bindControls();
   if (window.location.pathname === "/") navigateToStep("start", { replace: true }); else render();
   setStatus("Idle"); setBuildStatus("No build yet.");
