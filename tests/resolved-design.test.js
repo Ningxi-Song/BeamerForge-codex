@@ -104,6 +104,67 @@ test("missing sample bullets fail validation before resolved content is cloned",
   );
 });
 
+for (const field of ["title", "subtitle", "author", "institute", "date"]) {
+  test(`missing identity.${field} fails validation and resolution`, () => {
+    const theme = clone(DEFAULT_THEME);
+    const registry = getRegistry();
+    delete theme.identity[field];
+
+    const validation = validateTheme(theme, { registry });
+    assert.equal(validation.ok, false);
+    assert.deepEqual(
+      validation.errors.map((error) => error.path),
+      [`identity.${field}`]
+    );
+    assert.throws(
+      () => resolveDesign(theme, registry),
+      (error) => error.name === "Error"
+        && error.message.startsWith("Invalid theme: ")
+        && error.message.includes(`identity.${field}`)
+    );
+  });
+}
+
+for (const field of ["blockBody", "alert"]) {
+  test(`missing colors.${field} fails validation and resolution`, () => {
+    const theme = clone(DEFAULT_THEME);
+    const registry = getRegistry();
+    delete theme.colors[field];
+
+    const validation = validateTheme(theme, { registry });
+    assert.equal(validation.ok, false);
+    assert.deepEqual(
+      validation.errors.map((error) => error.path),
+      [`colors.${field}`]
+    );
+    assert.throws(
+      () => resolveDesign(theme, registry),
+      (error) => error.name === "Error"
+        && error.message.startsWith("Invalid theme: ")
+        && error.message.includes(`colors.${field}`)
+    );
+  });
+}
+
+test("serialized resolved identity and colors contain every contract field", () => {
+  const serialized = JSON.parse(JSON.stringify(resolveDesign(DEFAULT_THEME, getRegistry())));
+
+  for (const field of ["name", "title", "subtitle", "author", "institute", "date"]) {
+    assert.notEqual(serialized.identity[field], undefined, `identity.${field}`);
+  }
+  for (const field of [
+    "background",
+    "primary",
+    "accent",
+    "text",
+    "blockBody",
+    "alert",
+    "primaryText"
+  ]) {
+    assert.notEqual(serialized.colors[field], undefined, `colors.${field}`);
+  }
+});
+
 test("4:3 themes resolve to normalized canvas units", () => {
   const theme = clone(DEFAULT_THEME);
   theme.foundation.aspectRatio = "4:3";

@@ -60,8 +60,7 @@ const DEFAULT_THEME = Object.freeze({
 
 const VALID_ASPECT_RATIOS = ["16:9", "4:3"];
 const VALID_BASE_LAYOUTS = ["single"];
-const REQUIRED_HEX_FIELDS = ["background", "primary", "accent", "text"];
-const OPTIONAL_HEX_FIELDS = ["blockBody", "alert"];
+const REQUIRED_HEX_FIELDS = ["background", "primary", "accent", "text", "blockBody", "alert"];
 const IDENTITY_FIELDS = ["title", "subtitle", "author", "institute", "date"];
 const BULLET_MIN_COUNT = 3;
 const ALLOWED_KEYS = Object.freeze({
@@ -142,7 +141,7 @@ function validateIdentity(identity, errors) {
     errors.push(new ValidationError("identity.name", "identity.name must be a lowercase slug"));
   }
   for (const field of IDENTITY_FIELDS) {
-    if (identity[field] !== undefined) assertNonEmptyString(identity, `identity.${field}`, errors);
+    assertNonEmptyString(identity, `identity.${field}`, errors);
   }
 }
 
@@ -159,9 +158,6 @@ function validateColors(colors, registry, errors) {
   assertNonEmptyString(colors, "colors.paletteId", errors);
   assertKnownOption(registry, "palettes", colors.paletteId, "colors.paletteId", errors);
   for (const field of REQUIRED_HEX_FIELDS) assertHexColor(colors, `colors.${field}`, errors);
-  for (const field of OPTIONAL_HEX_FIELDS) {
-    if (colors[field] !== undefined) assertHexColor(colors, `colors.${field}`, errors);
-  }
 }
 
 function validateFonts(fonts, registry, errors) {
