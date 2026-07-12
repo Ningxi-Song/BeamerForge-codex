@@ -167,6 +167,36 @@ test("same-key retry success preserves a newer intervening build status", async 
   assert.equal(state.previewErrorActive, false);
 });
 
+test("a later preview failure adopts an intervening build status before retry success", () => {
+  const state = { previewValidationErrors: [], previewErrorActive: false };
+
+  applyPreviewFailure(state, new Error("E1"), "S0", "E1");
+  applyPreviewFailure(state, new Error("E2"), "S1", "E2");
+  const recovery = applyPreviewSuccess(state, { source: { themeHash: "valid" } }, "E2");
+
+  assert.equal(recovery.restoreBuildStatus, "S1");
+});
+
+test("a later preview failure adopts an intervening build status before cached reuse", () => {
+  const state = { previewValidationErrors: [], previewErrorActive: false };
+
+  applyPreviewFailure(state, new Error("E1"), "S0", "E1");
+  applyPreviewFailure(state, new Error("E2"), "S1", "E2");
+  const recovery = applyCachedReuse(state, "E2");
+
+  assert.equal(recovery.restoreBuildStatus, "S1");
+});
+
+test("consecutive preview failures retain the original pre-error build status", () => {
+  const state = { previewValidationErrors: [], previewErrorActive: false };
+
+  applyPreviewFailure(state, new Error("E1"), "S0", "E1");
+  applyPreviewFailure(state, new Error("E2"), "E1", "E2");
+  const recovery = applyPreviewSuccess(state, { source: { themeHash: "valid" } }, "E2");
+
+  assert.equal(recovery.restoreBuildStatus, "S0");
+});
+
 test("cached reuse clears only preview-owned errors and preserves the resolved design", () => {
   const design = { source: { themeHash: "A" } };
   const serverErrors = [{ path: "identity.title" }];

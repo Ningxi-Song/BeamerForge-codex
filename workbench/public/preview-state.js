@@ -71,7 +71,9 @@
 
   function applyPreviewFailure(state, error, currentBuildStatus, previewErrorPresentation) {
     if (Array.isArray(error?.errors) && error.errors.length > 0) state.previewValidationErrors = error.errors;
-    if (!state.previewErrorActive) state.previewBuildStatusBeforeError = currentBuildStatus;
+    if (!state.previewErrorActive || currentBuildStatus !== state.previewBuildErrorPresentation) {
+      state.previewBuildStatusBeforeError = currentBuildStatus;
+    }
     state.previewErrorActive = true;
     state.previewBuildErrorPresentation = previewErrorPresentation;
     return state.resolvedDesign;
