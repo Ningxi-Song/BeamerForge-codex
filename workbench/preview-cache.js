@@ -9,7 +9,9 @@ const { writeTemplateProject } = require("../generators/project-writer");
 const { compileTemplate } = require("./build");
 
 const CACHE_KEY_RE = /^[a-f0-9]{64}-[A-Za-z0-9._-]+$/;
-const GENERATOR_TOKEN_RE = /^[A-Za-z0-9._-]+$/;
+const SAFE_TOKEN_RE = /^[A-Za-z0-9._-]+$/;
+const GENERATION_ID_RE = /^[A-Za-z0-9._-]+$/;
+const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const MAX_ERROR_LENGTH = 4000;
 
 function isSafeCacheKey(value) {
@@ -20,49 +22,90 @@ function makeCacheKey(themeHash, generatorVersion) {
   const hash = String(themeHash);
   const version = String(generatorVersion);
   if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("Invalid theme hash for preview cache");
-  if (!GENERATOR_TOKEN_RE.test(version)) throw new Error("Invalid generator version for preview cache");
+  if (!SAFE_TOKEN_RE.test(version)) throw new Error("Invalid generator version for preview cache");
   return `${hash}-${version}`;
 }
 
-function boundedText(value, fallback = "Preview compilation failed.") {
-  const text = String(value || fallback)
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+function isStrictIsoTimestamp(value) {
+  if (typeof value !== "string" || !ISO_TIMESTAMP_RE.test(value)) return false;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && new Date(time).toISOString() === value;
+}
+
+function safeToken(value, fallback) {
+  return typeof value === "string" && SAFE_TOKEN_RE.test(value) ? value : fallback;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function boundedDiagnostic(value, roots, fallback = "Preview compilation failed.") {
+  let text = String(value || fallback)
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
+  for (const root of [...roots].sort((a, b) => String(b).length - String(a).length)) {
+    if (!root) continue;
+    const variants = new Set([root, root.replace(/\\/g, "/"), root.replace(/\//g, "\\")]);
+    for (const variant of variants) {
+      text = text.replace(new RegExp(escapeRegExp(variant), "gi"), "[path]");
+    }
+  }
+  text = text
+    .replace(/[A-Za-z]:[\\/][^\s"'<>|]*/g, "[path]")
+    .replace(/\/(?:[^/\s"'<>]+\/)+[^/\s"'<>]*/g, "[path]")
     .slice(0, MAX_ERROR_LENGTH);
   return text || fallback;
 }
 
-function isFile(filePath) {
+function lstatOrNull(target) {
   try {
-    return fs.statSync(filePath).isFile();
+    return fs.lstatSync(target);
+  } catch {
+    return null;
+  }
+}
+
+function isPlainDirectory(target) {
+  const stat = lstatOrNull(target);
+  return Boolean(stat && stat.isDirectory() && !stat.isSymbolicLink());
+}
+
+function isPlainFile(target) {
+  const stat = lstatOrNull(target);
+  return Boolean(stat && stat.isFile() && !stat.isSymbolicLink());
+}
+
+function isRealPathBeneath(rootReal, target, allowRoot = false) {
+  try {
+    const targetReal = fs.realpathSync(target);
+    const relative = path.relative(rootReal, targetReal);
+    if (!relative) return allowRoot;
+    return !relative.startsWith("..") && !path.isAbsolute(relative);
   } catch {
     return false;
   }
 }
 
-function readReadyEntry(cacheRoot, cacheKey, themeHash, generatorVersion) {
-  const entryDir = path.join(cacheRoot, cacheKey);
-  const metadataPath = path.join(entryDir, "metadata.json");
-  const pdfPath = path.join(entryDir, "main.pdf");
-  let metadata;
-  try {
-    metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
-  } catch {
-    return null;
-  }
-  if (!metadata || typeof metadata !== "object") return null;
-  if (metadata.cacheKey !== cacheKey) return null;
-  if (metadata.themeHash !== themeHash) return null;
-  if (metadata.generatorVersion !== generatorVersion) return null;
-  if (typeof metadata.compilerKind !== "string" || !metadata.compilerKind.trim()) return null;
-  if (typeof metadata.completedAt !== "string" || !metadata.completedAt.trim()) return null;
-  if (typeof metadata.sourceVersion !== "string" || !metadata.sourceVersion.trim()) return null;
-  if (!isFile(pdfPath)) return null;
-  return { entryDir, metadata, pdfPath };
+function validMetadata(metadata, expected) {
+  return Boolean(
+    metadata
+    && typeof metadata === "object"
+    && metadata.cacheKey === expected.cacheKey
+    && metadata.themeHash === expected.themeHash
+    && metadata.generatorVersion === expected.generatorVersion
+    && typeof metadata.compilerKind === "string"
+    && SAFE_TOKEN_RE.test(metadata.compilerKind)
+    && isStrictIsoTimestamp(metadata.completedAt)
+    && typeof metadata.sourceVersion === "string"
+    && SAFE_TOKEN_RE.test(metadata.sourceVersion)
+  );
 }
 
 function timestamp(now) {
   const value = now();
-  return value instanceof Date ? value.toISOString() : String(value);
+  const result = value instanceof Date ? value.toISOString() : String(value);
+  if (!isStrictIsoTimestamp(result)) throw new Error("Preview completion time must be a strict ISO timestamp");
+  return result;
 }
 
 function createPreviewCache(options = {}) {
@@ -76,15 +119,64 @@ function createPreviewCache(options = {}) {
     options.generatorVersion === undefined ? GENERATOR_VERSION : options.generatorVersion
   );
   const now = options.now || (() => new Date());
+  const renameSync = options.renameSync || fs.renameSync;
   const inFlight = new Map();
 
-  if (!GENERATOR_TOKEN_RE.test(generatorVersion)) {
+  if (!SAFE_TOKEN_RE.test(generatorVersion)) {
     throw new Error("generatorVersion must be a safe cache token");
   }
   fs.mkdirSync(cacheRoot, { recursive: true });
+  if (!isPlainDirectory(cacheRoot)) throw new Error("Preview cache root must not be a link");
+  const cacheRootReal = fs.realpathSync(cacheRoot);
 
-  function readyEntry(cacheKey, themeHash) {
-    return readReadyEntry(cacheRoot, cacheKey, themeHash, generatorVersion);
+  function rootIsSafe() {
+    return isPlainDirectory(cacheRoot)
+      && fs.realpathSync(cacheRoot) === cacheRootReal;
+  }
+
+  function readGeneration(generationDir, generationId, expected) {
+    if (!GENERATION_ID_RE.test(generationId) || !isPlainDirectory(generationDir)) return null;
+    if (!isRealPathBeneath(cacheRootReal, generationDir)) return null;
+    const generationReal = fs.realpathSync(generationDir);
+    const metadataPath = path.join(generationDir, "metadata.json");
+    const pdfPath = path.join(generationDir, "main.pdf");
+    if (!isPlainFile(metadataPath) || !isPlainFile(pdfPath)) return null;
+    if (!isRealPathBeneath(cacheRootReal, metadataPath) || !isRealPathBeneath(cacheRootReal, pdfPath)) return null;
+    if (!isRealPathBeneath(generationReal, metadataPath) || !isRealPathBeneath(generationReal, pdfPath)) return null;
+    let metadata;
+    try {
+      metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+    } catch {
+      return null;
+    }
+    if (!validMetadata(metadata, expected)) return null;
+    return { generationId, generationDir, metadata, pdfPath };
+  }
+
+  function readReadyEntry(cacheKey, themeHash, version = generatorVersion) {
+    try {
+      if (!rootIsSafe()) return null;
+      const keyDir = path.join(cacheRoot, cacheKey);
+      const generationsDir = path.join(keyDir, "generations");
+      if (!isPlainDirectory(keyDir) || !isPlainDirectory(generationsDir)) return null;
+      if (!isRealPathBeneath(cacheRootReal, keyDir) || !isRealPathBeneath(cacheRootReal, generationsDir)) return null;
+      const expected = { cacheKey, themeHash, generatorVersion: version };
+      const candidates = [];
+      for (const entry of fs.readdirSync(generationsDir, { withFileTypes: true })) {
+        const candidate = readGeneration(path.join(generationsDir, entry.name), entry.name, expected);
+        if (candidate) candidates.push(candidate);
+      }
+      candidates.sort((a, b) => {
+        if (a.metadata.completedAt !== b.metadata.completedAt) {
+          return a.metadata.completedAt > b.metadata.completedAt ? -1 : 1;
+        }
+        if (a.generationId === b.generationId) return 0;
+        return a.generationId > b.generationId ? -1 : 1;
+      });
+      return candidates[0] || null;
+    } catch {
+      return null;
+    }
   }
 
   function responseFromReady(entry, cached) {
@@ -94,44 +186,59 @@ function createPreviewCache(options = {}) {
       cacheKey: entry.metadata.cacheKey,
       compilerKind: entry.metadata.compilerKind,
       completedAt: entry.metadata.completedAt,
-      pdfPath: entry.pdfPath,
-      sourceVersion: entry.metadata.sourceVersion
+      sourceVersion: entry.metadata.sourceVersion,
+      pdfAvailable: true,
+      staleAvailable: false
     };
   }
 
-  function safelyRemove(target) {
+  function safelyRemoveTemp(target) {
     const relative = path.relative(cacheRoot, path.resolve(target));
-    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw new Error("Refusing to remove a path outside the preview cache");
-    }
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return;
     fs.rmSync(target, { recursive: true, force: true });
   }
+  const cleanupTemp = options.cleanupTemp || safelyRemoveTemp;
 
-  function publish(tempDir, finalDir) {
-    if (!fs.existsSync(finalDir)) {
-      fs.renameSync(tempDir, finalDir);
-      return;
-    }
-
-    const backupDir = path.join(cacheRoot, `${path.basename(finalDir)}.backup-${crypto.randomUUID()}`);
-    fs.renameSync(finalDir, backupDir);
-    try {
-      fs.renameSync(tempDir, finalDir);
-    } catch (error) {
+  function ensurePublicationDirectory(cacheKey) {
+    if (!rootIsSafe()) throw new Error("Preview cache root is unsafe");
+    const keyDir = path.join(cacheRoot, cacheKey);
+    const generationsDir = path.join(keyDir, "generations");
+    if (!lstatOrNull(keyDir)) {
       try {
-        fs.renameSync(backupDir, finalDir);
-      } catch (restoreError) {
-        error.restoreError = restoreError;
+        fs.mkdirSync(keyDir);
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
       }
-      throw error;
     }
-    safelyRemove(backupDir);
+    if (!isPlainDirectory(keyDir) || !isRealPathBeneath(cacheRootReal, keyDir)) {
+      throw new Error("Preview cache key directory must not be a link");
+    }
+    if (!lstatOrNull(generationsDir)) {
+      try {
+        fs.mkdirSync(generationsDir);
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+      }
+    }
+    if (!isPlainDirectory(generationsDir)) {
+      throw new Error("Preview generation directory must not be a link");
+    }
+    if (!isRealPathBeneath(cacheRootReal, generationsDir)) {
+      throw new Error("Preview generation directory escapes the cache root");
+    }
+    return generationsDir;
+  }
+
+  function makeGenerationId(completedAt) {
+    const monotonic = process.hrtime.bigint().toString(16).padStart(16, "0");
+    return `gen-${completedAt.replace(/\D/g, "")}-${monotonic}-${crypto.randomUUID()}`;
   }
 
   async function compileMiss({ bundle, cacheKey, sourceVersion, stale }) {
     const themeHash = bundle.design.source.themeHash;
-    const finalDir = path.join(cacheRoot, cacheKey);
     const tempDir = fs.mkdtempSync(path.join(cacheRoot, `${cacheKey}.tmp-`));
+    const roots = [cacheRoot, rootDir, tempDir];
+    let compilerKind = "unknown";
     try {
       projectWriter(bundle.theme, tempDir, {
         registry,
@@ -140,7 +247,7 @@ function createPreviewCache(options = {}) {
         resolveDesignBundle: () => bundle
       });
       const result = await compiler(tempDir);
-      const compilerKind = boundedText(result && result.compilerKind, "unknown");
+      compilerKind = safeToken(result && result.compilerKind, "unknown");
 
       if (!result || !result.ok) {
         if (result && result.status === "missing-compiler") {
@@ -148,66 +255,99 @@ function createPreviewCache(options = {}) {
             status: "unavailable",
             cached: false,
             cacheKey,
-            message: boundedText(result.message, "No LaTeX compiler is available."),
+            message: boundedDiagnostic(result.message, roots, "No LaTeX compiler is available."),
             compilerKind: "missing",
-            ...(stale ? { stalePdfPath: stale.pdfPath } : {})
+            pdfAvailable: false,
+            staleAvailable: Boolean(stale)
           };
         }
         return {
           status: "failed",
           cached: false,
           cacheKey,
-          message: boundedText(result && result.message),
-          excerpt: boundedText(result && result.excerpt, ""),
+          message: boundedDiagnostic(result && result.message, roots),
+          excerpt: boundedDiagnostic(result && result.excerpt, roots, ""),
           compilerKind,
-          ...(stale ? { stalePdfPath: stale.pdfPath } : {})
+          pdfAvailable: false,
+          staleAvailable: Boolean(stale)
         };
       }
 
       const tempPdf = path.join(tempDir, "main.pdf");
-      if (!isFile(tempPdf)) {
+      if (!isPlainFile(tempPdf) || !isRealPathBeneath(cacheRootReal, tempPdf)) {
         return {
           status: "failed",
           cached: false,
           cacheKey,
-          message: "Compiler reported success but main.pdf was not created.",
+          message: "Compiler reported success but main.pdf was not created safely.",
           excerpt: "",
           compilerKind,
-          ...(stale ? { stalePdfPath: stale.pdfPath } : {})
+          pdfAvailable: false,
+          staleAvailable: Boolean(stale)
         };
       }
 
+      const completedAt = timestamp(now);
+      const normalizedSource = safeToken(sourceVersion, null);
+      if (!normalizedSource) throw new Error("sourceVersion must be a safe token");
       const metadata = {
         cacheKey,
         themeHash,
         generatorVersion,
         compilerKind,
-        completedAt: timestamp(now),
-        sourceVersion: boundedText(sourceVersion, "unknown")
+        completedAt,
+        sourceVersion: normalizedSource
       };
-      fs.writeFileSync(path.join(tempDir, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
-      publish(tempDir, finalDir);
-      return responseFromReady({ metadata, pdfPath: path.join(finalDir, "main.pdf") }, false);
+      if (!validMetadata(metadata, { cacheKey, themeHash, generatorVersion })) {
+        throw new Error("Preview metadata is invalid");
+      }
+      fs.writeFileSync(
+        path.join(tempDir, "metadata.json"),
+        `${JSON.stringify(metadata, null, 2)}\n`,
+        { encoding: "utf8", flag: "wx" }
+      );
+
+      const generationsDir = ensurePublicationDirectory(cacheKey);
+      const generationId = makeGenerationId(completedAt);
+      const generationDir = path.join(generationsDir, generationId);
+      renameSync(tempDir, generationDir);
+      const published = readGeneration(
+        generationDir,
+        generationId,
+        { cacheKey, themeHash, generatorVersion }
+      );
+      if (!published) throw new Error("Published preview generation failed validation");
+      return responseFromReady(published, false);
     } catch (error) {
       return {
         status: "failed",
         cached: false,
         cacheKey,
-        message: boundedText(error && error.message),
+        message: boundedDiagnostic(error && error.message, roots),
         excerpt: "",
-        compilerKind: "unknown",
-        ...(stale ? { stalePdfPath: stale.pdfPath } : {})
+        compilerKind,
+        pdfAvailable: false,
+        staleAvailable: Boolean(stale)
       };
     } finally {
-      if (fs.existsSync(tempDir)) safelyRemove(tempDir);
+      try {
+        cleanupTemp(tempDir);
+      } catch {
+        // Cleanup is best-effort and must not change the documented result.
+      }
     }
   }
 
   function compile({ theme, sourceVersion, force = false }) {
-    const bundle = bundleResolver(theme, registry);
+    let bundle;
+    try {
+      bundle = bundleResolver(theme, registry);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     const themeHash = bundle.design.source.themeHash;
     const cacheKey = makeCacheKey(themeHash, generatorVersion);
-    const existing = readyEntry(cacheKey, themeHash);
+    const existing = readReadyEntry(cacheKey, themeHash);
 
     if (inFlight.has(cacheKey)) return inFlight.get(cacheKey);
     if (!force && existing) return Promise.resolve(responseFromReady(existing, true));
@@ -225,7 +365,7 @@ function createPreviewCache(options = {}) {
     if (!isSafeCacheKey(cacheKey)) return null;
     const themeHash = cacheKey.slice(0, 64);
     const version = cacheKey.slice(65);
-    const entry = readReadyEntry(cacheRoot, cacheKey, themeHash, version);
+    const entry = readReadyEntry(cacheKey, themeHash, version);
     return entry ? entry.pdfPath : null;
   }
 

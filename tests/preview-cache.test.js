@@ -43,6 +43,24 @@ function createService(overrides = {}) {
   });
 }
 
+function generationDirs(cacheRoot, cacheKey) {
+  const root = path.join(cacheRoot, cacheKey, "generations");
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root).map((name) => path.join(root, name));
+}
+
+function onlyGenerationDir(cacheRoot, cacheKey) {
+  const dirs = generationDirs(cacheRoot, cacheKey);
+  assert.equal(dirs.length, 1);
+  return dirs[0];
+}
+
+function readResolvedPdf(service, cacheKey) {
+  const pdfPath = service.resolvePdf(cacheKey);
+  assert.notEqual(pdfPath, null);
+  return fs.readFileSync(pdfPath, "utf8");
+}
+
 test("identical normalized designs compile once despite different source versions", async () => {
   let compiles = 0;
   const cacheRoot = tempDir();
@@ -61,7 +79,7 @@ test("identical normalized designs compile once despite different source version
   assert.equal(first.cacheKey, second.cacheKey);
   assert.equal(second.sourceVersion, "manual");
   assert.equal(compiles, 1);
-  const metadata = JSON.parse(fs.readFileSync(path.join(cacheRoot, first.cacheKey, "metadata.json"), "utf8"));
+  const metadata = JSON.parse(fs.readFileSync(path.join(onlyGenerationDir(cacheRoot, first.cacheKey), "metadata.json"), "utf8"));
   assert.equal(metadata.sourceVersion, "manual");
   assert.equal(Object.hasOwn(metadata, "pdfPath"), false);
 });
@@ -84,7 +102,7 @@ test("default project writer reuses the cache service resolved bundle", async ()
 
   assert.equal(result.status, "ready");
   assert.equal(resolutions, 1);
-  assert.equal(fs.existsSync(path.join(cacheRoot, result.cacheKey, "theme.json")), true);
+  assert.equal(fs.existsSync(path.join(onlyGenerationDir(cacheRoot, result.cacheKey), "theme.json")), true);
 });
 
 test("sparse legacy and explicit normalized themes share one cache entry", async () => {
@@ -152,27 +170,31 @@ test("concurrent same-key requests, including forced requests, share one promise
 test("a normal request arriving during a forced refresh shares the refresh", async () => {
   let release;
   let refresh = false;
+  const cacheRoot = tempDir();
   const service = createService({
+    cacheRoot,
     compiler: async (templateDir) => {
       if (refresh) await new Promise((resolve) => { release = resolve; });
       fs.writeFileSync(path.join(templateDir, "main.pdf"), refresh ? "new" : "old");
       return { ok: true, status: "compiled", compilerKind: "fake" };
     }
   });
-  await service.compile({ theme: cloneTheme(), sourceVersion: "initial" });
+  const initial = await service.compile({ theme: cloneTheme(), sourceVersion: "initial" });
   refresh = true;
 
   const forced = service.compile({ theme: cloneTheme(), sourceVersion: "refresh", force: true });
   const normal = service.compile({ theme: cloneTheme(), sourceVersion: "review" });
   assert.strictEqual(forced, normal);
   await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(generationDirs(cacheRoot, initial.cacheKey).length, 1);
+  assert.equal(readResolvedPdf(service, initial.cacheKey), "old");
   release();
   const result = await normal;
 
-  assert.equal(fs.readFileSync(result.pdfPath, "utf8"), "new");
+  assert.equal(readResolvedPdf(service, result.cacheKey), "new");
 });
 
-test("forced refresh recompiles and atomically replaces the ready PDF", async () => {
+test("forced refresh recompiles and publishes a newer immutable generation", async () => {
   let value = "old";
   let compiles = 0;
   const cacheRoot = tempDir();
@@ -191,11 +213,12 @@ test("forced refresh recompiles and atomically replaces the ready PDF", async ()
   assert.equal(compiles, 2);
   assert.equal(refreshed.status, "ready");
   assert.equal(refreshed.cached, false);
-  assert.equal(fs.readFileSync(refreshed.pdfPath, "utf8"), "new");
+  assert.equal(readResolvedPdf(actual, refreshed.cacheKey), "new");
+  assert.equal(generationDirs(cacheRoot, first.cacheKey).length, 2);
   assert.equal(fs.readdirSync(cacheRoot).some((name) => name.includes(".backup-")), false);
 });
 
-test("forced compilation failure preserves old PDF bytes and reports stale path", async () => {
+test("forced compilation failure preserves old PDF bytes and reports stale availability", async () => {
   const cacheRoot = tempDir();
   let fail = false;
   const service = createService({
@@ -211,8 +234,9 @@ test("forced compilation failure preserves old PDF bytes and reports stale path"
   const result = await service.compile({ theme: cloneTheme(), sourceVersion: "refresh", force: true });
 
   assert.equal(result.status, "failed");
-  assert.equal(result.stalePdfPath, first.pdfPath);
-  assert.equal(fs.readFileSync(first.pdfPath, "utf8"), "old bytes");
+  assert.equal(result.staleAvailable, true);
+  assert.equal(result.pdfAvailable, false);
+  assert.equal(readResolvedPdf(service, first.cacheKey), "old bytes");
 });
 
 test("missing compiler returns unavailable and includes stale PDF when applicable", async () => {
@@ -232,11 +256,11 @@ test("missing compiler returns unavailable and includes stale PDF when applicabl
   }).compile({ theme: cloneTheme(), sourceVersion: "manual" });
 
   assert.deepEqual(
-    { status: stale.status, compilerKind: stale.compilerKind, stalePdfPath: stale.stalePdfPath },
-    { status: "unavailable", compilerKind: "missing", stalePdfPath: first.pdfPath }
+    { status: stale.status, compilerKind: stale.compilerKind, staleAvailable: stale.staleAvailable },
+    { status: "unavailable", compilerKind: "missing", staleAvailable: true }
   );
   assert.equal(fresh.status, "unavailable");
-  assert.equal(fresh.stalePdfPath, undefined);
+  assert.equal(fresh.staleAvailable, false);
 });
 
 test("corrupt, missing, or mismatched metadata and missing PDFs are cache misses", async () => {
@@ -245,10 +269,10 @@ test("corrupt, missing, or mismatched metadata and missing PDFs are cache misses
     let compiles = 0;
     const service = createService({ cacheRoot, compiler: pdfCompiler("new", () => { compiles += 1; }) });
     const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
-    const dir = path.join(cacheRoot, key);
-    fs.mkdirSync(dir);
+    const dir = path.join(cacheRoot, key, "generations", "manual-generation");
+    fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "main.pdf"), "stale");
-    const metadata = { cacheKey: key, themeHash: key.slice(0, 64), generatorVersion: "1", compilerKind: "fake", completedAt: "then", sourceVersion: "old" };
+    const metadata = { cacheKey: key, themeHash: key.slice(0, 64), generatorVersion: "1", compilerKind: "fake", completedAt: "2026-07-12T00:00:00.000Z", sourceVersion: "old" };
     if (defect === "corrupt") fs.writeFileSync(path.join(dir, "metadata.json"), "{");
     else if (defect !== "missing-metadata") {
       if (defect === "hash") metadata.themeHash = "0".repeat(64);
@@ -283,7 +307,7 @@ for (const field of REQUIRED_METADATA_FIELDS) {
         compiler: pdfCompiler("rebuilt", () => { compiles += 1; })
       });
       const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
-      const metadataPath = path.join(cacheRoot, ready.cacheKey, "metadata.json");
+      const metadataPath = path.join(onlyGenerationDir(cacheRoot, ready.cacheKey), "metadata.json");
       const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
       if (defect === "missing") delete metadata[field];
       else metadata[field] = 42;
@@ -302,7 +326,7 @@ for (const field of ["completedAt", "sourceVersion"]) {
     const cacheRoot = tempDir();
     const service = createService({ cacheRoot });
     const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
-    const metadataPath = path.join(cacheRoot, ready.cacheKey, "metadata.json");
+    const metadataPath = path.join(onlyGenerationDir(cacheRoot, ready.cacheKey), "metadata.json");
     const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
     metadata[field] = "   ";
     fs.writeFileSync(metadataPath, JSON.stringify(metadata));
@@ -316,16 +340,248 @@ test("resolvePdf accepts only valid ready keys and rejects unsafe or corrupt ent
   const service = createService({ cacheRoot });
   const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
 
-  assert.equal(service.resolvePdf(ready.cacheKey), ready.pdfPath);
+  assert.equal(fs.readFileSync(service.resolvePdf(ready.cacheKey), "utf8"), "pdf");
   for (const invalid of ["../x", "..%2Fx", path.resolve(cacheRoot), "A".repeat(64) + "-1", "a".repeat(63) + "-1", "a".repeat(64) + "-bad/version", "a".repeat(64) + "-"]) {
     assert.equal(service.resolvePdf(invalid), null, invalid);
     assert.equal(isSafeCacheKey(invalid), false, invalid);
   }
   const directoryKey = `${"b".repeat(64)}-1`;
-  fs.mkdirSync(path.join(cacheRoot, directoryKey, "main.pdf"), { recursive: true });
+  fs.mkdirSync(path.join(cacheRoot, directoryKey, "generations", "bad", "main.pdf"), { recursive: true });
   assert.equal(service.resolvePdf(directoryKey), null);
-  fs.writeFileSync(path.join(cacheRoot, ready.cacheKey, "metadata.json"), "corrupt");
+  fs.writeFileSync(path.join(onlyGenerationDir(cacheRoot, ready.cacheKey), "metadata.json"), "corrupt");
   assert.equal(service.resolvePdf(ready.cacheKey), null);
+});
+
+test("a failed generation rename leaves the previous generation ready", async () => {
+  const cacheRoot = tempDir();
+  let failRename = false;
+  const service = createService({
+    cacheRoot,
+    renameSync(from, to) {
+      if (failRename) throw new Error(`rename blocked ${from} ${to}`);
+      return fs.renameSync(from, to);
+    },
+    compiler: pdfCompiler("old")
+  });
+  const initial = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+  failRename = true;
+
+  const failed = await service.compile({ theme: cloneTheme(), sourceVersion: "selected", force: true });
+
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.staleAvailable, true);
+  assert.equal(generationDirs(cacheRoot, initial.cacheKey).length, 1);
+  assert.equal(readResolvedPdf(service, initial.cacheKey), "old");
+});
+
+test("two cache service instances force-publish distinct generations safely", async () => {
+  const cacheRoot = tempDir();
+  const common = { cacheRoot, rootDir: process.cwd(), registry: getRegistry(), projectWriter: fakeWriter };
+  const initialService = createPreviewCache({
+    ...common,
+    now: () => new Date("2026-07-12T00:00:00.000Z"),
+    compiler: pdfCompiler("initial")
+  });
+  const initial = await initialService.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+  const first = createPreviewCache({
+    ...common,
+    now: () => new Date("2026-07-12T00:01:00.000Z"),
+    compiler: pdfCompiler("first")
+  });
+  const second = createPreviewCache({
+    ...common,
+    now: () => new Date("2026-07-12T00:02:00.000Z"),
+    compiler: pdfCompiler("second")
+  });
+
+  const [a, b] = await Promise.all([
+    first.compile({ theme: cloneTheme(), sourceVersion: "ai", force: true }),
+    second.compile({ theme: cloneTheme(), sourceVersion: "selected", force: true })
+  ]);
+
+  assert.equal(a.status, "ready");
+  assert.equal(b.status, "ready");
+  assert.equal(generationDirs(cacheRoot, initial.cacheKey).length, 3);
+  assert.equal(readResolvedPdf(initialService, initial.cacheKey), "second");
+});
+
+test("orphan temporary directories are ignored", async () => {
+  const cacheRoot = tempDir();
+  const service = createService({ cacheRoot });
+  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
+  const orphan = path.join(cacheRoot, `${key}.tmp-orphan`);
+  fs.mkdirSync(orphan);
+  fs.writeFileSync(path.join(orphan, "main.pdf"), "orphan");
+
+  assert.equal(service.resolvePdf(key), null);
+  const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+  assert.equal(ready.status, "ready");
+  assert.equal(readResolvedPdf(service, key), "pdf");
+  assert.equal(fs.existsSync(orphan), true);
+});
+
+function writeExternalGeneration(directory, cacheKey) {
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, "main.pdf"), "external");
+  fs.writeFileSync(path.join(directory, "metadata.json"), JSON.stringify({
+    cacheKey,
+    themeHash: cacheKey.slice(0, 64),
+    generatorVersion: cacheKey.slice(65),
+    compilerKind: "fake",
+    completedAt: "2026-07-12T00:00:00.000Z",
+    sourceVersion: "manual"
+  }));
+}
+
+test("resolvePdf rejects a generation directory symlink escape", (t) => {
+  const cacheRoot = tempDir();
+  const service = createService({ cacheRoot });
+  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
+  const generations = path.join(cacheRoot, key, "generations");
+  const outside = tempDir("beamerforge-external-generation-");
+  writeExternalGeneration(outside, key);
+  fs.mkdirSync(generations, { recursive: true });
+  try {
+    fs.symlinkSync(outside, path.join(generations, "linked"), "dir");
+  } catch (error) {
+    if (["EPERM", "EACCES", "ENOTSUP"].includes(error.code)) {
+      t.skip(`directory symlink unavailable: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
+
+  assert.equal(service.resolvePdf(key), null);
+});
+
+test("metadata publication never follows an external file symlink", async (t) => {
+  const cacheRoot = tempDir();
+  const outsideRoot = tempDir("beamerforge-external-metadata-");
+  const outsideMetadata = path.join(outsideRoot, "metadata.json");
+  fs.writeFileSync(outsideMetadata, "unchanged");
+  let linkUnavailable = false;
+  const service = createService({
+    cacheRoot,
+    compiler: async (templateDir) => {
+      fs.writeFileSync(path.join(templateDir, "main.pdf"), "pdf");
+      try {
+        fs.symlinkSync(outsideMetadata, path.join(templateDir, "metadata.json"), "file");
+      } catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP"].includes(error.code)) {
+          linkUnavailable = true;
+          return { ok: false, status: "compile-failed", message: "symlink unavailable", compilerKind: "fake" };
+        }
+        throw error;
+      }
+      return { ok: true, status: "compiled", compilerKind: "fake" };
+    }
+  });
+
+  const result = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+  if (linkUnavailable) {
+    t.skip("file symlink unavailable");
+    return;
+  }
+
+  assert.equal(result.status, "failed");
+  assert.equal(fs.readFileSync(outsideMetadata, "utf8"), "unchanged");
+});
+
+test("resolvePdf rejects a Windows junction escape", { skip: process.platform !== "win32" }, () => {
+  const cacheRoot = tempDir();
+  const service = createService({ cacheRoot });
+  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
+  const generations = path.join(cacheRoot, key, "generations");
+  const outside = tempDir("beamerforge-external-junction-");
+  writeExternalGeneration(outside, key);
+  fs.mkdirSync(generations, { recursive: true });
+  fs.symlinkSync(outside, path.join(generations, "junction"), "junction");
+
+  assert.equal(service.resolvePdf(key), null);
+});
+
+test("compile never creates generation folders through a Windows key junction", { skip: process.platform !== "win32" }, async () => {
+  const cacheRoot = tempDir();
+  const service = createService({ cacheRoot });
+  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
+  const outside = tempDir("beamerforge-external-key-junction-");
+  fs.symlinkSync(outside, path.join(cacheRoot, key), "junction");
+
+  const result = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+
+  assert.equal(result.status, "failed");
+  assert.equal(fs.existsSync(path.join(outside, "generations")), false);
+});
+
+for (const scenario of ["ready", "failed", "unavailable"]) {
+  test(`temporary cleanup failure cannot reject a ${scenario} result`, async () => {
+    const compiler = scenario === "ready"
+      ? pdfCompiler("ready")
+      : scenario === "failed"
+        ? async () => ({ ok: false, status: "compile-failed", message: "bad", excerpt: "bad", compilerKind: "fake" })
+        : async () => ({ ok: false, status: "missing-compiler", message: "missing", compilerKind: "missing" });
+    const service = createService({
+      compiler,
+      cleanupTemp() { throw new Error("locked temp directory"); }
+    });
+
+    const result = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+
+    assert.equal(result.status, scenario);
+  });
+}
+
+test("compile results are browser-safe DTOs with redacted diagnostics", async () => {
+  const cacheRoot = tempDir();
+  const rootDir = process.cwd();
+  const service = createService({
+    cacheRoot,
+    rootDir,
+    compiler: async (templateDir) => {
+      throw new Error(`failed ${templateDir} ${cacheRoot} ${rootDir} C:\\private\\secret.tex /var/private/file.tex`);
+    }
+  });
+
+  const result = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+  const serialized = JSON.stringify(result);
+
+  assert.equal(result.status, "failed");
+  assert.equal(Object.hasOwn(result, "pdfPath"), false);
+  assert.equal(Object.hasOwn(result, "stalePdfPath"), false);
+  assert.equal(serialized.includes(cacheRoot), false);
+  assert.equal(serialized.includes(rootDir), false);
+  assert.doesNotMatch(serialized, /[A-Za-z]:\\|\/var\/private|\.tmp-/);
+});
+
+for (const [field, invalid] of [
+  ["completedAt", "not-an-iso-date"],
+  ["compilerKind", "../latexmk"],
+  ["sourceVersion", "../manual"]
+]) {
+  test(`metadata ${field} rejects malformed values`, async () => {
+    const cacheRoot = tempDir();
+    const service = createService({ cacheRoot });
+    const ready = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+    const metadataPath = path.join(onlyGenerationDir(cacheRoot, ready.cacheKey), "metadata.json");
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+    metadata[field] = invalid;
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata));
+
+    assert.equal(service.resolvePdf(ready.cacheKey), null);
+  });
+}
+
+test("resolver failures return rejected promises instead of throwing synchronously", async () => {
+  const service = createService();
+  const invalid = cloneTheme();
+  invalid.identity.title = 42;
+  let promise;
+
+  assert.doesNotThrow(() => {
+    promise = service.compile({ theme: invalid, sourceVersion: "manual" });
+  });
+  assert.ok(promise instanceof Promise);
+  await assert.rejects(promise, /Invalid theme/);
 });
 
 test("compiler success without main.pdf is failed and does not publish", async () => {
@@ -338,7 +594,7 @@ test("compiler success without main.pdf is failed and does not publish", async (
 
   assert.equal(result.status, "failed");
   assert.match(result.message, /main\.pdf/i);
-  assert.equal(fs.existsSync(path.join(cacheRoot, result.cacheKey)), false);
+  assert.equal(service.resolvePdf(result.cacheKey), null);
 });
 
 test("writer and compiler exceptions become bounded failures and temporary directories are cleaned", async () => {
