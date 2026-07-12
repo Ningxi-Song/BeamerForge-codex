@@ -8,9 +8,21 @@ const { getRegistry } = require("../registry/options");
 const { writeTemplateProject } = require("../generators/project-writer");
 const { compileTemplate } = require("./build");
 const { clone, isPlainObject } = require("../lib/utils");
+const {
+  freezeManualTheme,
+  readManualTheme,
+  readAiDraft,
+  acceptAiDraft,
+  restoreManualTheme
+} = require("./theme-state");
+const { createHandoff, importAiDraft } = require("./ai-handoff");
+const { diffThemes } = require("./theme-diff");
 
 const MAX_BODY_BYTES = 1024 * 1024;
-const WIZARD_ROUTES = new Set(["/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page", "/review"]);
+const WIZARD_ROUTES = new Set([
+  "/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page", "/review",
+  "/manual-review", "/ai-customize", "/ai-handoff", "/ai-import", "/ai-compare", "/final-review"
+]);
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -64,6 +76,22 @@ function sendText(res, status, body, contentType = "text/plain; charset=utf-8") 
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
   res.writeHead(status, { "content-type": contentType, "content-length": buf.length });
   res.end(buf);
+}
+
+async function readMultipart(req) {
+  const contentLength = Number(req.headers["content-length"] || 0);
+  if (contentLength > 101 * 1024 * 1024) throw new HttpError(413, "Upload too large");
+  const request = new Request("http://localhost/upload", {
+    method: "POST",
+    headers: req.headers,
+    body: req,
+    duplex: "half"
+  });
+  try {
+    return await request.formData();
+  } catch {
+    throw new HttpError(400, "Invalid multipart request body");
+  }
 }
 
 function ensureDir(dir) { fs.mkdirSync(dir, { recursive: true }); }
@@ -165,6 +193,7 @@ function createWorkbenchServer(options = {}) {
   const stateDir = options.stateDir || path.join(rootDir, "workbench", "state");
   const outputRoot = options.outputRoot || path.join(rootDir, "templates");
   const publicDir = options.publicDir || path.join(rootDir, "workbench", "public");
+  const handoffRoot = options.handoffRoot || path.join(stateDir, "ai-handoff");
   const registry = options.registry || getRegistry();
   const projectWriter = options.writeTemplateProject || writeTemplateProject;
   const templateCompiler = options.compileTemplate || compileTemplate;
@@ -191,6 +220,67 @@ function createWorkbenchServer(options = {}) {
         if (!v.ok) { sendJson(res, 400, { ok: false, errors: v.errors }); return; }
         writeTheme(stateDir, v.value);
         sendJson(res, 200, { ok: true, theme: v.value });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/manual-baseline") {
+        const theme = readValidatedTheme(stateDir, registry);
+        freezeManualTheme(stateDir, theme);
+        sendJson(res, 200, { ok: true, theme });
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/manual-baseline") {
+        if (!fs.existsSync(path.join(stateDir, "manual-theme.json"))) { sendJson(res, 404, { ok: false, error: "Manual baseline not found" }); return; }
+        sendJson(res, 200, { ok: true, theme: readManualTheme(stateDir) });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/ai/handoff") {
+        if (!fs.existsSync(path.join(stateDir, "manual-theme.json"))) throw new HttpError(409, "Manual baseline required");
+        const form = await readMultipart(req);
+        const files = form.getAll("references").filter((entry) => typeof entry !== "string");
+        let relativePaths;
+        try { relativePaths = JSON.parse(String(form.get("relativePaths") || "[]")); }
+        catch { throw new HttpError(400, "relativePaths must be valid JSON"); }
+        if (!Array.isArray(relativePaths) || relativePaths.length !== files.length) throw new HttpError(400, "Reference path count does not match files");
+        const references = await Promise.all(files.map(async (file, index) => ({
+          name: file.name,
+          relativePath: relativePaths[index],
+          bytes: Buffer.from(await file.arrayBuffer())
+        })));
+        const result = createHandoff({ stateDir, handoffRoot, brief: String(form.get("brief") || ""), references });
+        sendJson(res, 200, { ok: true, ...result });
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/ai/handoff") {
+        if (!fs.existsSync(handoffRoot)) { sendJson(res, 404, { ok: false, error: "AI handoff not found" }); return; }
+        sendJson(res, 200, { ok: true, handoffRoot });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/ai/import") {
+        if (!fs.existsSync(path.join(stateDir, "manual-theme.json"))) throw new HttpError(409, "Manual baseline required");
+        const draft = await readJsonBody(req);
+        const result = importAiDraft({ stateDir, draftBuffer: Buffer.from(JSON.stringify(draft)), registry });
+        sendJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/ai/comparison") {
+        if (!fs.existsSync(path.join(stateDir, "manual-theme.json")) || !fs.existsSync(path.join(stateDir, "ai-draft-theme.json"))) {
+          throw new HttpError(409, "Manual baseline and AI draft required");
+        }
+        const manual = readManualTheme(stateDir);
+        const draft = readAiDraft(stateDir);
+        sendJson(res, 200, { ok: true, manual, draft, changes: diffThemes(manual, draft) });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/ai/accept") {
+        if (!fs.existsSync(path.join(stateDir, "ai-draft-theme.json"))) throw new HttpError(409, "AI draft required");
+        acceptAiDraft(stateDir);
+        sendJson(res, 200, { ok: true, selectedVersion: "ai", theme: readTheme(stateDir) });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/ai/restore") {
+        if (!fs.existsSync(path.join(stateDir, "manual-theme.json"))) throw new HttpError(409, "Manual baseline required");
+        restoreManualTheme(stateDir);
+        sendJson(res, 200, { ok: true, selectedVersion: "manual", theme: readTheme(stateDir) });
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/generate") {

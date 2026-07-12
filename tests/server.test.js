@@ -363,3 +363,59 @@ test("serves the wizard shell for client-side wizard routes", async (t) => {
     assert.match(body, /id="wizardApp"/);
   }
 });
+
+test("manual baseline and AI draft APIs preserve explicit selection", async (t) => {
+  const stateDir = tempDir("beamerforge-ai-server-");
+  const handoffRoot = path.join(stateDir, "ai-handoff");
+  const baseUrl = await withServer(t, { stateDir, handoffRoot });
+
+  const saved = cloneTheme();
+  saved.identity.name = "manual-baseline";
+  await fetch(`${baseUrl}/api/theme`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(saved)
+  });
+
+  let response = await fetch(`${baseUrl}/api/manual-baseline`, { method: "POST" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(stateDir, "manual-theme.json"))), saved);
+
+  const form = new FormData();
+  form.set("brief", "Make it warmer");
+  form.set("relativePaths", "[]");
+  response = await fetch(`${baseUrl}/api/ai/handoff`, { method: "POST", body: form });
+  assert.equal(response.status, 200);
+  assert.equal(fs.existsSync(path.join(handoffRoot, "instructions.md")), true);
+
+  const draft = cloneTheme();
+  draft.identity.name = "manual-baseline";
+  draft.colors.primary = "#A14D3A";
+  response = await fetch(`${baseUrl}/api/ai/import`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(draft)
+  });
+  assert.equal(response.status, 200);
+
+  response = await fetch(`${baseUrl}/api/ai/comparison`);
+  const comparison = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(comparison.changes.some((change) => change.path === "colors.primary"), true);
+
+  response = await fetch(`${baseUrl}/api/ai/accept`, { method: "POST" });
+  assert.equal(response.status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/theme`).then((result) => result.json())).colors.primary, "#A14D3A");
+
+  response = await fetch(`${baseUrl}/api/ai/restore`, { method: "POST" });
+  assert.equal(response.status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/theme`).then((result) => result.json())).colors.primary, saved.colors.primary);
+});
+
+test("AI phase endpoints reject missing prerequisites", async (t) => {
+  const stateDir = tempDir("beamerforge-ai-server-");
+  const baseUrl = await withServer(t, { stateDir });
+  assert.equal((await fetch(`${baseUrl}/api/manual-baseline`)).status, 404);
+  assert.equal((await fetch(`${baseUrl}/api/ai/comparison`)).status, 409);
+  assert.equal((await fetch(`${baseUrl}/api/ai/accept`, { method: "POST" })).status, 409);
+});

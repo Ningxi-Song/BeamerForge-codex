@@ -7,7 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { DEFAULT_THEME } = require("../schema/theme-schema");
 const { freezeManualTheme } = require("../workbench/theme-state");
-const { createHandoff, normalizeReferencePath, MAX_FILE_BYTES } = require("../workbench/ai-handoff");
+const { createHandoff, importAiDraft, normalizeReferencePath, MAX_FILE_BYTES } = require("../workbench/ai-handoff");
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-handoff-"));
@@ -62,4 +62,25 @@ test("reference destinations are unique case-insensitively", () => {
       { name: "a.png", relativePath: "a.png", bytes: Buffer.from("b") }
     ]
   }), /Duplicate reference path/);
+});
+
+test("importAiDraft stores only complete validated themes", () => {
+  const { stateDir } = fixture();
+  const draft = structuredClone(DEFAULT_THEME);
+  draft.colors.primary = "#A14D3A";
+  const result = importAiDraft({ stateDir, draftBuffer: Buffer.from(JSON.stringify(draft)) });
+  assert.equal(result.ok, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(stateDir, "ai-draft-theme.json"))), draft);
+});
+
+test("importAiDraft rejects unknown fields without replacing an existing draft", () => {
+  const { stateDir } = fixture();
+  const valid = structuredClone(DEFAULT_THEME);
+  importAiDraft({ stateDir, draftBuffer: Buffer.from(JSON.stringify(valid)) });
+  const broken = structuredClone(DEFAULT_THEME);
+  broken.rawLatex = "\\usepackage{shellesc}";
+  const result = importAiDraft({ stateDir, draftBuffer: Buffer.from(JSON.stringify(broken)) });
+  assert.equal(result.ok, false);
+  assert.equal(result.errors.some((error) => error.path === "rawLatex"), true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(stateDir, "ai-draft-theme.json"))), valid);
 });

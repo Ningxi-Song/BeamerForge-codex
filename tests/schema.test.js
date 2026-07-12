@@ -47,3 +47,15 @@ test("slugifies names for output paths", () => {
   assert.equal(slugifyName("Blue Academic 2026"), "blue-academic-2026");
   assert.equal(slugifyName("___Bamboo!!!"), "bamboo");
 });
+
+test("rejects unknown theme fields instead of silently ignoring AI code", () => {
+  const broken = structuredClone(DEFAULT_THEME);
+  broken.rawLatex = "\\usepackage{shellesc}";
+  broken.colors.unexpected = "#000000";
+  const result = validateTheme(broken);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.errors.filter((error) => error.message === "is not allowed").map((error) => error.path), [
+    "rawLatex",
+    "colors.unexpected"
+  ]);
+});

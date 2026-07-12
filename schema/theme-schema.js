@@ -61,6 +61,19 @@ const REQUIRED_HEX_FIELDS = ["background", "primary", "accent", "text"];
 const OPTIONAL_HEX_FIELDS = ["blockBody", "alert"];
 const IDENTITY_FIELDS = ["title", "subtitle", "author", "institute", "date"];
 const BULLET_MIN_COUNT = 3;
+const ALLOWED_KEYS = Object.freeze({
+  root: new Set(["identity", "foundation", "colors", "fonts", "bullets", "blocks", "navigation", "titlePage", "contentDefaults", "build"]),
+  identity: new Set(["name", "title", "subtitle", "author", "institute", "date"]),
+  foundation: new Set(["aspectRatio", "baseLayout"]),
+  colors: new Set(["paletteId", "background", "primary", "accent", "text", "blockBody", "alert"]),
+  fonts: new Set(["body", "title", "mode"]),
+  bullets: new Set(["style"]),
+  blocks: new Set(["style"]),
+  navigation: new Set(["style"]),
+  titlePage: new Set(["layout"]),
+  contentDefaults: new Set(["sampleTitle", "sampleBullets"]),
+  build: new Set(["status", "warnings"])
+});
 
 const ERROR_STEP_MAP = Object.freeze([
   ["identity", "start"],
@@ -87,6 +100,13 @@ function requireSection(theme, key, errors) {
     return {};
   }
   return theme[key];
+}
+
+function rejectUnknownKeys(value, allowed, basePath, errors) {
+  if (!isPlainObject(value)) return;
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) errors.push(new ValidationError(basePath ? `${basePath}.${key}` : key, "is not allowed"));
+  }
 }
 
 function assertNonEmptyString(obj, path, errors) {
@@ -172,36 +192,49 @@ function validateTheme(input, options = {}) {
   const theme = isPlainObject(input) ? clone(input) : {};
   const registry = options.registry;
 
+  rejectUnknownKeys(theme, ALLOWED_KEYS.root, "", errors);
+
   const identity = requireSection(theme, "identity", errors);
+  rejectUnknownKeys(identity, ALLOWED_KEYS.identity, "identity", errors);
   validateIdentity(identity, errors);
 
   const foundation = requireSection(theme, "foundation", errors);
+  rejectUnknownKeys(foundation, ALLOWED_KEYS.foundation, "foundation", errors);
   validateFoundation(foundation, errors);
 
   const colors = requireSection(theme, "colors", errors);
+  rejectUnknownKeys(colors, ALLOWED_KEYS.colors, "colors", errors);
   validateColors(colors, registry, errors);
 
   const fonts = requireSection(theme, "fonts", errors);
+  rejectUnknownKeys(fonts, ALLOWED_KEYS.fonts, "fonts", errors);
   validateFonts(fonts, registry, errors);
 
   const bullets = requireSection(theme, "bullets", errors);
+  rejectUnknownKeys(bullets, ALLOWED_KEYS.bullets, "bullets", errors);
   assertNonEmptyString(bullets, "bullets.style", errors);
   assertKnownOption(registry, "bullets", bullets.style, "bullets.style", errors);
 
   const blocks = requireSection(theme, "blocks", errors);
+  rejectUnknownKeys(blocks, ALLOWED_KEYS.blocks, "blocks", errors);
   assertNonEmptyString(blocks, "blocks.style", errors);
   assertKnownOption(registry, "blocks", blocks.style, "blocks.style", errors);
 
   const navigation = requireSection(theme, "navigation", errors);
+  rejectUnknownKeys(navigation, ALLOWED_KEYS.navigation, "navigation", errors);
   assertNonEmptyString(navigation, "navigation.style", errors);
   assertKnownOption(registry, "navigation", navigation.style, "navigation.style", errors);
 
   const titlePage = requireSection(theme, "titlePage", errors);
+  rejectUnknownKeys(titlePage, ALLOWED_KEYS.titlePage, "titlePage", errors);
   assertNonEmptyString(titlePage, "titlePage.layout", errors);
   assertKnownOption(registry, "titlePages", titlePage.layout, "titlePage.layout", errors);
 
   const contentDefaults = requireSection(theme, "contentDefaults", errors);
+  rejectUnknownKeys(contentDefaults, ALLOWED_KEYS.contentDefaults, "contentDefaults", errors);
   validateContentDefaults(contentDefaults, errors);
+
+  if (theme.build !== undefined) rejectUnknownKeys(theme.build, ALLOWED_KEYS.build, "build", errors);
 
   return {
     ok: errors.length === 0,

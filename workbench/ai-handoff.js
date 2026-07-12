@@ -2,7 +2,9 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { readManualTheme } = require("./theme-state");
+const { validateTheme } = require("../schema/theme-schema");
+const { getRegistry } = require("../registry/options");
+const { readManualTheme, saveAiDraft } = require("./theme-state");
 
 const ALLOWED_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".pdf", ".tex", ".sty", ".cls", ".bib", ".svg"]);
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -92,10 +94,26 @@ function createHandoff({ stateDir, handoffRoot, brief, references = [] }) {
   return { handoffRoot: target, referenceCount: validated.length };
 }
 
+function importAiDraft({ stateDir, draftBuffer, registry = getRegistry() }) {
+  if (!Buffer.isBuffer(draftBuffer)) throw badRequest("AI draft has no file data");
+  if (draftBuffer.length > 1024 * 1024) throw Object.assign(new Error("AI draft exceeds 1 MiB"), { statusCode: 413 });
+  let draft;
+  try {
+    draft = JSON.parse(draftBuffer.toString("utf8"));
+  } catch {
+    throw badRequest("AI draft is not valid JSON");
+  }
+  const validation = validateTheme(draft, { registry });
+  if (!validation.ok) return { ok: false, errors: validation.errors };
+  saveAiDraft(stateDir, validation.value);
+  return { ok: true, theme: validation.value };
+}
+
 module.exports = {
   ALLOWED_EXTENSIONS,
   MAX_FILE_BYTES,
   MAX_TOTAL_BYTES,
   normalizeReferencePath,
-  createHandoff
+  createHandoff,
+  importAiDraft
 };
