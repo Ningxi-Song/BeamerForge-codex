@@ -2,6 +2,7 @@
 
 const wizard = window.BeamerForgeWizard;
 const previewState = window.BeamerForgePreviewState;
+const authoritativeState = window.BeamerForgeAuthoritativePreviewState;
 
 const STEP_DESC = Object.freeze({
   start: "Start from the default BeamerForge template, then make one cumulative design decision per step.",
@@ -37,7 +38,7 @@ const state = {
   baseColor: { r: 69, g: 105, b: 144 }, scheme: "complementary",
   savedPalettes: [], paletteCounter: 0,
   workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null },
-  aiBrief: "", comparison: null,
+  aiBrief: "", comparison: null, authoritativePreviews: { manual: null, ai: null, selected: null },
   cube: { yaw: -0.72, pitch: -0.42, dragging: false, dragMoved: false, lx: 0, ly: 0 }
 };
 
@@ -58,8 +59,26 @@ const elements = {
   next: document.getElementById("nextStep"),
   reviewGenerate: document.getElementById("reviewGenerate"),
   compileTheme: document.getElementById("compileTheme"),
-  buildStatus: document.getElementById("buildStatus")
+  buildStatus: document.getElementById("buildStatus"),
+  authoritativePreview: document.getElementById("authoritativePreview"),
+  authoritativeStatus: document.getElementById("authoritativeStatus"),
+  retryPreview: document.getElementById("retryPreview"),
+  refreshPreview: document.getElementById("refreshPreview")
 };
+
+async function sendAuthoritativeRequest(source, force) {
+  return api("/api/preview/compile", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ source, force })
+  });
+}
+
+const authoritativeController = authoritativeState.createAuthoritativePreviewState({
+  request: sendAuthoritativeRequest,
+  onChange() { renderAuthoritativePreviews(); }
+});
+state.authoritativePreviews = authoritativeController.records;
 
 function clone(v) { return JSON.parse(JSON.stringify(v)); }
 function replaceChildren(p, c) { p.replaceChildren(...c); }
@@ -526,13 +545,102 @@ function renderThemeChanges(changes) {
   return list;
 }
 
+function requestAuthoritative(source, { force = false } = {}) {
+  return force ? authoritativeController.refresh(source) : authoritativeController.retry(source);
+}
+
+function authoritativeSourceForStep() {
+  if (currentStep().id === "manual-review") return "manual";
+  if (currentStep().id === "final-review") return "selected";
+  return null;
+}
+
+function setAuthoritativeStatus(element, record) {
+  const status = record?.status || "idle";
+  element.className = `preview-state is-${status}${record?.stale ? " is-stale" : ""}`;
+  let text = "Waiting for a review route.";
+  if (status === "pending") text = "Compiling authoritative preview…";
+  if (status === "ready") text = `${record.cached ? "Cached" : "Fresh"} LaTeX preview.`;
+  if (status === "failed") text = `LaTeX preview failed. ${record.message || "Compilation failed."}${record.excerpt ? ` ${record.excerpt}` : ""}`;
+  if (status === "unavailable") text = `LaTeX compiler unavailable. ${record.message || "Install XeLaTeX or another supported compiler."}`;
+  if (record?.stale) text += " Showing the last successful preview (stale).";
+  element.textContent = text.slice(0, 4200);
+}
+
+function renderAuthoritativeRecord(container, statusElement, record) {
+  setAuthoritativeStatus(statusElement, record);
+  const url = authoritativeState.displayPdfUrl(record, window.location);
+  const children = [];
+  if (url) {
+    const object = document.createElement("object");
+    object.type = "application/pdf";
+    object.data = url;
+    object.setAttribute("aria-label", "Authoritative compiled PDF preview");
+    const fallback = document.createElement("p"); fallback.textContent = "The compiled PDF preview cannot be embedded in this browser.";
+    object.appendChild(fallback); children.push(object);
+  }
+  replaceChildren(container, children);
+}
+
+function renderAuthoritativePreview() {
+  const source = authoritativeSourceForStep();
+  elements.authoritativePreview.hidden = source === null || currentStep().id === "ai-compare";
+  if (!source) return;
+  const record = state.authoritativePreviews[source];
+  const media = elements.authoritativePreview.querySelector(".authoritative-media");
+  renderAuthoritativeRecord(media, elements.authoritativeStatus, record);
+  elements.retryPreview.hidden = !["failed", "unavailable"].includes(record.status);
+  elements.refreshPreview.hidden = record.status === "idle";
+  elements.retryPreview.disabled = record.status === "pending";
+  elements.refreshPreview.disabled = record.status === "pending";
+}
+
+function createComparisonLatexPreview(source, id) {
+  const slot = document.createElement("section"); slot.id = id; slot.className = "authoritative-preview comparison-latex-preview";
+  const title = document.createElement("h4"); title.textContent = "Authoritative LaTeX preview";
+  const status = document.createElement("p"); status.className = "preview-state"; status.setAttribute("aria-live", "polite");
+  const actions = document.createElement("div"); actions.className = "preview-actions";
+  const retry = document.createElement("button"); retry.type = "button"; retry.className = "secondary-button"; retry.textContent = "Retry"; retry.addEventListener("click", () => requestAuthoritative(source));
+  const refresh = document.createElement("button"); refresh.type = "button"; refresh.className = "secondary-button"; refresh.textContent = "Refresh"; refresh.addEventListener("click", () => requestAuthoritative(source, { force: true }));
+  const media = document.createElement("div"); media.className = "authoritative-media";
+  actions.append(retry, refresh); slot.append(title, status, actions, media); return slot;
+}
+
+function renderComparisonAuthoritative(source, id) {
+  const slot = document.getElementById(id); if (!slot) return;
+  const record = state.authoritativePreviews[source];
+  renderAuthoritativeRecord(slot.querySelector(".authoritative-media"), slot.querySelector(".preview-state"), record);
+  const [retry, refresh] = slot.querySelectorAll("button");
+  retry.hidden = !["failed", "unavailable"].includes(record.status);
+  retry.disabled = record.status === "pending";
+  refresh.disabled = record.status === "pending";
+}
+
+function renderAuthoritativePreviews() {
+  renderAuthoritativePreview();
+  renderComparisonAuthoritative("manual", "manualLatexPreview");
+  renderComparisonAuthoritative("ai", "aiLatexPreview");
+}
+
+function maybeRequestAuthoritativePreviews() {
+  const step = currentStep().id;
+  const hashes = {};
+  if (step === "manual-review" && state.previewResolution?.state.successfulKey === JSON.stringify(state.theme)) hashes.manual = state.resolvedDesign?.source?.themeHash;
+  if (step === "ai-compare") {
+    hashes.manual = state.comparison?.manualDesign?.source?.themeHash;
+    hashes.ai = state.comparison?.draftDesign?.source?.themeHash;
+  }
+  if (step === "final-review" && state.previewResolution?.state.successfulKey === JSON.stringify(state.theme)) hashes.selected = state.resolvedDesign?.source?.themeHash;
+  authoritativeController.sync(step, hashes);
+}
+
 function renderAiCompare() {
   const wrap = document.createElement("div"); wrap.dataset.region = "ai-compare";
   if (!state.comparison) { const p = document.createElement("p"); p.textContent = "Loading comparison…"; wrap.appendChild(p); loadAiComparison().then(render).catch((error) => setBuildStatus(error.message)); return wrap; }
   if (!state.comparison.manualDesign || !state.comparison.draftDesign) { const p = document.createElement("p"); p.textContent = "Comparison previews could not be resolved."; wrap.appendChild(p); return wrap; }
   const grid = document.createElement("div"); grid.className = "comparison-grid";
-  const manualCard = document.createElement("section"); const manualTitle = document.createElement("h3"); manualTitle.textContent = "Manual baseline"; const manualPreview = document.createElement("article"); manualPreview.id = "manual-comparison-preview"; manualPreview.className = "slide-preview compact-preview"; renderThemeInto(manualPreview, state.comparison.manualDesign); manualCard.append(manualTitle, manualPreview);
-  const aiCard = document.createElement("section"); const aiTitle = document.createElement("h3"); aiTitle.textContent = "AI customized draft"; const aiPreview = document.createElement("article"); aiPreview.id = "ai-comparison-preview"; aiPreview.className = "slide-preview compact-preview"; renderThemeInto(aiPreview, state.comparison.draftDesign); aiCard.append(aiTitle, aiPreview);
+  const manualCard = document.createElement("section"); const manualTitle = document.createElement("h3"); manualTitle.textContent = "Manual baseline"; const manualPreview = document.createElement("article"); manualPreview.id = "manual-comparison-preview"; manualPreview.className = "slide-preview compact-preview"; renderThemeInto(manualPreview, state.comparison.manualDesign); const manualLatexPreview = createComparisonLatexPreview("manual", "manualLatexPreview"); manualCard.append(manualTitle, manualPreview, manualLatexPreview);
+  const aiCard = document.createElement("section"); const aiTitle = document.createElement("h3"); aiTitle.textContent = "AI customized draft"; const aiPreview = document.createElement("article"); aiPreview.id = "ai-comparison-preview"; aiPreview.className = "slide-preview compact-preview"; renderThemeInto(aiPreview, state.comparison.draftDesign); const aiLatexPreview = createComparisonLatexPreview("ai", "aiLatexPreview"); aiCard.append(aiTitle, aiPreview, aiLatexPreview);
   grid.append(manualCard, aiCard);
   const actions = document.createElement("div"); actions.className = "inline-actions";
   const accept = document.createElement("button"); accept.type = "button"; accept.textContent = "Accept AI Version"; accept.addEventListener("click", () => selectFinalVersion("ai"));
@@ -939,13 +1047,15 @@ async function compileTheme() {
   finally { setBusy(false); render(); }
 }
 
-function render({ schedulePreview = true } = {}) { if (schedulePreview !== false) schedulePreviewResolution(); refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); updateActions(); }
+function render({ schedulePreview = true } = {}) { if (schedulePreview !== false) schedulePreviewResolution(); refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); renderAuthoritativePreviews(); updateActions(); maybeRequestAuthoritativePreviews(); }
 
 function bindControls() {
   elements.back.addEventListener("click", () => navigateToStep(wizard.previousStepId(currentStep().id)));
   elements.next.addEventListener("click", () => navigateToStep(wizard.nextStepId(currentStep().id)));
   elements.reviewGenerate.addEventListener("click", generateTheme);
   elements.compileTheme.addEventListener("click", compileTheme);
+  elements.retryPreview.addEventListener("click", () => { const source = authoritativeSourceForStep(); if (source) requestAuthoritative(source); });
+  elements.refreshPreview.addEventListener("click", () => { const source = authoritativeSourceForStep(); if (source) requestAuthoritative(source, { force: true }); });
   window.addEventListener("popstate", render);
 }
 

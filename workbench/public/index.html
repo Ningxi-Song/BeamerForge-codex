@@ -39,6 +39,20 @@
           <span id="saveStatus" class="status">Loading</span>
         </div>
         <article id="slidePreview" class="slide-preview"></article>
+        <section id="authoritativePreview" class="authoritative-preview" aria-labelledby="authoritativeHeading" hidden>
+          <div class="authoritative-heading">
+            <div>
+              <p class="eyebrow">Compiled output</p>
+              <h2 id="authoritativeHeading">Authoritative LaTeX preview</h2>
+            </div>
+            <span id="authoritativeStatus" class="preview-state" aria-live="polite">Waiting</span>
+          </div>
+          <div class="preview-actions">
+            <button id="retryPreview" class="secondary-button" type="button">Retry</button>
+            <button id="refreshPreview" class="secondary-button" type="button">Refresh</button>
+          </div>
+          <div class="authoritative-media"></div>
+        </section>
       </section>
 
       <aside class="summary-panel" aria-label="Selected choices">
@@ -51,6 +65,7 @@
     </main>
     <script src="/wizard-state.js"></script>
     <script src="/preview-state.js"></script>
+    <script src="/authoritative-preview-state.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

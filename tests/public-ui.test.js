@@ -50,12 +50,39 @@ test("workbench index exposes cumulative wizard regions", () => {
 
 test("workbench index loads wizard state before app script", () => {
   const html = readPublicFile("index.html");
-  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/preview-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
 });
 
 test("preview toolbar identifies the instant HTML preview", () => {
   const html = readPublicFile("index.html");
   assert.match(html, />Instant HTML preview</);
+});
+
+test("workbench exposes a separate authoritative LaTeX preview region", () => {
+  const html = readPublicFile("index.html");
+  assert.match(html, />Authoritative LaTeX preview</);
+  for (const id of ["authoritativePreview", "authoritativeStatus", "retryPreview", "refreshPreview"]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(html, /<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+});
+
+test("authoritative preview UI is route-gated and uses independent status controls", () => {
+  const script = readPublicFile("app.js");
+  for (const token of ["authoritativePreviews", "requestAuthoritative", "maybeRequestAuthoritativePreviews", "renderAuthoritativePreview", "manualLatexPreview", "aiLatexPreview", "BeamerForgeAuthoritativePreviewState", "/api/preview/compile"]) {
+    assert.match(script, new RegExp(escapeRegExp(token)));
+  }
+  assert.doesNotMatch(functionSource(script, "renderAuthoritativePreview"), /buildStatus|saveStatus/);
+  assert.match(functionSource(script, "renderAiCompare"), /manualLatexPreview/);
+  assert.match(functionSource(script, "renderAiCompare"), /aiLatexPreview/);
+  assert.match(functionSource(script, "render"), /maybeRequestAuthoritativePreviews\(\)/);
+  const css = readPublicFile("styles.css");
+  for (const selector of [".authoritative-preview", ".preview-state", ".is-stale", ".is-failed", ".is-unavailable", ".authoritative-preview object"]) {
+    assert.match(css, new RegExp(escapeRegExp(selector)));
+  }
+  const objectRule = cssRuleBodies(css, ".authoritative-preview object")[0];
+  assert.match(objectRule, /aspect-ratio:/);
+  assert.doesNotMatch(objectRule, /min-height:\s*(?!0(?:px|rem|em|%)?\s*;)[1-9]/i);
 });
 
 test("browser script renders wizard steps and preserves cumulative choices", () => {

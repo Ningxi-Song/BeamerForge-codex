@@ -8,6 +8,7 @@ const { getRegistry } = require("../registry/options");
 const { resolveDesign, ThemeValidationError } = require("../design/resolve-design");
 const { writeTemplateProject } = require("../generators/project-writer");
 const { compileTemplate } = require("./build");
+const { createPreviewCache, isSafeCacheKey } = require("./preview-cache");
 const { clone, isPlainObject } = require("../lib/utils");
 const {
   freezeManualTheme,
@@ -139,6 +140,38 @@ function readValidatedTheme(stateDir, registry) {
   return v.value;
 }
 
+function validatePreviewTheme(theme, registry, message) {
+  const validation = validateTheme(theme, { registry });
+  if (!validation.ok) throw new HttpError(409, message);
+  return validation.value;
+}
+
+function previewThemeForSource(stateDir, registry, source) {
+  if (source === "selected") return readValidatedTheme(stateDir, registry);
+  if (source === "manual") {
+    const manualPath = path.join(stateDir, "manual-theme.json");
+    if (!fs.existsSync(manualPath)) return readValidatedTheme(stateDir, registry);
+    return validatePreviewTheme(readManualTheme(stateDir), registry, "Valid manual baseline required");
+  }
+  const draftPath = path.join(stateDir, "ai-draft-theme.json");
+  if (!fs.existsSync(draftPath)) throw new HttpError(409, "Valid AI draft required");
+  return validatePreviewTheme(readAiDraft(stateDir), registry, "Valid AI draft required");
+}
+
+function previewDto(result) {
+  if (!result || !["ready", "failed", "unavailable"].includes(result.status) || !isSafeCacheKey(result.cacheKey)) {
+    throw new Error("Invalid preview cache response");
+  }
+  const fields = ["status", "cached", "cacheKey", "compilerKind", "completedAt", "sourceVersion", "message", "excerpt"];
+  const dto = {};
+  for (const field of fields) if (result[field] !== undefined) dto[field] = result[field];
+  const encodedKey = encodeURIComponent(String(result.cacheKey || ""));
+  const pdfUrl = `/api/preview/${encodedKey}/main.pdf`;
+  if (result.pdfAvailable) dto.pdfUrl = pdfUrl;
+  if (result.staleAvailable) dto.stalePdfUrl = pdfUrl;
+  return dto;
+}
+
 function resolveTemplateDir(outputRoot, name) {
   const root = path.resolve(outputRoot);
   const dir = path.resolve(root, name);
@@ -202,6 +235,11 @@ function createWorkbenchServer(options = {}) {
   const registry = options.registry || getRegistry();
   const projectWriter = options.writeTemplateProject || writeTemplateProject;
   const templateCompiler = options.compileTemplate || compileTemplate;
+  const previewCache = options.previewCache || createPreviewCache({
+    cacheRoot: options.previewCacheRoot || path.join(stateDir, "preview-cache"), rootDir, registry,
+    projectWriter: options.previewProjectWriter,
+    compiler: options.previewCompiler
+  });
   const allowedAssetPaths = allowedAssets(registry);
 
   return http.createServer(async (req, res) => {
@@ -241,6 +279,45 @@ function createWorkbenchServer(options = {}) {
           return;
         }
         sendJson(res, 200, design);
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/preview/compile") {
+        const body = await readJsonBody(req);
+        if (!isPlainObject(body) || !["manual", "ai", "selected"].includes(body.source)) {
+          throw new HttpError(400, "source must be manual, ai, or selected");
+        }
+        if (body.force !== undefined && typeof body.force !== "boolean") {
+          throw new HttpError(400, "force must be a boolean");
+        }
+        try {
+          const theme = previewThemeForSource(stateDir, registry, body.source);
+          const result = await previewCache.compile({ theme, sourceVersion: body.source, force: Boolean(body.force) });
+          sendJson(res, 200, previewDto(result));
+        } catch (error) {
+          if (error instanceof HttpError) throw error;
+          sendJson(res, 500, { ok: false, error: "Unable to compile preview" });
+        }
+        return;
+      }
+      if (req.method === "GET" && /^\/api\/preview\/[^/]+\/main\.pdf$/.test(url.pathname)) {
+        const encodedKey = url.pathname.slice("/api/preview/".length, -"/main.pdf".length);
+        let cacheKey;
+        try { cacheKey = decodeURIComponent(encodedKey); } catch { cacheKey = null; }
+        let pdfPath = null;
+        try { if (cacheKey) pdfPath = previewCache.resolvePdf(cacheKey); }
+        catch { sendJson(res, 500, { ok: false, error: "Unable to load preview" }); return; }
+        if (!pdfPath) { sendText(res, 404, "Not found"); return; }
+        let stat;
+        try { stat = fs.lstatSync(pdfPath); } catch { stat = null; }
+        if (!stat || !stat.isFile() || stat.isSymbolicLink()) { sendText(res, 404, "Not found"); return; }
+        let bytes;
+        try { bytes = fs.readFileSync(pdfPath); }
+        catch { sendJson(res, 500, { ok: false, error: "Unable to load preview" }); return; }
+        res.writeHead(200, {
+          "content-type": "application/pdf", "content-disposition": "inline",
+          "cache-control": "no-store", "content-length": bytes.length
+        });
+        res.end(bytes);
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/manual-baseline") {

@@ -38,6 +38,134 @@ function cloneTheme() {
   return JSON.parse(JSON.stringify(DEFAULT_THEME));
 }
 
+test("POST /api/preview/compile compiles the requested manual source and returns a browser-safe PDF URL", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const current = cloneTheme();
+  current.identity.name = "current-theme";
+  fs.writeFileSync(path.join(stateDir, "theme.json"), `${JSON.stringify(current, null, 2)}\n`, "utf8");
+  const calls = [];
+  const previewCache = {
+    async compile(input) {
+      calls.push(input);
+      return {
+        status: "ready", cached: false, cacheKey: `${"a".repeat(64)}-v1`, pdfAvailable: true,
+        compilerKind: "xelatex", completedAt: "2026-07-12T01:02:03.000Z", sourceVersion: "manual",
+        pdfPath: "C:\\private\\main.pdf"
+      };
+    },
+    resolvePdf() { return null; }
+  };
+  const baseUrl = await withServer(t, { stateDir, previewCache });
+
+  const response = await fetch(`${baseUrl}/api/preview/compile`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ source: "manual", force: true })
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].theme.identity.name, "current-theme");
+  assert.equal(calls[0].sourceVersion, "manual");
+  assert.equal(calls[0].force, true);
+  assert.equal(body.pdfUrl, `/api/preview/${"a".repeat(64)}-v1/main.pdf`);
+  assert.equal(JSON.stringify(body).includes("private"), false);
+  assert.deepEqual(Object.keys(body).sort(), ["cacheKey", "cached", "completedAt", "compilerKind", "pdfUrl", "sourceVersion", "status"].sort());
+});
+
+test("preview compile enforces source prerequisites, validates input, and keeps failures at HTTP 200", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  fs.writeFileSync(path.join(stateDir, "theme.json"), `${JSON.stringify(DEFAULT_THEME)}\n`);
+  const manual = cloneTheme(); manual.identity.name = "manual-source";
+  fs.writeFileSync(path.join(stateDir, "manual-theme.json"), `${JSON.stringify(manual)}\n`);
+  const ai = cloneTheme(); ai.identity.name = "ai-source";
+  fs.writeFileSync(path.join(stateDir, "ai-draft-theme.json"), `${JSON.stringify(ai)}\n`);
+  const calls = [];
+  const key = `${"b".repeat(64)}-v1`;
+  const previewCache = {
+    async compile(input) {
+      calls.push(input);
+      if (input.sourceVersion === "ai") return { status: "failed", cached: false, cacheKey: key, compilerKind: "xelatex", message: "bad", excerpt: "line 1", staleAvailable: true };
+      return { status: "unavailable", cached: false, cacheKey: key, compilerKind: "missing", message: "Install LaTeX", staleAvailable: false };
+    }, resolvePdf() { return null; }
+  };
+  const baseUrl = await withServer(t, { stateDir, previewCache });
+  const post = (body) => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  for (const source of ["manual", "ai", "selected"]) {
+    const response = await post({ source });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    if (source === "ai") assert.equal(body.stalePdfUrl, `/api/preview/${key}/main.pdf`);
+    else assert.equal(body.status, "unavailable");
+  }
+  assert.deepEqual(calls.map((call) => call.theme.identity.name), ["manual-source", "ai-source", DEFAULT_THEME.identity.name]);
+  assert.deepEqual(calls.map((call) => call.force), [false, false, false]);
+  for (const invalid of [{}, { source: "bogus" }, { source: "manual", force: 1 }]) {
+    assert.equal((await post(invalid)).status, 400);
+  }
+
+  fs.rmSync(path.join(stateDir, "ai-draft-theme.json"));
+  assert.equal((await post({ source: "ai" })).status, 409);
+  fs.writeFileSync(path.join(stateDir, "ai-draft-theme.json"), "{}\n");
+  assert.equal((await post({ source: "ai" })).status, 409);
+});
+
+test("GET authoritative preview serves only resolved PDFs with inline no-store headers", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const pdfPath = path.join(stateDir, "served.pdf");
+  const bytes = Buffer.from("%PDF-1.4\npreview\n");
+  fs.writeFileSync(pdfPath, bytes);
+  const key = `${"c".repeat(64)}-v1`;
+  const resolved = [];
+  const previewCache = { compile() {}, resolvePdf(value) { resolved.push(value); return value === key ? pdfPath : null; } };
+  const baseUrl = await withServer(t, { stateDir, previewCache });
+
+  const response = await fetch(`${baseUrl}/api/preview/${key}/main.pdf`);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/pdf");
+  assert.equal(response.headers.get("content-disposition"), "inline");
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+  for (const bad of ["invalid", "%2e%2e%2fsecret", `${"d".repeat(64)}-v1`]) {
+    assert.equal((await fetch(`${baseUrl}/api/preview/${bad}/main.pdf`)).status, 404);
+  }
+  assert.equal(resolved.includes("../secret"), true);
+});
+
+test("preview cache rejections return a generic error without internal paths", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const previewCache = { async compile() { throw new Error("C:\\secret\\cache failure"); }, resolvePdf() { throw new Error("C:\\secret"); } };
+  const baseUrl = await withServer(t, { stateDir, previewCache });
+  const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected" }) });
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { ok: false, error: "Unable to compile preview" });
+  const pdfResponse = await fetch(`${baseUrl}/api/preview/${"e".repeat(64)}-v1/main.pdf`);
+  assert.equal(pdfResponse.status, 500);
+  assert.deepEqual(await pdfResponse.json(), { ok: false, error: "Unable to load preview" });
+});
+
+test("server creates one default preview cache at the configured root", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const previewCacheRoot = path.join(stateDir, "custom-preview-cache");
+  let writes = 0;
+  let compiles = 0;
+  const baseUrl = await withServer(t, {
+    stateDir, previewCacheRoot,
+    previewProjectWriter(theme, target) { writes++; fs.writeFileSync(path.join(target, "main.tex"), theme.identity.name); },
+    async previewCompiler(target) { compiles++; fs.writeFileSync(path.join(target, "main.pdf"), "%PDF-1.4\n"); return { ok: true, compilerKind: "fake" }; }
+  });
+  const request = () => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected" }) });
+  const first = await request();
+  const second = await request();
+  assert.equal(first.status, 200);
+  assert.equal((await first.json()).status, "ready");
+  assert.equal((await second.json()).cached, true);
+  assert.equal(writes, 1);
+  assert.equal(compiles, 1);
+  assert.equal(fs.existsSync(previewCacheRoot), true);
+});
+
 test("server exposes registry options and default theme", async (t) => {
   const stateDir = tempDir("beamerforge-server-");
   const baseUrl = await withServer(t, { stateDir });
