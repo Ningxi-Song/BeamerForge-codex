@@ -625,3 +625,99 @@ git commit -m "docs: explain manual and AI design phases"
 - [ ] Confirm both manual-only and manual-then-AI paths generate a complete Beamer project.
 - [ ] Confirm no raw LaTeX customization field was introduced.
 - [ ] Confirm `npm run check`, `npm test`, and proportional compile verification pass.
+
+## Task 10: Trusted corner-logo decorations
+
+**Files:**
+- Create: `elements/decorations/logos/duck.svg`
+- Modify: `registry/options.js`
+- Modify: `schema/theme-schema.js`
+- Modify: `generators/project-writer.js`
+- Modify: `generators/latex.js`
+- Modify: `workbench/theme-diff.js`
+- Modify: `workbench/public/app.js`
+- Test: `tests/registry.test.js`
+- Test: `tests/schema.test.js`
+- Test: `tests/project-writer.test.js`
+- Test: `tests/generator.test.js`
+- Test: `tests/theme-diff.test.js`
+- Test: `tests/public-ui.test.js`
+
+- [ ] **Step 1: Write failing catalog and schema tests**
+
+Assert the registry exposes `logos.duck` with a trusted SVG asset, label, and
+preview URL. Assert `DEFAULT_THEME.decorations.cornerLogo` is disabled with
+`id: "none"`, while a duck configuration validates. Assert unknown IDs,
+positions, sizes, scopes, and extra decoration fields fail at their exact paths.
+
+- [ ] **Step 2: Run focused tests to verify red**
+
+Run: `node --test tests/registry.test.js tests/schema.test.js`
+
+Expected: FAIL because the logo registry and decorations schema do not exist.
+
+- [ ] **Step 3: Add the trusted duck asset, registry entry, and schema**
+
+Create a compact original duck SVG using simple filled vector paths. Add registry
+entries `none` and `duck`. Extend the default theme and closed-key validation with
+`decorations.cornerLogo.{id,position,size,scope}` and registry-aware enum checks.
+
+- [ ] **Step 4: Write failing project-generation tests**
+
+Assert a duck theme copies `elements/decorations/logos/duck.svg` to
+`assets/corner-logo.svg`, records it in the project manifest, and produces a
+Beamer background-canvas template containing `\includegraphics`, the trusted
+copied path, top-right placement, and the small size token. Assert `none` emits no
+logo overlay or copied decoration asset.
+
+- [ ] **Step 5: Run generation tests to verify red**
+
+Run: `node --test tests/project-writer.test.js tests/generator.test.js`
+
+Expected: FAIL because decoration copying and LaTeX output are absent.
+
+- [ ] **Step 6: Implement project copying and Beamer overlay generation**
+
+Resolve the logo only through registry metadata. Copy it with the existing
+root/output guards. Generate a background-canvas overlay using `textpos` and
+`graphicx`, mapping `small` and `medium` to fixed widths and mapping the two
+positions to fixed safe margins. Respect `content-frames` by excluding the plain
+title frame and `all-frames` by including it.
+
+- [ ] **Step 7: Write failing diff and preview tests**
+
+Assert semantic differences include the four corner-logo fields. Assert the
+browser preview resolves the selected registry asset and renders a positioned
+`.preview-corner-logo` only when the ID is not `none`.
+
+- [ ] **Step 8: Implement semantic comparison and HTML preview**
+
+Add the decoration fields to the ordered diff allowlist. Add a preview overlay
+that uses `/assets/<trusted-registry-path>`, applies size and position CSS classes,
+and follows title/content scope.
+
+- [ ] **Step 9: Create and validate the requested duck AI draft**
+
+Update the handoff `ai-draft-theme.json` by adding the approved duck decoration.
+Validate it with the registry, import it through `/api/ai/import`, and confirm the
+comparison reports the decoration change.
+
+- [ ] **Step 10: Run full verification and commit**
+
+Run: `npm run check`
+
+Expected: exit 0.
+
+Run: `npm test`
+
+Expected: all tests pass.
+
+Run: `npm run smoke:compile`
+
+Expected: the duck theme compiles when a supported LaTeX engine is installed, or
+reports the established missing-compiler status without corrupting output.
+
+```powershell
+git add elements/decorations/logos/duck.svg registry/options.js schema/theme-schema.js generators/project-writer.js generators/latex.js workbench/theme-diff.js workbench/public/app.js tests
+git commit -m "feat: add trusted corner logo decorations"
+```

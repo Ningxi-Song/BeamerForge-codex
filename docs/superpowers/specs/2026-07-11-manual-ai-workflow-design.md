@@ -273,3 +273,36 @@ export a portable AI handoff with optional references, have an external agent
 produce a schema-constrained draft, import and compare it without risking the
 baseline, choose either version, and generate and compile the chosen Beamer
 project with all automated tests passing.
+
+## Approved Extension: Schema-Supported Corner Logos
+
+The external AI phase may select a trusted logo from a closed BeamerForge logo
+catalog. This adds expressive decoration without permitting arbitrary LaTeX or
+untrusted asset paths. The first catalog entry is a small built-in duck logo.
+
+Themes may include:
+
+```json
+"decorations": {
+  "cornerLogo": {
+    "id": "duck",
+    "position": "top-right",
+    "size": "small",
+    "scope": "content-frames"
+  }
+}
+```
+
+The closed schema accepts only registered logo IDs, `top-left` or `top-right`
+positions, `small` or `medium` sizes, and `content-frames` or `all-frames` scope.
+The initial AI request uses `duck`, `top-right`, `small`, and `content-frames` so
+the title page remains uncluttered.
+
+The logo registry owns both browser-preview metadata and the trusted repository
+asset path. The project writer copies the selected asset into generated projects.
+The LaTeX generator renders it through a Beamer background-canvas overlay with
+fixed margins and size tokens. The HTML preview renders the same asset and
+position. Semantic comparison reports logo ID, position, size, and scope changes.
+
+Unknown logo IDs, fields, positions, sizes, and scopes are validation errors.
+No user-authored path, SVG markup, LaTeX, or TikZ is accepted in `theme.json`.
