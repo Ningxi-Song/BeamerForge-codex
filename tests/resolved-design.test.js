@@ -41,7 +41,7 @@ test("resolved design contains full identity, exact canvas, colors, and componen
   assert.equal(design.components.bullet.id, "pifont-outline");
   assert.equal(design.components.navigation.id, "page-number");
   assert.equal(design.source.generatorVersion, GENERATOR_VERSION);
-  assert.equal(GENERATOR_VERSION, "2");
+  assert.equal(GENERATOR_VERSION, "3");
   assert.match(design.source.themeHash, /^[a-f0-9]{64}$/);
 });
 
@@ -231,6 +231,46 @@ test("4:3 themes resolve to normalized canvas units", () => {
     widthUnits: 4,
     heightUnits: 3
   });
+});
+
+const CONTENT_DENSITY_WARNING = {
+  code: "content-density",
+  severity: "warning",
+  message: "Sample content may overflow in one or both renderers."
+};
+
+test("content density title threshold is exact and informational", () => {
+  for (const [length, warnings] of [[90, []], [91, [CONTENT_DENSITY_WARNING]]]) {
+    const theme = clone(DEFAULT_THEME);
+    theme.contentDefaults.sampleTitle = "T".repeat(length);
+    theme.contentDefaults.sampleBullets = ["A", "B", "C"];
+    const design = resolveDesign(theme, getRegistry());
+
+    assert.deepEqual(design.capabilities.warnings, warnings);
+    assert.equal(design.capabilities.html, true);
+    assert.equal(design.capabilities.latex, true);
+  }
+});
+
+test("content density combines bullet text without separators at the exact threshold", () => {
+  for (const [length, warnings] of [[360, []], [361, [CONTENT_DENSITY_WARNING]]]) {
+    const theme = clone(DEFAULT_THEME);
+    theme.contentDefaults.sampleTitle = "Short title";
+    theme.contentDefaults.sampleBullets = ["A".repeat(length - 2), "B", "C"];
+
+    assert.deepEqual(resolveDesignBundle(theme, getRegistry()).design.capabilities.warnings, warnings);
+  }
+});
+
+test("content density emits one deterministically ordered warning when both limits are exceeded", () => {
+  const theme = clone(DEFAULT_THEME);
+  theme.contentDefaults.sampleTitle = "T".repeat(91);
+  theme.contentDefaults.sampleBullets = ["A".repeat(359), "B", "C"];
+
+  const manual = resolveDesign(theme, getRegistry());
+  const ai = resolveDesignBundle(clone(theme), getRegistry()).design;
+  assert.deepEqual(manual.capabilities.warnings, [CONTENT_DENSITY_WARNING]);
+  assert.deepEqual(ai.capabilities.warnings, manual.capabilities.warnings);
 });
 
 test("medium duck logos resolve normalized size, vector identity, and canonical art", () => {

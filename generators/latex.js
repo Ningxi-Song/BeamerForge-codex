@@ -3,7 +3,7 @@
 const { getRegistry } = require("../registry/options");
 const { resolveDesignBundle } = require("../design/resolve-design");
 const { hexWithoutHash, normalizeLatexNewlines, joinNonEmpty } = require("../lib/utils");
-const { renderTikz } = require("../design/vector-renderers");
+const { renderTikz, formatNumber, tikzScaleForTargetWidth } = require("../design/vector-renderers");
 
 const LATEX_SPECIAL_CHARS = {
   "\\": "\\textbackslash{}",
@@ -165,7 +165,7 @@ function generateClassTex(design) {
   const logoWidth = `${cornerLogo.sizeUnits}cm`;
   const logoScale = cornerLogo.vector === null
     ? "0"
-    : String(cornerLogo.sizeUnits / cornerLogo.vector.viewBox[2]);
+    : formatNumber(tikzScaleForTargetWidth(cornerLogo.vector, cornerLogo.sizeUnits));
   const logoX = cornerLogo.position === "top-left" ? "0.4cm" : String.raw`\dimexpr\paperwidth-${logoWidth}-0.4cm\relax`;
   const logoGuardOpen = cornerLogo.scope === "content-frames" ? String.raw`\ifnum\insertframenumber>1\relax` : "";
   const logoGuardClose = cornerLogo.scope === "content-frames" ? String.raw`\fi` : "";
@@ -177,7 +177,7 @@ function generateClassTex(design) {
   ${logoGuardOpen}
   \begin{textblock*}{${logoWidth}}(${logoX},0.35cm)
     \begin{tikzpicture}[scale=${logoScale}]
-${renderTikz(cornerLogo.vector)}
+${renderTikz(cornerLogo.vector, { strokeScale: Number(logoScale) })}
     \end{tikzpicture}
   \end{textblock*}%
   ${logoGuardClose}

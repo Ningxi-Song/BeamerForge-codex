@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { createWorkbenchServer } = require("../workbench/server");
+const { createWorkbenchServer, generatedLogoAssets } = require("../workbench/server");
 const { DEFAULT_THEME } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
 const { resolveDesign } = require("../design/resolve-design");
@@ -356,6 +356,77 @@ test("server construction intentionally rejects malformed registry contracts", (
   const registry = getRegistry();
   delete registry.bullets[DEFAULT_THEME.bullets.style].marker;
   assert.throws(() => createWorkbenchServer({ rootDir: process.cwd(), stateDir, registry }), /Invalid registry renderer contract.*bullets/i);
+});
+
+test("generated logo route builder rejects conflicting duplicate geometry independently", () => {
+  const registry = getRegistry();
+  const conflicting = structuredClone(registry.logos.duck);
+  conflicting.id = "conflicting-duck";
+  conflicting.vector.primitives[3].cx = 4.2;
+  registry.logos["conflicting-duck"] = conflicting;
+
+  assert.throws(
+    () => generatedLogoAssets(registry),
+    /Conflicting generated logo route.*duck.*conflicting-duck/
+  );
+  assert.throws(
+    () => createWorkbenchServer({ rootDir: process.cwd(), stateDir: tempDir("beamerforge-server-"), registry }),
+    /Invalid registry renderer contract.*conflicting-duck/i
+  );
+});
+
+test("generated logo route builder permits byte-equivalent aliases", () => {
+  const registry = getRegistry();
+  registry.logos["duck-alias"] = { ...structuredClone(registry.logos.duck), id: "duck-alias" };
+  const generated = generatedLogoAssets(registry);
+
+  assert.equal(generated.size, 1);
+  assert.deepEqual(generated.get("/assets/generated/logos/duck.svg"), duck);
+});
+
+test("server snapshots and deeply freezes registry data without freezing the caller", async (t) => {
+  const stateDir = tempDir("beamerforge-server-snapshot-");
+  const registry = getRegistry();
+  let observedSnapshot = null;
+  const baseUrl = await withServer(t, {
+    stateDir,
+    registry,
+    writeTemplateProject(_theme, templateDir, options) {
+      observedSnapshot = options.registry;
+      return { templateDir, written: [], copiedAssets: [] };
+    }
+  });
+
+  assert.equal(Object.isFrozen(registry), false);
+  registry.logos.duck.label = "Mutated caller duck";
+  registry.logos.duck.previewUrl = "/assets/generated/logos/mutated.svg";
+  registry.logos.duck.vector.primitives[0].cx = 2.4;
+  registry.fonts.lato.assets.length = 0;
+
+  const options = await fetch(`${baseUrl}/api/options`).then((response) => response.json());
+  assert.equal(options.logos.duck.label, "Duck");
+  assert.equal(options.logos.duck.previewUrl, "/assets/generated/logos/duck.svg");
+  assert.equal(options.logos.duck.vector.primitives[0].cx, duck.primitives[0].cx);
+
+  const logoResponse = await fetch(`${baseUrl}/assets/generated/logos/duck.svg`);
+  assert.equal(await logoResponse.text(), renderSvg(duck));
+  assert.equal((await fetch(`${baseUrl}/assets/generated/logos/mutated.svg`)).status, 404);
+  assert.equal((await fetch(`${baseUrl}/assets/elements/fonts/local/Lato.ttf`)).status, 200);
+
+  const theme = cloneTheme();
+  theme.decorations.cornerLogo.id = "duck";
+  const resolved = await fetch(`${baseUrl}/api/design/resolve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(theme)
+  }).then((response) => response.json());
+  assert.equal(resolved.components.cornerLogo.vector.primitives[0].cx, duck.primitives[0].cx);
+
+  assert.equal((await fetch(`${baseUrl}/api/generate`, { method: "POST" })).status, 200);
+  assert.equal(Object.isFrozen(observedSnapshot), true);
+  assert.equal(Object.isFrozen(observedSnapshot.logos.duck.vector), true);
+  assert.equal(Object.isFrozen(observedSnapshot.logos.duck.vector.primitives[0]), true);
+  assert.equal(Object.isFrozen(registry), false);
 });
 
 test("POST /api/design/resolve retains JSON body error behavior", async (t) => {

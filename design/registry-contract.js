@@ -1,6 +1,7 @@
 "use strict";
 
-const { validateVector } = require("./vector-renderers");
+const { validateVector, validateLogoVectorRenderability } = require("./vector-renderers");
+const { canonicalJson } = require("../lib/canonical-json");
 
 const COLLECTIONS = [
   "palettes",
@@ -94,6 +95,16 @@ function logoVectorErrors(collection, id, option) {
       message: vectorError.message
     });
   }
+  if (vectorErrors.length === 0 && option.renderers?.latex === true) {
+    for (const renderError of validateLogoVectorRenderability(option.vector)) {
+      errors.push({
+        collection,
+        id,
+        field: renderError.path ? `vector.${renderError.path}` : "vector",
+        message: renderError.message
+      });
+    }
+  }
   if (option.vector && typeof option.vector.id === "string" && option.vectorId !== option.vector.id) {
     errors.push({ collection, id, field: "vectorId", message: "must equal vector.id" });
   }
@@ -116,6 +127,36 @@ function semanticErrors(collection, id, option) {
   for (const [field, rule] of Object.entries(rules)) {
     if (!rule.valid(option[field])) {
       errors.push({ collection, id, field, message: rule.message });
+    }
+  }
+  return errors;
+}
+
+function logoUniquenessErrors(logos) {
+  if (!logos || typeof logos !== "object" || Array.isArray(logos)) return [];
+  const errors = [];
+  const seenVectorIds = new Map();
+  const seenPreviewUrls = new Map();
+  for (const [id, option] of Object.entries(logos)) {
+    if (!option || typeof option !== "object" || Array.isArray(option) || option.vector === null) continue;
+    if (validateVector(option.vector).length !== 0) continue;
+    const signature = canonicalJson(option.vector);
+    for (const [field, value, seen] of [
+      ["vectorId", option.vectorId, seenVectorIds],
+      ["previewUrl", option.previewUrl, seenPreviewUrls]
+    ]) {
+      if (typeof value !== "string") continue;
+      const previous = seen.get(value);
+      if (!previous) {
+        seen.set(value, { id, signature });
+      } else if (previous.signature !== signature) {
+        errors.push({
+          collection: "logos",
+          id,
+          field,
+          message: `conflicts with logos.${previous.id} for ${field} ${value}`
+        });
+      }
     }
   }
   return errors;
@@ -164,6 +205,8 @@ function validateRegistryContract(registry) {
       }
     }
   }
+
+  errors.push(...logoUniquenessErrors(registryObject.logos));
 
   return errors;
 }

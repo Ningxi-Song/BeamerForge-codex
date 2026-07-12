@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
-const { resolveDesign, resolveDesignBundle, ThemeValidationError } = require("../design/resolve-design");
+const { resolveDesign, resolveDesignBundle, deepFreeze, ThemeValidationError } = require("../design/resolve-design");
 const { assertRegistryContract } = require("../design/registry-contract");
 const { writeTemplateProject } = require("../generators/project-writer");
 const { compileTemplate, compileTemplateAsync } = require("./build");
@@ -21,6 +21,7 @@ const {
 const { createHandoff, importAiDraft } = require("./ai-handoff");
 const { diffThemes } = require("./theme-diff");
 const { renderSvg } = require("../design/vector-renderers");
+const { canonicalJson } = require("../lib/canonical-json");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const WIZARD_ROUTES = new Set([
@@ -222,8 +223,18 @@ function allowedAssets(registry) {
 
 function generatedLogoAssets(registry) {
   const assets = new Map();
-  for (const logo of Object.values(registry.logos || {})) {
-    if (logo.vector !== null) assets.set(logo.previewUrl, logo.vector);
+  const owners = new Map();
+  for (const [id, logo] of Object.entries(registry.logos || {})) {
+    if (logo.vector === null) continue;
+    const signature = canonicalJson(logo.vector);
+    const previous = owners.get(logo.previewUrl);
+    if (previous && previous.signature !== signature) {
+      throw new Error(`Conflicting generated logo route ${logo.previewUrl}: logos.${previous.id} and logos.${id}`);
+    }
+    if (!previous) {
+      owners.set(logo.previewUrl, { id, signature });
+      assets.set(logo.previewUrl, logo.vector);
+    }
   }
   return assets;
 }
@@ -247,7 +258,7 @@ function createWorkbenchServer(options = {}) {
   const outputRoot = options.outputRoot || path.join(rootDir, "templates");
   const publicDir = options.publicDir || path.join(rootDir, "workbench", "public");
   const handoffRoot = options.handoffRoot || path.join(stateDir, "ai-handoff");
-  const registry = assertRegistryContract(options.registry || getRegistry());
+  const registry = deepFreeze(assertRegistryContract(clone(options.registry || getRegistry())));
   const projectWriter = options.writeTemplateProject || writeTemplateProject;
   const templateCompiler = options.compileTemplate || compileTemplate;
   const previewCache = options.previewCache || createPreviewCache({
@@ -462,4 +473,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { createWorkbenchServer };
+module.exports = { createWorkbenchServer, generatedLogoAssets };

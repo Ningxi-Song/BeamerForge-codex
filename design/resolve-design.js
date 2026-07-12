@@ -3,10 +3,11 @@
 const { validateTheme } = require("../schema/theme-schema");
 const { resolveThemeChoices } = require("../registry/options");
 const { assertRegistryContract } = require("./registry-contract");
+const { LOGO_TARGET_WIDTHS_CM } = require("./vector-renderers");
 const { hashCanonical } = require("../lib/canonical-json");
 const { clone, textColorForBg } = require("../lib/utils");
 
-const GENERATOR_VERSION = "2";
+const GENERATOR_VERSION = "3";
 
 class ThemeValidationError extends Error {
   constructor(errors) {
@@ -101,7 +102,7 @@ function resolvedComponents(theme, choices) {
       id: choices.logo.id,
       label: choices.logo.label,
       position: logo.position,
-      sizeUnits: logo.size === "medium" ? 1.2 : 0.8,
+      sizeUnits: LOGO_TARGET_WIDTHS_CM[logo.size],
       scope: logo.scope,
       vectorId: choices.logo.vectorId,
       previewUrl: choices.logo.previewUrl,
@@ -110,7 +111,17 @@ function resolvedComponents(theme, choices) {
   };
 }
 
-function resolvedCapabilities(choices) {
+function contentDensityWarnings(content) {
+  const bulletTextLength = content.sampleBullets.reduce((total, bullet) => total + bullet.length, 0);
+  if (content.sampleTitle.length <= 90 && bulletTextLength <= 360) return [];
+  return [{
+    code: "content-density",
+    severity: "warning",
+    message: "Sample content may overflow in one or both renderers."
+  }];
+}
+
+function resolvedCapabilities(choices, content) {
   const selected = [
     choices.palette,
     choices.bodyFont,
@@ -138,7 +149,8 @@ function resolvedCapabilities(choices) {
   return {
     html: selected.every((option) => option.renderers.html),
     latex: selected.every((option) => option.renderers.latex),
-    approximations
+    approximations,
+    warnings: contentDensityWarnings(content)
   };
 }
 
@@ -167,7 +179,7 @@ function buildResolvedDesign(value, choices) {
       blockTitle: "Design note",
       blockBody: "The instant HTML preview and authoritative PDF use the same resolved design."
     },
-    capabilities: resolvedCapabilities(choices)
+    capabilities: resolvedCapabilities(choices, value.contentDefaults)
   });
 }
 
