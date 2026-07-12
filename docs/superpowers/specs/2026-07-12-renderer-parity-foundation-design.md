@@ -82,6 +82,14 @@ The initial `ResolvedDesign` contains these sections:
     widthUnits,
     heightUnits
   },
+  identity: {
+    name,
+    title,
+    subtitle,
+    author,
+    institute,
+    date
+  },
   colors: {
     background,
     primary,
@@ -103,7 +111,7 @@ The initial `ResolvedDesign` contains these sections:
     cornerLogo: { id, position, sizeUnits, scope, vector }
   },
   content: {
-    title,
+    sampleTitle,
     bullets,
     blockTitle,
     blockBody
