@@ -116,16 +116,22 @@ test("browser boot loads validation metadata for persisted themes", () => {
 test("browser resolves debounced preview designs and rejects stale responses", () => {
   const script = readPublicFile("app.js");
   assert.match(script, /resolvedDesign:\s*null/);
+  assert.match(script, /previewValidationErrors:\s*\[\]/);
   assert.match(script, /previewResolution:\s*null/);
   assert.match(script, /BeamerForgePreviewState/);
   assert.match(script, /async function requestResolvedDesign\(theme\)[\s\S]*?api\("\/api\/design\/resolve",[\s\S]*?method:\s*"POST"[\s\S]*?JSON\.stringify\(theme\)/);
   assert.match(script, /createPreviewLifecycle\(/);
   assert.match(script, /state\.resolvedDesign = design/);
   assert.match(script, /previewState\.applyPreviewFailure\(state, error\)/);
+  assert.match(script, /state\.previewValidationErrors = \[\]/);
   assert.match(script, /render\(\{ schedulePreview: false \}\)/);
   const scheduler = functionSource(script, "schedulePreviewResolution");
   assert.match(scheduler, /JSON\.stringify\(state\.theme\)/);
   assert.match(scheduler, /state\.previewResolution\.schedule/);
+  assert.match(scheduler, /transition === "reuse"/);
+  assert.match(scheduler, /previewState\.applyCachedReuse\(state\)/);
+  assert.match(scheduler, /setStatus\("Preview current"\)/);
+  assert.match(functionSource(script, "refreshStatuses"), /\.\.\.state\.validationErrors, \.\.\.state\.previewValidationErrors/);
   assert.match(functionSource(script, "render"), /schedulePreviewResolution\(\)/);
   assert.match(functionSource(script, "render"), /schedulePreview !== false/);
   assert.match(functionSource(script, "navigateToStep"), /render\(\{ schedulePreview: opts\.schedulePreview \}\)/);

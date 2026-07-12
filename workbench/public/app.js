@@ -32,7 +32,7 @@ const CUBE_GRID = 14;
 const CUBE_HALF = 1;
 
 const state = {
-  registry: null, theme: null, resolvedDesign: null, validationErrors: [], statuses: [], busy: false,
+  registry: null, theme: null, resolvedDesign: null, validationErrors: [], previewValidationErrors: [], statuses: [], busy: false,
   previewResolution: null,
   baseColor: { r: 69, g: 105, b: 144 }, scheme: "complementary",
   savedPalettes: [], paletteCounter: 0,
@@ -110,12 +110,13 @@ function applyChoice(stepId, optId) {
   if (stepId === "navigation") t.navigation.style = opt.id;
   if (stepId === "title-page") t.titlePage.layout = opt.id;
   state.validationErrors = state.validationErrors.filter((e) => errorStep(e) !== stepId);
+  state.previewValidationErrors = state.previewValidationErrors.filter((e) => errorStep(e) !== stepId);
   setStatus("Unsaved"); render();
 }
 
 function refreshStatuses() {
   if (!state.theme || !state.registry) { state.statuses = []; return; }
-  state.statuses = wizard.deriveStepStatuses(state.theme, state.registry, state.validationErrors);
+  state.statuses = wizard.deriveStepStatuses(state.theme, state.registry, [...state.validationErrors, ...state.previewValidationErrors]);
 }
 
 async function api(path, opts = {}) {
@@ -143,7 +144,7 @@ function initializePreviewResolution() {
     resolve: requestResolvedDesign,
     onSuccess(design, meta) {
       state.resolvedDesign = design;
-      state.validationErrors = [];
+      state.previewValidationErrors = [];
       if (meta.context?.render !== false) render({ schedulePreview: false });
     },
     onError(error, meta) {
@@ -162,7 +163,12 @@ async function resolvePreviewDesign(theme, { render: shouldRender = true, inputK
 function schedulePreviewResolution() {
   if (!state.theme || !state.previewResolution) return;
   const inputKey = JSON.stringify(state.theme);
-  state.previewResolution.schedule(clone(state.theme), inputKey, { render: true });
+  const transition = state.previewResolution.schedule(clone(state.theme), inputKey, { render: true });
+  if (transition === "reuse") {
+    previewState.applyCachedReuse(state);
+    setStatus("Preview current");
+  }
+  return transition;
 }
 
 function setStatus(text, cls = "") {
@@ -185,7 +191,7 @@ function updateActions() {
 async function saveDraft() {
   try {
     const r = await api("/api/theme", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(state.theme) });
-    state.theme = clone(r.theme); state.validationErrors = []; refreshStatuses();
+    state.theme = clone(r.theme); state.validationErrors = []; state.previewValidationErrors = []; refreshStatuses();
     setStatus("Saved", "is-saved"); return r;
   } catch (err) {
     if (Array.isArray(err.errors) && err.errors.length > 0) { state.validationErrors = err.errors; refreshStatuses(); render(); }
@@ -295,6 +301,7 @@ function applyGeneratedScheme(opts = {}) {
   const bg = tintForSurface(primary);
   Object.assign(state.theme.colors, { paletteId: "custom", background: bg, primary: primary.hex, accent: accent.hex, text: textColorFor(bg), blockBody: lightenForBlock(primary), alert: alert.hex });
   state.validationErrors = state.validationErrors.filter((e) => errorStep(e) !== "color");
+  state.previewValidationErrors = state.previewValidationErrors.filter((e) => errorStep(e) !== "color");
   setStatus("Unsaved");
   if (opts.render !== false) render();
 }
@@ -326,7 +333,7 @@ function refreshColorEditorOutputs() {
   if (schemeSw) replaceChildren(schemeSw, Array.from(renderSchemeSwatches().childNodes));
   const palDisp = document.getElementById("paletteDisplay");
   if (palDisp) replaceChildren(palDisp, Array.from(renderPaletteDisplay().childNodes));
-  syncCubeColor(); renderCube(); refreshStatuses(); renderStepList(); renderSummary(); schedulePreviewResolution(); renderPreview(); updateActions();
+  syncCubeColor(); renderCube(); schedulePreviewResolution(); refreshStatuses(); renderStepList(); renderSummary(); renderPreview(); updateActions();
 }
 
 function copyText(text, msg) {

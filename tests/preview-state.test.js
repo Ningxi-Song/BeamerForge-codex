@@ -7,6 +7,7 @@ const {
   createPreviewLifecycle,
   applyResolvedCanvas,
   applyPreviewFailure,
+  applyCachedReuse,
   trustedPreviewUrl
 } = require(modulePath);
 
@@ -67,7 +68,7 @@ test("trusted preview URLs must stay on the current origin under assets", () => 
 
 test("structured preview failures update field errors and preserve the last design", () => {
   const lastDesign = { source: { themeHash: "last-valid" } };
-  const state = { resolvedDesign: lastDesign, validationErrors: [{ path: "old" }] };
+  const state = { resolvedDesign: lastDesign, previewValidationErrors: [{ path: "old" }] };
   const error = Object.assign(new Error("invalid"), {
     errors: [{ path: "identity.title", message: "must be a string" }]
   });
@@ -75,14 +76,30 @@ test("structured preview failures update field errors and preserve the last desi
   applyPreviewFailure(state, error);
 
   assert.equal(state.resolvedDesign, lastDesign);
-  assert.deepEqual(state.validationErrors, error.errors);
+  assert.deepEqual(state.previewValidationErrors, error.errors);
 });
 
 test("unstructured preview failures preserve existing field errors", () => {
   const existing = [{ path: "colors.primary", message: "must be a color" }];
-  const state = { resolvedDesign: {}, validationErrors: existing };
+  const state = { resolvedDesign: {}, previewValidationErrors: existing };
   applyPreviewFailure(state, Object.assign(new Error("offline"), { errors: [] }));
-  assert.equal(state.validationErrors, existing);
+  assert.equal(state.previewValidationErrors, existing);
+});
+
+test("cached reuse clears only preview-owned errors and preserves the resolved design", () => {
+  const design = { source: { themeHash: "A" } };
+  const serverErrors = [{ path: "identity.title" }];
+  const state = {
+    resolvedDesign: design,
+    validationErrors: serverErrors,
+    previewValidationErrors: [{ path: "colors.primary" }]
+  };
+
+  applyCachedReuse(state);
+
+  assert.equal(state.resolvedDesign, design);
+  assert.equal(state.validationErrors, serverErrors);
+  assert.deepEqual(state.previewValidationErrors, []);
 });
 
 test("same key dedupes while pending and after success", async () => {
@@ -108,7 +125,7 @@ test("reverting A to B to A cancels B before its timer runs", async () => {
   h.lifecycle.schedule({ id: "B" }, "B");
 
   assert.equal(h.timers.size, 1);
-  assert.equal(h.lifecycle.schedule({ id: "A" }, "A"), false);
+  assert.equal(h.lifecycle.schedule({ id: "A" }, "A"), "reuse");
   assert.equal(h.timers.size, 0);
   assert.equal(h.lifecycle.state.desiredKey, "A");
   assert.equal(h.lifecycle.state.pendingKey, null);
@@ -125,7 +142,7 @@ for (const outcome of ["success", "failure"]) {
     h.lifecycle.schedule({ id: "B" }, "B");
     const bRun = h.timers.runNext();
 
-    assert.equal(h.lifecycle.schedule({ id: "A" }, "A"), false);
+    assert.equal(h.lifecycle.schedule({ id: "A" }, "A"), "reuse");
     assert.equal(h.lifecycle.state.desiredKey, "A");
     assert.equal(h.lifecycle.state.pendingKey, null);
     if (outcome === "success") b.resolve({ id: "B" });
@@ -139,6 +156,27 @@ for (const outcome of ["success", "failure"]) {
     assert.equal(h.errors.length, 0);
   });
 }
+
+test("failed B transitions once to cached A reuse without requesting A again", async () => {
+  const calls = [];
+  const h = lifecycleHarness(async (input) => {
+    calls.push(input.id);
+    if (input.id === "B") throw Object.assign(new Error("invalid B"), { errors: [{ path: "colors.primary" }] });
+    return input;
+  });
+  h.lifecycle.schedule({ id: "A" }, "A");
+  await h.timers.runNext();
+  h.lifecycle.schedule({ id: "B" }, "B");
+  await h.timers.runNext();
+
+  assert.equal(h.lifecycle.schedule({ id: "A" }, "A"), "reuse");
+  assert.equal(h.lifecycle.schedule({ id: "A" }, "A"), false);
+  assert.deepEqual(calls, ["A", "B"]);
+  assert.equal(h.lifecycle.state.successfulKey, "A");
+  assert.equal(h.lifecycle.state.desiredKey, "A");
+  assert.equal(h.lifecycle.state.pendingKey, null);
+  assert.equal(h.lifecycle.schedule({ id: "B" }, "B"), true);
+});
 
 test("current failure clears pending and permits an identical retry", async () => {
   let calls = 0;

@@ -31,15 +31,17 @@
     }
 
     function begin(input, key, context, delayed) {
+      const previousDesiredKey = state.desiredKey;
       state.desiredKey = key;
       if (key === state.successfulKey) {
+        const reused = previousDesiredKey !== null && previousDesiredKey !== key;
         if (state.pendingKey !== null && state.pendingKey !== key) {
           if (state.timer !== null) clearTimeoutFn(state.timer);
           state.timer = null;
           state.pendingKey = null;
           state.sequence++;
         }
-        return delayed ? false : Promise.resolve(null);
+        return delayed ? (reused ? "reuse" : false) : Promise.resolve(null);
       }
       if (key === state.pendingKey) return delayed ? false : Promise.resolve(null);
       if (state.timer !== null) clearTimeoutFn(state.timer);
@@ -68,7 +70,12 @@
   }
 
   function applyPreviewFailure(state, error) {
-    if (Array.isArray(error?.errors) && error.errors.length > 0) state.validationErrors = error.errors;
+    if (Array.isArray(error?.errors) && error.errors.length > 0) state.previewValidationErrors = error.errors;
+    return state.resolvedDesign;
+  }
+
+  function applyCachedReuse(state) {
+    state.previewValidationErrors = [];
     return state.resolvedDesign;
   }
 
@@ -83,5 +90,5 @@
     }
   }
 
-  return { createPreviewLifecycle, applyResolvedCanvas, applyPreviewFailure, trustedPreviewUrl };
+  return { createPreviewLifecycle, applyResolvedCanvas, applyPreviewFailure, applyCachedReuse, trustedPreviewUrl };
 });
