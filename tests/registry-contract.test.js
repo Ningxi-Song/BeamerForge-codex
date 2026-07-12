@@ -34,9 +34,7 @@ const SEMANTIC_FIELDS = [
   ["navigation", "page-number", "latexFootline", "must be a string"],
   ["titlePages", "left-curtain", "alignment", "must be a non-empty string"],
   ["titlePages", "left-curtain", "layout", "must be a non-empty string"],
-  ["logos", "duck", "vectorId", "must be null or a non-empty string"],
-  ["logos", "duck", "previewUrl", "must be a string"],
-  ["logos", "duck", "asset", "must be null or a string"]
+  ["logos", "duck", "previewUrl", "must be a string"]
 ];
 
 for (const [collection, id, field, message] of SEMANTIC_FIELDS) {
@@ -76,6 +74,57 @@ test("registry semantic validation checks non-empty strings and font asset entri
       field: "label",
       message: "must be a non-empty string"
     }
+  ]);
+});
+
+test("logo registry contract validates canonical vectors and semantic identity", () => {
+  const malformed = getRegistry();
+  malformed.logos.duck.vector.primitives[0].fill = "missing";
+  assert.deepEqual(validateRegistryContract(malformed), [{
+    collection: "logos",
+    id: "duck",
+    field: "vector.primitives[0].fill",
+    message: "must name a declared color"
+  }]);
+
+  const unmatched = getRegistry();
+  unmatched.logos.duck.vectorId = "other";
+  assert.deepEqual(validateRegistryContract(unmatched), [{
+    collection: "logos",
+    id: "duck",
+    field: "vectorId",
+    message: "must equal vector.id"
+  }]);
+});
+
+test("logo registry contract permits only its exact generated same-origin preview URL", () => {
+  for (const previewUrl of [
+    "https://example.test/assets/generated/logos/duck.svg",
+    "//example.test/assets/generated/logos/duck.svg",
+    "/assets/generated/logos/other.svg",
+    "/assets/generated/logos/../duck.svg"
+  ]) {
+    const registry = getRegistry();
+    registry.logos.duck.previewUrl = previewUrl;
+    assert.deepEqual(validateRegistryContract(registry), [{
+      collection: "logos",
+      id: "duck",
+      field: "previewUrl",
+      message: "must equal the generated vector asset path"
+    }]);
+  }
+});
+
+test("null logo vectors require null identity, empty preview URL, and no asset", () => {
+  const registry = getRegistry();
+  registry.logos.none.vectorId = "duck";
+  registry.logos.none.previewUrl = "/assets/generated/logos/duck.svg";
+  registry.logos.none.asset = "duck.svg";
+
+  assert.deepEqual(validateRegistryContract(registry), [
+    { collection: "logos", id: "none", field: "asset", message: "must be null" },
+    { collection: "logos", id: "none", field: "vectorId", message: "must be null when vector is null" },
+    { collection: "logos", id: "none", field: "previewUrl", message: "must be empty when vector is null" }
   ]);
 });
 

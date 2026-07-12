@@ -1,5 +1,7 @@
 "use strict";
 
+const { validateVector } = require("./vector-renderers");
+
 const COLLECTIONS = [
   "palettes",
   "fonts",
@@ -62,17 +64,45 @@ const SEMANTIC_RULES = {
     layout: nonEmptyString
   },
   logos: {
-    vectorId: {
-      valid: (value) => value === null || nonEmptyString.valid(value),
-      message: "must be null or a non-empty string"
-    },
     previewUrl: string,
     asset: {
-      valid: (value) => value === null || typeof value === "string",
-      message: "must be null or a string"
+      valid: (value) => value === null,
+      message: "must be null"
     }
   }
 };
+
+function logoVectorErrors(collection, id, option) {
+  if (collection !== "logos" || !option || typeof option !== "object" || Array.isArray(option)) return [];
+  const errors = [];
+  if (option.vector === null) {
+    if (option.vectorId !== null) {
+      errors.push({ collection, id, field: "vectorId", message: "must be null when vector is null" });
+    }
+    if (option.previewUrl !== "") {
+      errors.push({ collection, id, field: "previewUrl", message: "must be empty when vector is null" });
+    }
+    return errors;
+  }
+
+  const vectorErrors = validateVector(option.vector);
+  for (const vectorError of vectorErrors) {
+    errors.push({
+      collection,
+      id,
+      field: vectorError.path ? `vector.${vectorError.path}` : "vector",
+      message: vectorError.message
+    });
+  }
+  if (option.vector && typeof option.vector.id === "string" && option.vectorId !== option.vector.id) {
+    errors.push({ collection, id, field: "vectorId", message: "must equal vector.id" });
+  }
+  if (option.vector && typeof option.vector.id === "string" && typeof option.previewUrl === "string"
+    && option.previewUrl !== `/assets/generated/logos/${option.vector.id}.svg`) {
+    errors.push({ collection, id, field: "previewUrl", message: "must equal the generated vector asset path" });
+  }
+  return errors;
+}
 
 function semanticErrors(collection, id, option) {
   if (!option || typeof option !== "object" || Array.isArray(option)) return [];
@@ -111,6 +141,7 @@ function validateRegistryContract(registry) {
 
     for (const [id, option] of Object.entries(options)) {
       errors.push(...semanticErrors(collection, id, option));
+      errors.push(...logoVectorErrors(collection, id, option));
       for (const renderer of ["html", "latex"]) {
         if (typeof option?.renderers?.[renderer] !== "boolean") {
           errors.push({

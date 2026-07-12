@@ -3,6 +3,7 @@
 const { getRegistry } = require("../registry/options");
 const { resolveDesignBundle } = require("../design/resolve-design");
 const { hexWithoutHash, normalizeLatexNewlines, joinNonEmpty } = require("../lib/utils");
+const { renderTikz } = require("../design/vector-renderers");
 
 const LATEX_SPECIAL_CHARS = {
   "\\": "\\textbackslash{}",
@@ -162,33 +163,26 @@ function generateClassTex(design) {
 }
 ` : "";
   const logoWidth = `${cornerLogo.sizeUnits}cm`;
-  const logoScale = cornerLogo.sizeUnits === 1.2 ? "0.24" : "0.16";
+  const logoScale = cornerLogo.vector === null
+    ? "0"
+    : String(cornerLogo.sizeUnits / cornerLogo.vector.viewBox[2]);
   const logoX = cornerLogo.position === "top-left" ? "0.4cm" : String.raw`\dimexpr\paperwidth-${logoWidth}-0.4cm\relax`;
   const logoGuardOpen = cornerLogo.scope === "content-frames" ? String.raw`\ifnum\insertframenumber>1\relax` : "";
   const logoGuardClose = cornerLogo.scope === "content-frames" ? String.raw`\fi` : "";
   let logoTemplate = "";
-  if (cornerLogo.vectorId === "duck") logoTemplate = String.raw`
+  if (cornerLogo.vector !== null) logoTemplate = String.raw`
 \RequirePackage{tikz}
 \RequirePackage[absolute,overlay]{textpos}
-\definecolor{bfDuckYellow}{HTML}{F4B942}
-\definecolor{bfDuckOrange}{HTML}{E67E22}
 \setbeamertemplate{background canvas}{%
   ${logoGuardOpen}
   \begin{textblock*}{${logoWidth}}(${logoX},0.35cm)
     \begin{tikzpicture}[scale=${logoScale}]
-      \fill[bfDuckYellow] (0,0) ellipse (2.3 and 1.25);
-      \fill[bfDuckYellow] (1.55,1.05) circle (0.9);
-      \fill[bfDuckOrange] (2.2,1.15) -- (3.25,0.9) -- (2.2,0.65) -- cycle;
-      \fill[black] (1.8,1.3) circle (0.11);
-      \fill[bfDuckYellow!82!black] (-1.1,0.15) ellipse (1.15 and 0.62);
+${renderTikz(cornerLogo.vector)}
     \end{tikzpicture}
   \end{textblock*}%
   ${logoGuardClose}
 }
 `;
-  else if (cornerLogo.vectorId !== null) {
-    throw new Error(`Unsupported trusted logo vector: ${cornerLogo.vectorId}`);
-  }
 
   return String.raw`\NeedsTeXFormat{LaTeX2e}
 \ProvidesClass{theme}[2026/06/28 BeamerForge generated theme]

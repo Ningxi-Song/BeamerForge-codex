@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("node:path");
+const duckVector = require("../elements/decorations/logos/duck-vector");
 const { clone } = require("../lib/utils");
 
 function defineRegistryCollection(options, supportById) {
@@ -452,13 +453,14 @@ const TITLE_PAGES = defineRegistryCollection({
 });
 
 const LOGOS = defineRegistryCollection({
-  none: { id: "none", label: "No Logo", asset: null, previewUrl: "", vectorId: null },
+  none: { id: "none", label: "No Logo", vector: null, vectorId: null, previewUrl: "", asset: null },
   duck: {
     id: "duck",
     label: "Duck",
-    asset: "elements/decorations/logos/duck.svg",
-    previewUrl: "/assets/elements/decorations/logos/duck.svg",
-    vectorId: "duck"
+    vector: duckVector,
+    vectorId: "duck",
+    previewUrl: "/assets/generated/logos/duck.svg",
+    asset: null
   }
 }, {
   none: { html: true, latex: true },

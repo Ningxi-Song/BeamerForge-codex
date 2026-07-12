@@ -59,8 +59,8 @@ test("resolved canvas applies exact 4:3 aspect ratio", () => {
 test("trusted preview URLs must stay on the current origin under assets", () => {
   const location = { href: "http://127.0.0.1:5177/color", origin: "http://127.0.0.1:5177" };
   assert.equal(
-    trustedPreviewUrl("/assets/elements/decorations/logos/duck.svg", location),
-    "http://127.0.0.1:5177/assets/elements/decorations/logos/duck.svg"
+    trustedPreviewUrl("/assets/generated/logos/duck.svg", location),
+    "http://127.0.0.1:5177/assets/generated/logos/duck.svg"
   );
   assert.equal(trustedPreviewUrl("/api/theme", location), null);
   assert.equal(trustedPreviewUrl("https://evil.example/assets/duck.svg", location), null);

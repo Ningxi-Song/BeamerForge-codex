@@ -20,6 +20,7 @@ const {
 } = require("./theme-state");
 const { createHandoff, importAiDraft } = require("./ai-handoff");
 const { diffThemes } = require("./theme-diff");
+const { renderSvg } = require("../design/vector-renderers");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const WIZARD_ROUTES = new Set([
@@ -216,10 +217,15 @@ function allowedAssets(registry) {
   for (const font of Object.values(registry.fonts || {})) {
     for (const a of font.assets || []) set.add(normalizeAssetPath(a));
   }
-  for (const logo of Object.values(registry.logos || {})) {
-    if (logo.asset) set.add(normalizeAssetPath(logo.asset));
-  }
   return set;
+}
+
+function generatedLogoAssets(registry) {
+  const assets = new Map();
+  for (const logo of Object.values(registry.logos || {})) {
+    if (logo.vector !== null) assets.set(logo.previewUrl, logo.vector);
+  }
+  return assets;
 }
 
 function resolveAssetFile(rootDir, requestPath, allowed) {
@@ -250,6 +256,7 @@ function createWorkbenchServer(options = {}) {
     compiler: options.previewCompiler || compileTemplateAsync
   });
   const allowedAssetPaths = allowedAssets(registry);
+  const generatedLogos = generatedLogoAssets(registry);
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -415,6 +422,12 @@ function createWorkbenchServer(options = {}) {
         return;
       }
       if (req.method === "GET" && url.pathname.startsWith("/assets/")) {
+        if (url.pathname.startsWith("/assets/generated/logos/")) {
+          const vector = generatedLogos.get(url.pathname);
+          if (!vector) { sendText(res, 404, "Not found"); return; }
+          sendText(res, 200, renderSvg(vector), "image/svg+xml");
+          return;
+        }
         const filePath = resolveAssetFile(rootDir, url.pathname, allowedAssetPaths);
         if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) { sendText(res, 404, "Not found"); return; }
         const ext = path.extname(filePath).toLowerCase();

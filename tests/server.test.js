@@ -8,6 +8,8 @@ const { DEFAULT_THEME } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
 const { resolveDesign } = require("../design/resolve-design");
 const { writeTemplateProject: realWriteTemplateProject } = require("../generators/project-writer");
+const duck = require("../elements/decorations/logos/duck-vector");
+const { renderSvg } = require("../design/vector-renderers");
 
 function listen(server) {
   return new Promise((resolve) => {
@@ -571,16 +573,23 @@ test("server serves read-only local font assets and rejects asset traversal", as
   assert.equal(gitConfig.status, 404);
 });
 
-test("server serves trusted SVG logo assets with an SVG content type", async (t) => {
+test("server generates only registered vector logo SVG routes", async (t) => {
   const stateDir = tempDir("beamerforge-server-");
   const baseUrl = await withServer(t, { stateDir });
 
-  const response = await fetch(`${baseUrl}/assets/elements/decorations/logos/duck.svg`);
+  const response = await fetch(`${baseUrl}/assets/generated/logos/duck.svg`);
   const body = await response.text();
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "image/svg+xml");
-  assert.match(body, /<svg\b/);
+  assert.equal(body, renderSvg(duck));
+
+  for (const route of [
+    "/assets/generated/logos/missing.svg",
+    "/assets/generated/logos/duck.svg/extra",
+    "/assets/generated/logos/..%2fduck.svg",
+    "/assets/generated/logos/%2e%2e%5cduck.svg"
+  ]) assert.equal((await fetch(`${baseUrl}${route}`)).status, 404, route);
 });
 
 test("default public directory serves index.html at root", async (t) => {

@@ -5,6 +5,7 @@ const path = require("node:path");
 const { generateResolvedFiles } = require("./latex");
 const { getRegistry, resolveAssetPath } = require("../registry/options");
 const { resolveDesignBundle } = require("../design/resolve-design");
+const { renderSvg } = require("../design/vector-renderers");
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -53,16 +54,6 @@ function copyFontAssets(design, templateDir, rootDir) {
   return copied;
 }
 
-function copyDecorationAssets(design, templateDir, rootDir) {
-  const asset = design.components.cornerLogo.trustedAssetPath;
-  if (!asset) return [];
-  const source = trustedSourcePath(rootDir, asset);
-  const destination = path.join(templateDir, "assets", "corner-logo.svg");
-  ensureDir(path.dirname(destination));
-  fs.copyFileSync(source, destination);
-  return [destination];
-}
-
 function assertInsideRoot(templateDir, outputRoot) {
   if (!outputRoot) return;
   const rel = path.relative(path.resolve(outputRoot), path.resolve(templateDir));
@@ -86,6 +77,9 @@ function writeTemplateProject(theme, templateDir, options = {}) {
     ...generateResolvedFiles(design),
     "theme.json": `${JSON.stringify(normalizedTheme, null, 2)}\n`
   };
+  if (design.components.cornerLogo.vector !== null) {
+    files["assets/corner-logo.svg"] = renderSvg(design.components.cornerLogo.vector);
+  }
   const written = [];
   for (const [rel, content] of Object.entries(files)) {
     const abs = path.join(templateDir, rel);
@@ -93,10 +87,7 @@ function writeTemplateProject(theme, templateDir, options = {}) {
     written.push(abs);
   }
 
-  const copiedAssets = [
-    ...copyFontAssets(design, templateDir, rootDir),
-    ...copyDecorationAssets(design, templateDir, rootDir)
-  ];
+  const copiedAssets = copyFontAssets(design, templateDir, rootDir);
   return { templateDir, written, copiedAssets };
 }
 

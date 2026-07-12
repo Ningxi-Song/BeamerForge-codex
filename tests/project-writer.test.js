@@ -8,6 +8,8 @@ const { getRegistry } = require("../registry/options");
 const { writeTemplateProject } = require("../generators/project-writer");
 const { resolveDesignBundle } = require("../design/resolve-design");
 const { parseArgs } = require("../generators/cli");
+const duck = require("../elements/decorations/logos/duck-vector");
+const { renderSvg } = require("../design/vector-renderers");
 
 test("parseArgs rejects missing --out value", () => {
   assert.throws(
@@ -144,17 +146,19 @@ test("detects font asset basename collisions", () => {
   );
 });
 
-test("copies a trusted corner logo into the generated project", () => {
+test("generates a trusted corner logo from the resolved vector", () => {
   const theme = structuredClone(DEFAULT_THEME);
   theme.decorations.cornerLogo = { id: "duck", position: "top-right", size: "small", scope: "content-frames" };
   const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-logo-output-"));
   const templateDir = path.join(outputRoot, "duck-theme");
   const result = writeTemplateProject(theme, templateDir, { registry: getRegistry(), rootDir: process.cwd(), outputRoot });
-  assert.equal(fs.existsSync(path.join(templateDir, "assets", "corner-logo.svg")), true);
-  assert.equal(result.copiedAssets.includes(path.join(templateDir, "assets", "corner-logo.svg")), true);
+  const destination = path.join(templateDir, "assets", "corner-logo.svg");
+  assert.equal(fs.readFileSync(destination, "utf8"), renderSvg(duck));
+  assert.equal(result.written.includes(destination), true);
+  assert.equal(result.copiedAssets.includes(destination), false);
 });
 
-test("rejects trusted font and decoration assets that escape rootDir", () => {
+test("rejects trusted font assets that escape rootDir", () => {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-asset-root-"));
   const rootDir = path.join(parent, "root");
   fs.mkdirSync(rootDir);
@@ -174,16 +178,18 @@ test("rejects trusted font and decoration assets that escape rootDir", () => {
     /Trusted asset path escapes rootDir/
   );
 
-  const logoRegistry = getRegistry();
-  logoRegistry.logos["escaping-logo"] = {
-    ...logoRegistry.logos.duck,
-    id: "escaping-logo",
-    asset: "../outside.svg"
-  };
-  const logoTheme = structuredClone(DEFAULT_THEME);
-  logoTheme.decorations.cornerLogo.id = "escaping-logo";
-  assert.throws(
-    () => writeTemplateProject(logoTheme, path.join(outputRoot, "logo"), { registry: logoRegistry, rootDir, outputRoot }),
-    /Trusted asset path escapes rootDir/
-  );
+});
+
+test("logo generation does not read a repository SVG source", () => {
+  const theme = structuredClone(DEFAULT_THEME);
+  theme.decorations.cornerLogo.id = "duck";
+  const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beamerforge-vector-output-"));
+  const templateDir = path.join(outputRoot, "duck-theme");
+
+  assert.doesNotThrow(() => writeTemplateProject(theme, templateDir, {
+    registry: getRegistry(),
+    rootDir: path.join(outputRoot, "empty-root"),
+    outputRoot
+  }));
+  assert.equal(fs.readFileSync(path.join(templateDir, "assets", "corner-logo.svg"), "utf8"), renderSvg(duck));
 });

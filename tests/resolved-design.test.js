@@ -12,6 +12,7 @@ const {
   ThemeValidationError
 } = require("../design/resolve-design");
 const { hashCanonical } = require("../lib/canonical-json");
+const duck = require("../elements/decorations/logos/duck-vector");
 
 function clone(value) {
   return structuredClone(value);
@@ -40,7 +41,7 @@ test("resolved design contains full identity, exact canvas, colors, and componen
   assert.equal(design.components.bullet.id, "pifont-outline");
   assert.equal(design.components.navigation.id, "page-number");
   assert.equal(design.source.generatorVersion, GENERATOR_VERSION);
-  assert.equal(GENERATOR_VERSION, "1");
+  assert.equal(GENERATOR_VERSION, "2");
   assert.match(design.source.themeHash, /^[a-f0-9]{64}$/);
 });
 
@@ -232,7 +233,7 @@ test("4:3 themes resolve to normalized canvas units", () => {
   });
 });
 
-test("medium duck logos resolve normalized size, vector identity, and trusted asset path", () => {
+test("medium duck logos resolve normalized size, vector identity, and canonical art", () => {
   const theme = clone(DEFAULT_THEME);
   theme.decorations.cornerLogo = {
     id: "duck",
@@ -248,22 +249,25 @@ test("medium duck logos resolve normalized size, vector identity, and trusted as
     sizeUnits: 1.2,
     scope: "all-frames",
     vectorId: "duck",
-    previewUrl: "/assets/elements/decorations/logos/duck.svg",
-    trustedAssetPath: "elements/decorations/logos/duck.svg"
+    previewUrl: "/assets/generated/logos/duck.svg",
+    vector: duck
   });
 });
 
-test("trusted logo asset paths are frozen and detached from the registry", () => {
+test("trusted logo vectors are deeply frozen and detached from registry mutations", () => {
   const theme = clone(DEFAULT_THEME);
   theme.decorations.cornerLogo.id = "duck";
   const registry = getRegistry();
   const design = resolveDesign(theme, registry);
 
-  registry.logos.duck.asset = "changed-after-resolution.svg";
+  registry.logos.duck.vector.primitives[0].cx = 5;
 
-  assert.equal(design.components.cornerLogo.trustedAssetPath, "elements/decorations/logos/duck.svg");
+  assert.equal(design.components.cornerLogo.vector.primitives[0].cx, duck.primitives[0].cx);
+  assert.notEqual(design.components.cornerLogo.vector, registry.logos.duck.vector);
   assert.equal(Object.isFrozen(design.components.cornerLogo), true);
-  assert.throws(() => { design.components.cornerLogo.trustedAssetPath = "mutated.svg"; }, TypeError);
+  assert.equal(Object.isFrozen(design.components.cornerLogo.vector), true);
+  assert.equal(Object.isFrozen(design.components.cornerLogo.vector.primitives[0]), true);
+  assert.throws(() => { design.components.cornerLogo.vector.primitives[0].cx = 4; }, TypeError);
 });
 
 test("typography assets are detached from the registry", () => {

@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry, resolveThemeChoices, resolveAssetPath } = require("../registry/options");
+const duck = require("../elements/decorations/logos/duck-vector");
 
 test("registry covers the rollout minimum", () => {
   const registry = getRegistry();
@@ -134,6 +135,11 @@ test("Neuton font assets exist and use valid fontspec order", () => {
 test("registry exposes trusted corner logos", () => {
   const registry = getRegistry();
   assert.equal(registry.logos.none.asset, null);
-  assert.equal(registry.logos.duck.asset, "elements/decorations/logos/duck.svg");
-  assert.equal(fs.existsSync(path.resolve(registry.logos.duck.asset)), true);
+  assert.equal(registry.logos.none.vector, null);
+  assert.equal(registry.logos.none.previewUrl, "");
+  assert.equal(registry.logos.duck.asset, null);
+  assert.deepEqual(registry.logos.duck.vector, duck);
+  assert.notEqual(registry.logos.duck.vector, duck);
+  assert.equal(registry.logos.duck.vectorId, "duck");
+  assert.equal(registry.logos.duck.previewUrl, "/assets/generated/logos/duck.svg");
 });

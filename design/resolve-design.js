@@ -6,7 +6,7 @@ const { assertRegistryContract } = require("./registry-contract");
 const { hashCanonical } = require("../lib/canonical-json");
 const { clone, textColorForBg } = require("../lib/utils");
 
-const GENERATOR_VERSION = "1";
+const GENERATOR_VERSION = "2";
 
 class ThemeValidationError extends Error {
   constructor(errors) {
@@ -105,7 +105,7 @@ function resolvedComponents(theme, choices) {
       scope: logo.scope,
       vectorId: choices.logo.vectorId,
       previewUrl: choices.logo.previewUrl,
-      trustedAssetPath: choices.logo.asset
+      vector: clone(choices.logo.vector)
     }
   };
 }

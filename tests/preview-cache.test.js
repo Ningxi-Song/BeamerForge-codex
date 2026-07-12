@@ -7,7 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
-const { resolveDesign, resolveDesignBundle } = require("../design/resolve-design");
+const { resolveDesign, resolveDesignBundle, GENERATOR_VERSION } = require("../design/resolve-design");
 const { createPreviewCache, isSafeCacheKey } = require("../workbench/preview-cache");
 
 function tempDir(prefix = "beamerforge-preview-") {
@@ -318,7 +318,7 @@ test("corrupt, missing, or mismatched metadata and missing PDFs are cache misses
     const cacheRoot = tempDir();
     let compiles = 0;
     const service = createService({ cacheRoot, compiler: pdfCompiler("new", () => { compiles += 1; }) });
-    const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
+    const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-${GENERATOR_VERSION}`;
     const dir = path.join(cacheRoot, key, "generations", "manual-generation");
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "main.pdf"), "stale");
@@ -671,7 +671,7 @@ test("temporary directory setup errors resolve to failed DTOs", async () => {
 test("orphan temporary directories are ignored", async () => {
   const cacheRoot = tempDir();
   const service = createService({ cacheRoot });
-  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
+  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-${GENERATOR_VERSION}`;
   const orphan = path.join(cacheRoot, `${key}.tmp-orphan`);
   fs.mkdirSync(orphan);
   fs.writeFileSync(path.join(orphan, "main.pdf"), "orphan");
@@ -699,7 +699,7 @@ function writeExternalGeneration(directory, cacheKey) {
 test("resolvePdf rejects a generation directory symlink escape", (t) => {
   const cacheRoot = tempDir();
   const service = createService({ cacheRoot });
-  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
+  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-${GENERATOR_VERSION}`;
   const generations = path.join(cacheRoot, key, "generations");
   const outside = tempDir("beamerforge-external-generation-");
   writeExternalGeneration(outside, key);
@@ -753,7 +753,7 @@ test("metadata publication never follows an external file symlink", async (t) =>
 test("resolvePdf rejects a Windows junction escape", { skip: process.platform !== "win32" }, () => {
   const cacheRoot = tempDir();
   const service = createService({ cacheRoot });
-  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
+  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-${GENERATOR_VERSION}`;
   const generations = path.join(cacheRoot, key, "generations");
   const outside = tempDir("beamerforge-external-junction-");
   writeExternalGeneration(outside, key);
@@ -766,7 +766,7 @@ test("resolvePdf rejects a Windows junction escape", { skip: process.platform !=
 test("compile never creates generation folders through a Windows key junction", { skip: process.platform !== "win32" }, async () => {
   const cacheRoot = tempDir();
   const service = createService({ cacheRoot });
-  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-1`;
+  const key = `${resolveDesign(DEFAULT_THEME, getRegistry()).source.themeHash}-${GENERATOR_VERSION}`;
   const outside = tempDir("beamerforge-external-key-junction-");
   fs.symlinkSync(outside, path.join(cacheRoot, key), "junction");
 

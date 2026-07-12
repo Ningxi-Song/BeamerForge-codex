@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { DEFAULT_THEME } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
 const { resolveDesign, resolveDesignBundle } = require("../design/resolve-design");
+const duck = require("../elements/decorations/logos/duck-vector");
 const {
   generateFiles,
   generateResolvedFiles,
@@ -218,21 +219,25 @@ test("dispatches trusted logo rendering by resolved vector semantics", () => {
   assert.doesNotMatch(generateFiles(nullTheme, registry)["theme.cls"], /\\begin\{tikzpicture\}/);
 });
 
-test("rejects unsupported trusted vector identities", () => {
+test("renders a new trusted vector from its actual art without vector ID dispatch", () => {
   const registry = getRegistry();
+  const futureVector = structuredClone(duck);
+  futureVector.id = "future-vector";
+  futureVector.primitives[3].cx = 4.2;
   registry.logos.future = {
     ...registry.logos.duck,
     id: "future",
     label: "Future Vector",
-    vectorId: "future-vector"
+    vector: futureVector,
+    vectorId: "future-vector",
+    previewUrl: "/assets/generated/logos/future-vector.svg"
   };
   const theme = structuredClone(DEFAULT_THEME);
   theme.decorations.cornerLogo.id = "future";
 
-  assert.throws(
-    () => generateFiles(theme, registry),
-    /Unsupported trusted logo vector: future-vector/
-  );
+  const classFile = generateFiles(theme, registry)["theme.cls"];
+  assert.match(classFile, /bfVectorFutureVectorBlack/);
+  assert.match(classFile, /\(4\.2,1\.2\) circle/);
 });
 
 test("raw wrapper serializes a normalized complete legacy theme", () => {
@@ -281,4 +286,15 @@ test("generates a trusted top-right duck logo overlay", () => {
   assert.doesNotMatch(files["theme.cls"], /\\includegraphics.*corner-logo\.svg/);
   assert.match(files["theme.cls"], /background canvas/);
   assert.match(files["theme.cls"], /0\.8cm/);
+  assert.match(files["theme.cls"], /\\begin\{tikzpicture\}\[scale=0\.13333333333333333\]/);
+  assert.equal((files["theme.cls"].match(/^\s*\\(?:fill|draw)\b/gm) || []).length, 5);
+});
+
+test("medium duck logo scale is derived from vector viewBox width", () => {
+  const theme = structuredClone(DEFAULT_THEME);
+  theme.decorations.cornerLogo = { id: "duck", position: "top-left", size: "medium", scope: "all-frames" };
+  const classFile = generateFiles(theme, getRegistry())["theme.cls"];
+
+  assert.match(classFile, /\{1\.2cm\}/);
+  assert.match(classFile, /\\begin\{tikzpicture\}\[scale=0\.19999999999999998\]/);
 });
