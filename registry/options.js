@@ -3,10 +3,19 @@
 const path = require("node:path");
 const { clone } = require("../lib/utils");
 
+function withRendererSupport(options) {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(options).map(([id, option]) => [
+      id,
+      { ...option, renderers: { html: true, latex: true } }
+    ])
+  ));
+}
+
 const PAGE_NUMBER_FOOTLINE =
   "\\setbeamertemplate{footline}{%\\n  \\hfill\\insertframenumber/\\inserttotalframenumber\\hspace{1.2em}\\vspace{0.8em}\\n}";
 
-const PALETTES = Object.freeze({
+const PALETTES = withRendererSupport({
   "academic-blue": {
     id: "academic-blue",
     label: "Academic Blue",
@@ -111,7 +120,7 @@ function localFont(id, label, fileName, mode, fallback) {
   };
 }
 
-const FONTS = Object.freeze({
+const FONTS = withRendererSupport({
   palatino: {
     id: "palatino",
     label: "Palatino",
@@ -202,7 +211,7 @@ const PIFONT = "\\usepackage{pifont}";
 const AMSSYMB = "\\usepackage{amssymb}";
 const TIKZ_SHAPES = "\\RequirePackage{tikz}\\n\\usetikzlibrary{shapes.geometric}";
 
-const BULLETS = Object.freeze({
+const BULLETS = withRendererSupport({
   "pifont-outline": bullet("pifont-outline", "Pifont Outline", PIFONT, "\\ding{109}", "\\ding{119}", "□"),
   triangle: bullet("triangle", "Triangle", AMSSYMB, "$\\blacktriangleright$", "$\\triangleright$", ">"),
   "ding-arrow": bullet("ding-arrow", "Ding Arrow", PIFONT, "\\ding{220}", "\\ding{216}", "➜"),
@@ -237,7 +246,7 @@ const BULLETS = Object.freeze({
     "$\\circ$", "⬣")
 });
 
-const BLOCKS = Object.freeze({
+const BLOCKS = withRendererSupport({
   classic: {
     id: "classic",
     label: "Classic",
@@ -261,7 +270,7 @@ const BLOCKS = Object.freeze({
   }
 });
 
-const NAVIGATION = Object.freeze({
+const NAVIGATION = withRendererSupport({
   none: {
     id: "none",
     label: "None",
@@ -296,7 +305,7 @@ const NAVIGATION = Object.freeze({
   }
 });
 
-const TITLE_PAGES = Object.freeze({
+const TITLE_PAGES = withRendererSupport({
   "left-curtain": {
     id: "left-curtain",
     label: "Left Curtain",
@@ -304,7 +313,7 @@ const TITLE_PAGES = Object.freeze({
   }
 });
 
-const LOGOS = Object.freeze({
+const LOGOS = withRendererSupport({
   none: { id: "none", label: "No Logo", asset: null, previewUrl: "" },
   duck: {
     id: "duck",
