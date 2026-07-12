@@ -45,7 +45,7 @@ test("workbench index exposes cumulative wizard regions", () => {
 
 test("workbench index loads wizard state before app script", () => {
   const html = readPublicFile("index.html");
-  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/preview-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
 });
 
 test("preview toolbar identifies the instant HTML preview", () => {
@@ -116,24 +116,20 @@ test("browser boot loads validation metadata for persisted themes", () => {
 test("browser resolves debounced preview designs and rejects stale responses", () => {
   const script = readPublicFile("app.js");
   assert.match(script, /resolvedDesign:\s*null/);
-  assert.match(script, /resolveSequence:\s*0/);
-  assert.match(script, /resolveInputKey:\s*null/);
-  assert.match(script, /resolveTimer:\s*null/);
+  assert.match(script, /previewResolution:\s*null/);
+  assert.match(script, /BeamerForgePreviewState/);
   assert.match(script, /async function requestResolvedDesign\(theme\)[\s\S]*?api\("\/api\/design\/resolve",[\s\S]*?method:\s*"POST"[\s\S]*?JSON\.stringify\(theme\)/);
-
-  const resolver = functionSource(script, "resolvePreviewDesign");
-  assert.match(resolver, /\+\+state\.resolveSequence/);
-  assert.match(resolver, /sequence !== state\.resolveSequence/);
-  assert.match(resolver, /inputKey !== state\.resolveInputKey/);
-  assert.match(resolver, /state\.resolvedDesign = design/);
-
+  assert.match(script, /createPreviewLifecycle\(/);
+  assert.match(script, /state\.resolvedDesign = design/);
+  assert.match(script, /previewState\.applyPreviewFailure\(state, error\)/);
+  assert.match(script, /render\(\{ schedulePreview: false \}\)/);
   const scheduler = functionSource(script, "schedulePreviewResolution");
   assert.match(scheduler, /JSON\.stringify\(state\.theme\)/);
-  assert.match(scheduler, /clearTimeout\(state\.resolveTimer\)/);
-  assert.match(scheduler, /setTimeout\([\s\S]*?50\)/);
-  assert.doesNotMatch(scheduler, /resolvedDesign\s*=\s*null|replaceChildren|renderPreview/);
+  assert.match(scheduler, /state\.previewResolution\.schedule/);
   assert.match(functionSource(script, "render"), /schedulePreviewResolution\(\)/);
-  assert.match(functionSource(script, "boot"), /await resolvePreviewDesign\([\s\S]*?render:\s*false[\s\S]*?(?:navigateToStep|render)\(/);
+  assert.match(functionSource(script, "render"), /schedulePreview !== false/);
+  assert.match(functionSource(script, "navigateToStep"), /render\(\{ schedulePreview: opts\.schedulePreview \}\)/);
+  assert.match(functionSource(script, "boot"), /await resolvePreviewDesign\([\s\S]*?render:\s*false[\s\S]*?schedulePreview:\s*false/);
 });
 
 test("color step keeps the richer custom color workbench", () => {

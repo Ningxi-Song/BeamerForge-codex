@@ -1,6 +1,7 @@
 "use strict";
 
 const wizard = window.BeamerForgeWizard;
+const previewState = window.BeamerForgePreviewState;
 
 const STEP_DESC = Object.freeze({
   start: "Start from the default BeamerForge template, then make one cumulative design decision per step.",
@@ -32,7 +33,7 @@ const CUBE_HALF = 1;
 
 const state = {
   registry: null, theme: null, resolvedDesign: null, validationErrors: [], statuses: [], busy: false,
-  resolveSequence: 0, resolveInputKey: null, resolveTimer: null,
+  previewResolution: null,
   baseColor: { r: 69, g: 105, b: 144 }, scheme: "complementary",
   savedPalettes: [], paletteCounter: 0,
   workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null },
@@ -70,7 +71,7 @@ function navigateToStep(id, opts = {}) {
   if (!wizard.canEnterStep(s.id, state.workflow)) return;
   if (opts.replace) window.history.replaceState({ stepId: s.id }, "", s.path);
   else window.history.pushState({ stepId: s.id }, "", s.path);
-  render();
+  render({ schedulePreview: opts.schedulePreview });
 }
 
 function selectedId(stepId) {
@@ -137,32 +138,31 @@ async function requestResolvedDesign(theme) {
   });
 }
 
+function initializePreviewResolution() {
+  state.previewResolution = previewState.createPreviewLifecycle({
+    resolve: requestResolvedDesign,
+    onSuccess(design, meta) {
+      state.resolvedDesign = design;
+      state.validationErrors = [];
+      if (meta.context?.render !== false) render({ schedulePreview: false });
+    },
+    onError(error, meta) {
+      previewState.applyPreviewFailure(state, error);
+      setBuildStatus(error.details || error.message);
+      setStatus("Preview error", "is-error");
+      if (meta.context?.render !== false) render({ schedulePreview: false });
+    }
+  });
+}
+
 async function resolvePreviewDesign(theme, { render: shouldRender = true, inputKey = JSON.stringify(theme) } = {}) {
-  const sequence = ++state.resolveSequence;
-  try {
-    const design = await requestResolvedDesign(theme);
-    if (sequence !== state.resolveSequence || inputKey !== state.resolveInputKey) return null;
-    state.resolvedDesign = design;
-    if (shouldRender) renderPreview();
-    return design;
-  } catch (error) {
-    if (sequence !== state.resolveSequence || inputKey !== state.resolveInputKey) return null;
-    setBuildStatus(error.details || error.message);
-    setStatus("Preview error", "is-error");
-    return null;
-  }
+  return state.previewResolution.resolveNow(theme, inputKey, { render: shouldRender });
 }
 
 function schedulePreviewResolution() {
-  if (!state.theme) return;
+  if (!state.theme || !state.previewResolution) return;
   const inputKey = JSON.stringify(state.theme);
-  if (inputKey === state.resolveInputKey) return;
-  state.resolveInputKey = inputKey;
-  if (state.resolveTimer) clearTimeout(state.resolveTimer);
-  state.resolveTimer = setTimeout(() => {
-    state.resolveTimer = null;
-    resolvePreviewDesign(clone(state.theme), { inputKey });
-  }, 50);
+  state.previewResolution.schedule(clone(state.theme), inputKey, { render: true });
 }
 
 function setStatus(text, cls = "") {
@@ -871,10 +871,11 @@ function appendFootline(parent, design) {
 
 function appendCornerLogo(parent, design) {
   const logo = design.components.cornerLogo;
-  if (logo.vectorId == null || !logo.previewUrl) return;
+  const previewUrl = previewState.trustedPreviewUrl(logo.previewUrl, window.location);
+  if (logo.vectorId == null || !previewUrl) return;
   const image = document.createElement("img");
   image.className = `preview-corner-logo is-${logo.position}`;
-  image.src = logo.previewUrl;
+  image.src = previewUrl;
   image.alt = `${logo.label} corner logo`;
   image.style.width = `${logo.sizeUnits * 6.25}%`;
   image.dataset.scope = logo.scope;
@@ -883,6 +884,7 @@ function appendCornerLogo(parent, design) {
 
 function renderThemeInto(container, design) {
   if (!design) return;
+  previewState.applyResolvedCanvas(container, design);
   container.style.backgroundColor = design.colors.background; container.style.color = design.colors.text;
   container.style.fontFamily = design.typography.body.cssFamily;
   container.style.setProperty("--accent-color", design.colors.accent);
@@ -923,7 +925,7 @@ async function compileTheme() {
   finally { setBusy(false); render(); }
 }
 
-function render() { schedulePreviewResolution(); refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); updateActions(); }
+function render({ schedulePreview = true } = {}) { if (schedulePreview !== false) schedulePreviewResolution(); refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); updateActions(); }
 
 function bindControls() {
   elements.back.addEventListener("click", () => navigateToStep(wizard.previousStepId(currentStep().id)));
@@ -953,6 +955,7 @@ async function boot() {
   const [reg, themeResult] = await Promise.all([api("/api/options"), api("/api/theme?validated=1")]);
   state.registry = reg; state.theme = clone(themeResult.theme);
   state.validationErrors = Array.isArray(themeResult.errors) ? themeResult.errors : [];
+  initializePreviewResolution();
   const baselineResponse = await fetch("/api/manual-baseline");
   state.workflow.hasManualBaseline = baselineResponse.ok;
   const handoffResponse = await fetch("/api/ai/handoff");
@@ -969,10 +972,10 @@ async function boot() {
     const baseline = await baselineResponse.json();
     if (JSON.stringify(state.theme) === JSON.stringify(baseline.theme)) state.workflow.selectedVersion = "manual";
   }
-  state.resolveInputKey = JSON.stringify(state.theme);
-  const initialDesign = await resolvePreviewDesign(clone(state.theme), { render: false, inputKey: state.resolveInputKey });
+  const initialInputKey = JSON.stringify(state.theme);
+  const initialDesign = await resolvePreviewDesign(clone(state.theme), { render: false, inputKey: initialInputKey });
   syncBase(); registerFontFaces(reg); bindControls();
-  if (window.location.pathname === "/") navigateToStep("start", { replace: true }); else render();
+  if (window.location.pathname === "/") navigateToStep("start", { replace: true, schedulePreview: false }); else render({ schedulePreview: false });
   if (initialDesign) setStatus("Idle");
   if (initialDesign && !comparisonError) setBuildStatus("No build yet.");
 }

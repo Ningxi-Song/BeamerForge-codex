@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
-const { resolveDesign } = require("../design/resolve-design");
+const { resolveDesign, ThemeValidationError } = require("../design/resolve-design");
 const { writeTemplateProject } = require("../generators/project-writer");
 const { compileTemplate } = require("./build");
 const { clone, isPlainObject } = require("../lib/utils");
@@ -233,7 +233,12 @@ function createWorkbenchServer(options = {}) {
         try {
           design = resolveDesign(theme, registry);
         } catch (error) {
-          throw new HttpError(400, error.message);
+          if (error instanceof ThemeValidationError) {
+            sendJson(res, 400, { ok: false, errors: error.errors });
+            return;
+          }
+          sendJson(res, 500, { ok: false, error: "Unable to resolve design" });
+          return;
         }
         sendJson(res, 200, design);
         return;

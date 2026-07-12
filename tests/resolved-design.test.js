@@ -8,7 +8,8 @@ const {
   resolveDesign,
   resolveDesignBundle,
   deepFreeze,
-  GENERATOR_VERSION
+  GENERATOR_VERSION,
+  ThemeValidationError
 } = require("../design/resolve-design");
 const { hashCanonical } = require("../lib/canonical-json");
 
@@ -80,7 +81,10 @@ test("resolver reports every validation path before registry lookup", () => {
 
   assert.throws(
     () => resolveDesign(theme, getRegistry()),
-    (error) => error.message.startsWith("Invalid theme: ")
+    (error) => error instanceof ThemeValidationError
+      && error.message.startsWith("Invalid theme: ")
+      && error.errors.some((item) => item.path === "identity.title")
+      && error.errors.some((item) => item.path === "navigation.style")
       && error.message.includes("identity.title")
       && error.message.includes("navigation.style")
   );

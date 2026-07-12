@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { createWorkbenchServer } = require("../workbench/server");
 const { DEFAULT_THEME } = require("../schema/theme-schema");
+const { getRegistry } = require("../registry/options");
 const { writeTemplateProject: realWriteTemplateProject } = require("../generators/project-writer");
 
 function listen(server) {
@@ -151,7 +152,26 @@ test("POST /api/design/resolve reports actionable validation errors", async (t) 
   const body = await response.json();
 
   assert.equal(response.status, 400);
-  assert.match(body.error, /navigation\.style/);
+  assert.equal(body.ok, false);
+  assert.equal(body.errors.some((error) => error.path === "navigation.style"), true);
+});
+
+test("POST /api/design/resolve classifies registry contract faults as generic 500 errors", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const registry = getRegistry();
+  delete registry.bullets[DEFAULT_THEME.bullets.style].marker;
+  const baseUrl = await withServer(t, { stateDir, registry });
+
+  const response = await fetch(`${baseUrl}/api/design/resolve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(DEFAULT_THEME)
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(body, { ok: false, error: "Unable to resolve design" });
+  assert.doesNotMatch(JSON.stringify(body), /registry renderer contract|bullets\./i);
 });
 
 test("POST /api/design/resolve retains JSON body error behavior", async (t) => {

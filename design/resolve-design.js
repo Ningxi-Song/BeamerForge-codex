@@ -8,6 +8,14 @@ const { clone, textColorForBg } = require("../lib/utils");
 
 const GENERATOR_VERSION = "1";
 
+class ThemeValidationError extends Error {
+  constructor(errors) {
+    super("Invalid theme: " + errors.map(formatError).join("; "));
+    this.name = "ThemeValidationError";
+    this.errors = clone(errors);
+  }
+}
+
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) deepFreeze(child);
@@ -167,7 +175,7 @@ function resolveDesignBundle(theme, registry) {
   const registrySnapshot = snapshotValue(registry);
   const validation = validateTheme(theme, { registry: registrySnapshot });
   if (!validation.ok) {
-    throw new Error("Invalid theme: " + validation.errors.map(formatError).join("; "));
+    throw new ThemeValidationError(validation.errors);
   }
 
   assertRegistryContract(registrySnapshot);
@@ -183,4 +191,4 @@ function resolveDesign(theme, registry) {
   return resolveDesignBundle(theme, registry).design;
 }
 
-module.exports = { resolveDesign, resolveDesignBundle, deepFreeze, GENERATOR_VERSION };
+module.exports = { resolveDesign, resolveDesignBundle, deepFreeze, GENERATOR_VERSION, ThemeValidationError };
