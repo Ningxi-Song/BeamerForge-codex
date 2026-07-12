@@ -81,8 +81,19 @@ test("authoritative preview UI is route-gated and uses independent status contro
     assert.match(css, new RegExp(escapeRegExp(selector)));
   }
   const objectRule = cssRuleBodies(css, ".authoritative-preview object")[0];
-  assert.match(objectRule, /aspect-ratio:/);
+  assert.doesNotMatch(objectRule, /aspect-ratio:/);
   assert.doesNotMatch(objectRule, /min-height:\s*(?!0(?:px|rem|em|%)?\s*;)[1-9]/i);
+});
+
+test("authoritative PDF objects use resolved geometry and a safe fallback link", () => {
+  const script = readPublicFile("app.js");
+  const renderer = functionSource(script, "renderAuthoritativeRecord");
+  assert.match(renderer, /applyPdfAspectRatio\(object, design\)/);
+  assert.match(renderer, /document\.createElement\("a"\)/);
+  assert.match(renderer, /link\.href = url/);
+  assert.match(functionSource(script, "renderAuthoritativePreview"), /state\.resolvedDesign/);
+  assert.match(functionSource(script, "renderAuthoritativePreviews"), /manualDesign/);
+  assert.match(functionSource(script, "renderAuthoritativePreviews"), /draftDesign/);
 });
 
 test("manual authoritative preview persists and resolves the normalized theme before compiling", () => {

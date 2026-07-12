@@ -35,6 +35,18 @@
     return url.href;
   }
 
+  function validateSnapshotResult(result, expectedThemeHash) {
+    if (!result || result.themeHash !== expectedThemeHash || typeof result.cacheKey !== "string" || !result.cacheKey.startsWith(`${expectedThemeHash}-`)) {
+      throw new Error("Authoritative preview conflicted with the resolved theme snapshot.");
+    }
+    return result;
+  }
+
+  function applyPdfAspectRatio(object, design) {
+    const width = design?.canvas?.widthUnits; const height = design?.canvas?.heightUnits;
+    if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) object.style.aspectRatio = `${width} / ${height}`;
+  }
+
   function blankRecord() {
     return { status: "idle", desiredKey: null, requestKey: null, route: null, themeHash: null, pdfUrl: null, stale: false, revision: 0, sequence: 0 };
   }
@@ -64,6 +76,7 @@
       const sequence = ++record.sequence;
       record.requestKey = key;
       record.status = "pending";
+      record.stale = Boolean(previousPdfUrl);
       record.message = null;
       record.excerpt = null;
       notify(source);
@@ -77,7 +90,7 @@
           record.desiredKey = preparedKey;
           record.requestKey = preparedKey;
         }
-        const result = await sendRequest(source, force);
+        const result = await sendRequest(source, force, { themeHash: preparedHash, route });
         if (record.sequence !== sequence || record.desiredKey !== preparedKey || record.requestKey !== preparedKey) return null;
         record.status = result?.status || "failed";
         record.cached = result?.cached === true;
@@ -153,5 +166,5 @@
     };
   }
 
-  return { createAuthoritativePreviewState, sourcesForRoute, trustedPdfUrl, displayPdfUrl };
+  return { createAuthoritativePreviewState, sourcesForRoute, trustedPdfUrl, displayPdfUrl, validateSnapshotResult, applyPdfAspectRatio };
 });

@@ -67,12 +67,13 @@ const elements = {
   refreshPreview: document.getElementById("refreshPreview")
 };
 
-async function sendAuthoritativeRequest(source, force) {
-  return api("/api/preview/compile", {
+async function sendAuthoritativeRequest(source, force, { themeHash }) {
+  const result = await api("/api/preview/compile", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ source, force })
+    body: JSON.stringify({ source, force, expectedThemeHash: themeHash })
   });
+  return authoritativeState.validateSnapshotResult(result, themeHash);
 }
 
 async function prepareAuthoritativeRequest(source, { route, themeHash }) {
@@ -610,7 +611,7 @@ function setAuthoritativeStatus(element, record) {
   element.textContent = text.slice(0, 4200);
 }
 
-function renderAuthoritativeRecord(container, statusElement, record) {
+function renderAuthoritativeRecord(container, statusElement, record, design) {
   setAuthoritativeStatus(statusElement, record);
   const url = authoritativeState.displayPdfUrl(record, window.location);
   const children = [];
@@ -618,8 +619,10 @@ function renderAuthoritativeRecord(container, statusElement, record) {
     const object = document.createElement("object");
     object.type = "application/pdf";
     object.data = url;
+    authoritativeState.applyPdfAspectRatio(object, design);
     object.setAttribute("aria-label", "Authoritative compiled PDF preview");
-    const fallback = document.createElement("p"); fallback.textContent = "The compiled PDF preview cannot be embedded in this browser.";
+    const fallback = document.createElement("p"); fallback.textContent = "The compiled PDF preview cannot be embedded in this browser. ";
+    const link = document.createElement("a"); link.href = url; link.textContent = "Open the authoritative PDF."; fallback.appendChild(link);
     object.appendChild(fallback); children.push(object);
   }
   replaceChildren(container, children);
@@ -631,7 +634,7 @@ function renderAuthoritativePreview() {
   if (!source) return;
   const record = state.authoritativePreviews[source];
   const media = elements.authoritativePreview.querySelector(".authoritative-media");
-  renderAuthoritativeRecord(media, elements.authoritativeStatus, record);
+  renderAuthoritativeRecord(media, elements.authoritativeStatus, record, state.resolvedDesign);
   elements.retryPreview.hidden = !["failed", "unavailable"].includes(record.status);
   elements.refreshPreview.hidden = record.status === "idle";
   elements.retryPreview.disabled = record.status === "pending";
@@ -649,10 +652,10 @@ function createComparisonLatexPreview(source, id) {
   actions.append(retry, refresh); slot.append(title, status, actions, media); return slot;
 }
 
-function renderComparisonAuthoritative(source, id) {
+function renderComparisonAuthoritative(source, id, design) {
   const slot = document.getElementById(id); if (!slot) return;
   const record = state.authoritativePreviews[source];
-  renderAuthoritativeRecord(slot.querySelector(".authoritative-media"), slot.querySelector(".preview-state"), record);
+  renderAuthoritativeRecord(slot.querySelector(".authoritative-media"), slot.querySelector(".preview-state"), record, design);
   const [retry, refresh] = slot.querySelectorAll("button");
   retry.hidden = !["failed", "unavailable"].includes(record.status);
   retry.disabled = record.status === "pending";
@@ -661,8 +664,8 @@ function renderComparisonAuthoritative(source, id) {
 
 function renderAuthoritativePreviews() {
   renderAuthoritativePreview();
-  renderComparisonAuthoritative("manual", "manualLatexPreview");
-  renderComparisonAuthoritative("ai", "aiLatexPreview");
+  renderComparisonAuthoritative("manual", "manualLatexPreview", state.comparison?.manualDesign);
+  renderComparisonAuthoritative("ai", "aiLatexPreview", state.comparison?.draftDesign);
 }
 
 function maybeRequestAuthoritativePreviews() {

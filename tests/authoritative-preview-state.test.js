@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 
 const modulePath = path.resolve(__dirname, "..", "workbench", "public", "authoritative-preview-state.js");
-const { createAuthoritativePreviewState, sourcesForRoute, trustedPdfUrl, displayPdfUrl } = require(modulePath);
+const { createAuthoritativePreviewState, sourcesForRoute, trustedPdfUrl, displayPdfUrl, validateSnapshotResult, applyPdfAspectRatio } = require(modulePath);
 
 function deferred() {
   let resolve;
@@ -149,4 +149,36 @@ test("authoritative PDF URL guard requires the same origin and exact cache route
   assert.equal(trustedPdfUrl("/api/preview/../secret/main.pdf", location), null);
   assert.equal(trustedPdfUrl(`/api/preview/${"e".repeat(64)}-v1/main.pdf/extra`, location), null);
   assert.equal(displayPdfUrl({ pdfUrl: pathUrl, revision: 3 }, location), `http://127.0.0.1:5177${pathUrl}?refresh=3`);
+});
+
+test("snapshot results reject malicious theme hash or cache key mismatches", () => {
+  const hash = "a".repeat(64);
+  assert.equal(validateSnapshotResult({ themeHash: hash, cacheKey: `${hash}-v1` }, hash).themeHash, hash);
+  assert.throws(() => validateSnapshotResult({ themeHash: "b".repeat(64), cacheKey: `${hash}-v1` }, hash), /conflicted/i);
+  assert.throws(() => validateSnapshotResult({ themeHash: hash, cacheKey: `${"b".repeat(64)}-v1` }, hash), /conflicted/i);
+});
+
+test("PDF geometry follows resolved 4:3 and 16:9 canvases", () => {
+  const object = { style: {} };
+  applyPdfAspectRatio(object, { canvas: { widthUnits: 4, heightUnits: 3 } });
+  assert.equal(object.style.aspectRatio, "4 / 3");
+  applyPdfAspectRatio(object, { canvas: { widthUnits: 16, heightUnits: 9 } });
+  assert.equal(object.style.aspectRatio, "16 / 9");
+});
+
+test("retained PDFs are stale while force refresh or a new key is pending", async () => {
+  const refresh = deferred(); const replacement = deferred();
+  const hashA = "a".repeat(64); const hashB = "b".repeat(64);
+  let calls = 0;
+  const previews = createAuthoritativePreviewState({ request() { calls++; if (calls === 1) return Promise.resolve({ status: "ready", themeHash: hashA, cacheKey: `${hashA}-v1`, pdfUrl: `/api/preview/${hashA}-v1/main.pdf` }); return calls === 2 ? refresh.promise : replacement.promise; } });
+  await previews.request("manual", { route: "manual-review", themeHash: hashA });
+  const refreshRun = previews.refresh("manual");
+  assert.equal(previews.records.manual.status, "pending");
+  assert.equal(previews.records.manual.stale, true);
+  refresh.resolve({ status: "ready", themeHash: hashA, cacheKey: `${hashA}-v1`, pdfUrl: `/api/preview/${hashA}-v1/main.pdf` }); await refreshRun;
+  previews.sync("manual-review", { manual: hashB });
+  assert.equal(previews.records.manual.status, "pending");
+  assert.equal(previews.records.manual.stale, true);
+  replacement.resolve({ status: "ready", themeHash: hashB, cacheKey: `${hashB}-v1`, pdfUrl: `/api/preview/${hashB}-v1/main.pdf` }); await replacement.promise; await Promise.resolve();
+  assert.equal(previews.records.manual.stale, false);
 });

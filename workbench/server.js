@@ -5,9 +5,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
-const { resolveDesign, ThemeValidationError } = require("../design/resolve-design");
+const { resolveDesign, resolveDesignBundle, ThemeValidationError } = require("../design/resolve-design");
+const { assertRegistryContract } = require("../design/registry-contract");
 const { writeTemplateProject } = require("../generators/project-writer");
-const { compileTemplate } = require("./build");
+const { compileTemplate, compileTemplateAsync } = require("./build");
 const { createPreviewCache, isSafeCacheKey } = require("./preview-cache");
 const { clone, isPlainObject } = require("../lib/utils");
 const {
@@ -151,20 +152,28 @@ function previewThemeForSource(stateDir, registry, source) {
   if (source === "manual") {
     const manualPath = path.join(stateDir, "manual-theme.json");
     if (!fs.existsSync(manualPath)) return readValidatedTheme(stateDir, registry);
-    return validatePreviewTheme(readManualTheme(stateDir), registry, "Valid manual baseline required");
+    try { return validatePreviewTheme(readManualTheme(stateDir), registry, "Valid manual baseline required"); }
+    catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(409, "Valid manual baseline required"); }
   }
   const draftPath = path.join(stateDir, "ai-draft-theme.json");
   if (!fs.existsSync(draftPath)) throw new HttpError(409, "Valid AI draft required");
-  return validatePreviewTheme(readAiDraft(stateDir), registry, "Valid AI draft required");
+  try { return validatePreviewTheme(readAiDraft(stateDir), registry, "Valid AI draft required"); }
+  catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(409, "Valid AI draft required"); }
+}
+
+function safePreviewDiagnostic(value) {
+  return String(value || "").replace(/[\u0000-\u001f\u007f]/g, "").replace(/[A-Za-z]:[\\/][^\r\n]*/g, "[path]").replace(/\/(?:[^/\r\n]+\/)+[^\r\n]*/g, "[path]").slice(0, 4000);
 }
 
 function previewDto(result) {
-  if (!result || !["ready", "failed", "unavailable"].includes(result.status) || !isSafeCacheKey(result.cacheKey)) {
+  if (!result || !["ready", "failed", "unavailable"].includes(result.status) || !isSafeCacheKey(result.cacheKey)
+    || !/^[a-f0-9]{64}$/.test(result.themeHash || "") || !result.cacheKey.startsWith(`${result.themeHash}-`)) {
     throw new Error("Invalid preview cache response");
   }
   const fields = ["status", "cached", "cacheKey", "compilerKind", "completedAt", "sourceVersion", "message", "excerpt"];
   const dto = {};
-  for (const field of fields) if (result[field] !== undefined) dto[field] = result[field];
+  for (const field of fields) if (result[field] !== undefined) dto[field] = ["message", "excerpt"].includes(field) ? safePreviewDiagnostic(result[field]) : result[field];
+  dto.themeHash = result.themeHash;
   const encodedKey = encodeURIComponent(String(result.cacheKey || ""));
   const pdfUrl = `/api/preview/${encodedKey}/main.pdf`;
   if (result.pdfAvailable) dto.pdfUrl = pdfUrl;
@@ -232,13 +241,13 @@ function createWorkbenchServer(options = {}) {
   const outputRoot = options.outputRoot || path.join(rootDir, "templates");
   const publicDir = options.publicDir || path.join(rootDir, "workbench", "public");
   const handoffRoot = options.handoffRoot || path.join(stateDir, "ai-handoff");
-  const registry = options.registry || getRegistry();
+  const registry = assertRegistryContract(options.registry || getRegistry());
   const projectWriter = options.writeTemplateProject || writeTemplateProject;
   const templateCompiler = options.compileTemplate || compileTemplate;
   const previewCache = options.previewCache || createPreviewCache({
     cacheRoot: options.previewCacheRoot || path.join(stateDir, "preview-cache"), rootDir, registry,
     projectWriter: options.previewProjectWriter,
-    compiler: options.previewCompiler
+    compiler: options.previewCompiler || compileTemplateAsync
   });
   const allowedAssetPaths = allowedAssets(registry);
 
@@ -289,9 +298,16 @@ function createWorkbenchServer(options = {}) {
         if (body.force !== undefined && typeof body.force !== "boolean") {
           throw new HttpError(400, "force must be a boolean");
         }
+        if (typeof body.expectedThemeHash !== "string" || !/^[a-f0-9]{64}$/.test(body.expectedThemeHash)) {
+          throw new HttpError(400, "expectedThemeHash must be a lowercase 64-character hash");
+        }
         try {
           const theme = previewThemeForSource(stateDir, registry, body.source);
-          const result = await previewCache.compile({ theme, sourceVersion: body.source, force: Boolean(body.force) });
+          const resolvedBundle = resolveDesignBundle(theme, registry);
+          if (resolvedBundle.design.source.themeHash !== body.expectedThemeHash) {
+            throw new HttpError(409, "Theme changed; refresh the review before compiling preview");
+          }
+          const result = await previewCache.compile({ theme: resolvedBundle.theme, resolvedBundle, sourceVersion: body.source, force: Boolean(body.force) });
           sendJson(res, 200, previewDto(result));
         } catch (error) {
           if (error instanceof HttpError) throw error;
@@ -303,16 +319,10 @@ function createWorkbenchServer(options = {}) {
         const encodedKey = url.pathname.slice("/api/preview/".length, -"/main.pdf".length);
         let cacheKey;
         try { cacheKey = decodeURIComponent(encodedKey); } catch { cacheKey = null; }
-        let pdfPath = null;
-        try { if (cacheKey) pdfPath = previewCache.resolvePdf(cacheKey); }
+        let bytes = null;
+        try { if (cacheKey) bytes = previewCache.readPdf(cacheKey); }
         catch { sendJson(res, 500, { ok: false, error: "Unable to load preview" }); return; }
-        if (!pdfPath) { sendText(res, 404, "Not found"); return; }
-        let stat;
-        try { stat = fs.lstatSync(pdfPath); } catch { stat = null; }
-        if (!stat || !stat.isFile() || stat.isSymbolicLink()) { sendText(res, 404, "Not found"); return; }
-        let bytes;
-        try { bytes = fs.readFileSync(pdfPath); }
-        catch { sendJson(res, 500, { ok: false, error: "Unable to load preview" }); return; }
+        if (!Buffer.isBuffer(bytes)) { sendText(res, 404, "Not found"); return; }
         res.writeHead(200, {
           "content-type": "application/pdf", "content-disposition": "inline",
           "cache-control": "no-store", "content-length": bytes.length

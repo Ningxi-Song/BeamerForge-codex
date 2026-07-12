@@ -3,7 +3,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { findCompiler, extractLatexExcerpt, compileTemplate } = require("../workbench/build");
+const { EventEmitter } = require("node:events");
+const { findCompiler, findCompilerAsync, runCommandAsync, extractLatexExcerpt, compileTemplate, compileTemplateAsync } = require("../workbench/build");
 
 test("findCompiler returns missing when no compiler command succeeds", () => {
   const fakeSpawn = () => ({ status: 1, error: new Error("missing") });
@@ -131,4 +132,48 @@ test("compileTemplate includes spawn errors when compiler produces no output", (
   assert.equal(result.exitCode, null);
   assert.match(`${result.excerpt}\n${result.message}`, /spawn blew up/);
   assert.match(fs.readFileSync(result.logPath, "utf8"), /spawn blew up/);
+});
+
+test("findCompilerAsync probes compilers without synchronous spawning", async () => {
+  const calls = [];
+  const compiler = await findCompilerAsync(async (command, args, options) => {
+    calls.push({ command, args, options });
+    return { status: command === "tectonic" ? 0 : 1, stdout: "", stderr: "" };
+  });
+  assert.equal(compiler.kind, "tectonic");
+  assert.deepEqual(calls.map((call) => call.command), ["latexmk", "xelatex", "tectonic"]);
+  assert.equal(calls.every((call) => call.options.windowsHide === true), true);
+});
+
+test("compileTemplateAsync runs two xelatex passes and captures logs", async () => {
+  const templateDir = fs.mkdtempSync(path.join(os.tmpdir(), "beamer-build-async-"));
+  let calls = 0;
+  const result = await compileTemplateAsync(templateDir, {
+    compiler: { kind: "xelatex", command: "xelatex", args: ["main.tex"] },
+    async runCommand(command, args, options) {
+      calls++;
+      assert.equal(options.cwd, templateDir);
+      fs.writeFileSync(path.join(templateDir, "main.pdf"), "async pdf");
+      return { status: 0, stdout: `pass ${calls}`, stderr: "" };
+    }
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.compilerKind, "xelatex");
+  assert.equal(calls, 2);
+  assert.match(fs.readFileSync(result.logPath, "utf8"), /pass 1[\s\S]*pass 2/);
+});
+
+test("runCommandAsync captures output and kills timed out children", async () => {
+  let killed = false;
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = () => { killed = true; child.emit("close", null); };
+  const resultPromise = runCommandAsync("xelatex", ["main.tex"], { timeout: 5 }, () => child);
+  child.stdout.emit("data", Buffer.from("partial"));
+  const result = await resultPromise;
+  assert.equal(killed, true);
+  assert.equal(result.status, null);
+  assert.match(result.error.message, /timed out/i);
+  assert.equal(result.stdout, "partial");
 });

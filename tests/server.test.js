@@ -6,6 +6,7 @@ const path = require("node:path");
 const { createWorkbenchServer } = require("../workbench/server");
 const { DEFAULT_THEME } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
+const { resolveDesign } = require("../design/resolve-design");
 const { writeTemplateProject: realWriteTemplateProject } = require("../generators/project-writer");
 
 function listen(server) {
@@ -38,6 +39,43 @@ function cloneTheme() {
   return JSON.parse(JSON.stringify(DEFAULT_THEME));
 }
 
+function expectedHash(theme = DEFAULT_THEME) { return resolveDesign(theme, getRegistry()).source.themeHash; }
+function deferred() { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; }
+
+test("preview compile rejects stale expected hashes before invoking the cache", async (t) => {
+  const stateDir = tempDir("beamerforge-server-"); fs.mkdirSync(stateDir, { recursive: true });
+  const original = cloneTheme();
+  const changed = cloneTheme(); changed.identity.title = "Changed in another tab";
+  fs.writeFileSync(path.join(stateDir, "theme.json"), JSON.stringify(changed));
+  fs.writeFileSync(path.join(stateDir, "manual-theme.json"), JSON.stringify(changed));
+  fs.writeFileSync(path.join(stateDir, "ai-draft-theme.json"), JSON.stringify(changed));
+  let compiles = 0;
+  const previewCache = { async compile() { compiles++; return {}; }, readPdf() { return null; } };
+  const baseUrl = await withServer(t, { stateDir, previewCache });
+  for (const source of ["manual", "ai", "selected"]) {
+    const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, expectedThemeHash: expectedHash(original) }) });
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /changed.*refresh/i);
+  }
+  assert.equal(compiles, 0);
+});
+
+test("default preview compilation does not block unrelated theme requests", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const started = deferred(); const release = deferred();
+  const baseUrl = await withServer(t, {
+    stateDir,
+    previewProjectWriter(theme, target) { fs.writeFileSync(path.join(target, "main.tex"), theme.identity.title); },
+    async previewCompiler(target) { started.resolve(); await release.promise; fs.writeFileSync(path.join(target, "main.pdf"), "%PDF"); return { ok: true, compilerKind: "fake" }; }
+  });
+  const compilePromise = fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected", expectedThemeHash: expectedHash() }) });
+  await started.promise;
+  const themeResponse = await fetch(`${baseUrl}/api/theme`);
+  assert.equal(themeResponse.status, 200);
+  release.resolve();
+  assert.equal((await compilePromise).status, 200);
+});
+
 test("POST /api/preview/compile compiles the requested manual source and returns a browser-safe PDF URL", async (t) => {
   const stateDir = tempDir("beamerforge-server-");
   const current = cloneTheme();
@@ -48,7 +86,7 @@ test("POST /api/preview/compile compiles the requested manual source and returns
     async compile(input) {
       calls.push(input);
       return {
-        status: "ready", cached: false, cacheKey: `${"a".repeat(64)}-v1`, pdfAvailable: true,
+        status: "ready", cached: false, cacheKey: `${expectedHash(current)}-v1`, themeHash: expectedHash(current), pdfAvailable: true,
         compilerKind: "xelatex", completedAt: "2026-07-12T01:02:03.000Z", sourceVersion: "manual",
         pdfPath: "C:\\private\\main.pdf"
       };
@@ -59,7 +97,7 @@ test("POST /api/preview/compile compiles the requested manual source and returns
 
   const response = await fetch(`${baseUrl}/api/preview/compile`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ source: "manual", force: true })
+    body: JSON.stringify({ source: "manual", force: true, expectedThemeHash: expectedHash(current) })
   });
   const body = await response.json();
 
@@ -68,9 +106,9 @@ test("POST /api/preview/compile compiles the requested manual source and returns
   assert.equal(calls[0].theme.identity.name, "current-theme");
   assert.equal(calls[0].sourceVersion, "manual");
   assert.equal(calls[0].force, true);
-  assert.equal(body.pdfUrl, `/api/preview/${"a".repeat(64)}-v1/main.pdf`);
+  assert.equal(body.pdfUrl, `/api/preview/${expectedHash(current)}-v1/main.pdf`);
   assert.equal(JSON.stringify(body).includes("private"), false);
-  assert.deepEqual(Object.keys(body).sort(), ["cacheKey", "cached", "completedAt", "compilerKind", "pdfUrl", "sourceVersion", "status"].sort());
+  assert.deepEqual(Object.keys(body).sort(), ["cacheKey", "cached", "completedAt", "compilerKind", "pdfUrl", "sourceVersion", "status", "themeHash"].sort());
 });
 
 test("preview compile enforces source prerequisites, validates input, and keeps failures at HTTP 200", async (t) => {
@@ -81,34 +119,35 @@ test("preview compile enforces source prerequisites, validates input, and keeps 
   const ai = cloneTheme(); ai.identity.name = "ai-source";
   fs.writeFileSync(path.join(stateDir, "ai-draft-theme.json"), `${JSON.stringify(ai)}\n`);
   const calls = [];
-  const key = `${"b".repeat(64)}-v1`;
   const previewCache = {
     async compile(input) {
       calls.push(input);
-      if (input.sourceVersion === "ai") return { status: "failed", cached: false, cacheKey: key, compilerKind: "xelatex", message: "bad", excerpt: "line 1", staleAvailable: true };
-      return { status: "unavailable", cached: false, cacheKey: key, compilerKind: "missing", message: "Install LaTeX", staleAvailable: false };
+      const hash = input.resolvedBundle.design.source.themeHash; const key = `${hash}-v1`;
+      if (input.sourceVersion === "ai") return { status: "failed", cached: false, cacheKey: key, themeHash: hash, compilerKind: "xelatex", message: "bad", excerpt: "line 1", staleAvailable: true };
+      return { status: "unavailable", cached: false, cacheKey: key, themeHash: hash, compilerKind: "missing", message: "Install LaTeX", staleAvailable: false };
     }, resolvePdf() { return null; }
   };
   const baseUrl = await withServer(t, { stateDir, previewCache });
+  const hashes = { manual: expectedHash(manual), ai: expectedHash(ai), selected: expectedHash(DEFAULT_THEME) };
   const post = (body) => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
   for (const source of ["manual", "ai", "selected"]) {
-    const response = await post({ source });
+    const response = await post({ source, expectedThemeHash: hashes[source] });
     assert.equal(response.status, 200);
     const body = await response.json();
-    if (source === "ai") assert.equal(body.stalePdfUrl, `/api/preview/${key}/main.pdf`);
+    if (source === "ai") assert.equal(body.stalePdfUrl, `/api/preview/${hashes.ai}-v1/main.pdf`);
     else assert.equal(body.status, "unavailable");
   }
   assert.deepEqual(calls.map((call) => call.theme.identity.name), ["manual-source", "ai-source", DEFAULT_THEME.identity.name]);
   assert.deepEqual(calls.map((call) => call.force), [false, false, false]);
-  for (const invalid of [{}, { source: "bogus" }, { source: "manual", force: 1 }]) {
+  for (const invalid of [{}, { source: "bogus", expectedThemeHash: hashes.manual }, { source: "manual", force: 1, expectedThemeHash: hashes.manual }, { source: "manual", expectedThemeHash: "BAD" }]) {
     assert.equal((await post(invalid)).status, 400);
   }
 
   fs.rmSync(path.join(stateDir, "ai-draft-theme.json"));
-  assert.equal((await post({ source: "ai" })).status, 409);
+  assert.equal((await post({ source: "ai", expectedThemeHash: hashes.ai })).status, 409);
   fs.writeFileSync(path.join(stateDir, "ai-draft-theme.json"), "{}\n");
-  assert.equal((await post({ source: "ai" })).status, 409);
+  assert.equal((await post({ source: "ai", expectedThemeHash: hashes.ai })).status, 409);
 });
 
 test("GET authoritative preview serves only resolved PDFs with inline no-store headers", async (t) => {
@@ -118,7 +157,7 @@ test("GET authoritative preview serves only resolved PDFs with inline no-store h
   fs.writeFileSync(pdfPath, bytes);
   const key = `${"c".repeat(64)}-v1`;
   const resolved = [];
-  const previewCache = { compile() {}, resolvePdf(value) { resolved.push(value); return value === key ? pdfPath : null; } };
+  const previewCache = { compile() {}, readPdf(value) { resolved.push(value); return value === key ? bytes : null; }, resolvePdf() { throw new Error("server must not resolve paths"); } };
   const baseUrl = await withServer(t, { stateDir, previewCache });
 
   const response = await fetch(`${baseUrl}/api/preview/${key}/main.pdf`);
@@ -135,14 +174,40 @@ test("GET authoritative preview serves only resolved PDFs with inline no-store h
 
 test("preview cache rejections return a generic error without internal paths", async (t) => {
   const stateDir = tempDir("beamerforge-server-");
-  const previewCache = { async compile() { throw new Error("C:\\secret\\cache failure"); }, resolvePdf() { throw new Error("C:\\secret"); } };
+  const previewCache = { async compile() { throw new Error("C:\\secret\\cache failure"); }, readPdf() { throw new Error("C:\\secret"); } };
   const baseUrl = await withServer(t, { stateDir, previewCache });
-  const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected" }) });
+  const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected", expectedThemeHash: expectedHash() }) });
   assert.equal(response.status, 500);
   assert.deepEqual(await response.json(), { ok: false, error: "Unable to compile preview" });
   const pdfResponse = await fetch(`${baseUrl}/api/preview/${"e".repeat(64)}-v1/main.pdf`);
   assert.equal(pdfResponse.status, 500);
   assert.deepEqual(await pdfResponse.json(), { ok: false, error: "Unable to load preview" });
+});
+
+test("preview API sanitizes injected diagnostics and rejects mismatched cache DTO hashes", async (t) => {
+  const stateDir = tempDir("beamerforge-server-"); const hash = expectedHash();
+  let mismatch = false;
+  const previewCache = { async compile() {
+    if (mismatch) return { status: "ready", themeHash: "f".repeat(64), cacheKey: `${hash}-v1`, pdfAvailable: true };
+    return { status: "failed", themeHash: hash, cacheKey: `${hash}-v1`, message: `C:\\private\\cache\u0000`, excerpt: "/secret/root/main.tex" };
+  }, readPdf() { return null; } };
+  const baseUrl = await withServer(t, { stateDir, previewCache });
+  const request = () => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected", expectedThemeHash: hash }) });
+  const safe = await request(); const body = await safe.json();
+  assert.equal(safe.status, 200); assert.doesNotMatch(JSON.stringify(body), /private|secret|main\.tex/i);
+  mismatch = true; const rejected = await request();
+  assert.equal(rejected.status, 500); assert.deepEqual(await rejected.json(), { ok: false, error: "Unable to compile preview" });
+});
+
+test("malformed manual and AI preview state returns prerequisite conflicts", async (t) => {
+  const stateDir = tempDir("beamerforge-server-"); fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(path.join(stateDir, "manual-theme.json"), "{"); fs.writeFileSync(path.join(stateDir, "ai-draft-theme.json"), "{");
+  const previewCache = { compile() { throw new Error("must not compile"); }, readPdf() { return null; } };
+  const baseUrl = await withServer(t, { stateDir, previewCache });
+  for (const source of ["manual", "ai"]) {
+    const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, expectedThemeHash: expectedHash() }) });
+    assert.equal(response.status, 409); assert.doesNotMatch(JSON.stringify(await response.json()), /stateDir|manual-theme|ai-draft|[A-Z]:\\/i);
+  }
 });
 
 test("server creates one default preview cache at the configured root", async (t) => {
@@ -155,7 +220,7 @@ test("server creates one default preview cache at the configured root", async (t
     previewProjectWriter(theme, target) { writes++; fs.writeFileSync(path.join(target, "main.tex"), theme.identity.name); },
     async previewCompiler(target) { compiles++; fs.writeFileSync(path.join(target, "main.pdf"), "%PDF-1.4\n"); return { ok: true, compilerKind: "fake" }; }
   });
-  const request = () => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected" }) });
+  const request = () => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected", expectedThemeHash: expectedHash() }) });
   const first = await request();
   const second = await request();
   assert.equal(first.status, 200);
@@ -284,22 +349,11 @@ test("POST /api/design/resolve reports actionable validation errors", async (t) 
   assert.equal(body.errors.some((error) => error.path === "navigation.style"), true);
 });
 
-test("POST /api/design/resolve classifies registry contract faults as generic 500 errors", async (t) => {
+test("server construction intentionally rejects malformed registry contracts", () => {
   const stateDir = tempDir("beamerforge-server-");
   const registry = getRegistry();
   delete registry.bullets[DEFAULT_THEME.bullets.style].marker;
-  const baseUrl = await withServer(t, { stateDir, registry });
-
-  const response = await fetch(`${baseUrl}/api/design/resolve`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(DEFAULT_THEME)
-  });
-  const body = await response.json();
-
-  assert.equal(response.status, 500);
-  assert.deepEqual(body, { ok: false, error: "Unable to resolve design" });
-  assert.doesNotMatch(JSON.stringify(body), /registry renderer contract|bullets\./i);
+  assert.throws(() => createWorkbenchServer({ rootDir: process.cwd(), stateDir, registry }), /Invalid registry renderer contract.*bullets/i);
 });
 
 test("POST /api/design/resolve retains JSON body error behavior", async (t) => {

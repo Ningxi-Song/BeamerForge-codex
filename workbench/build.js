@@ -44,6 +44,40 @@ function findCompiler(spawnSync = childProcess.spawnSync) {
   return { kind: "missing" };
 }
 
+function runCommandAsync(command, args, options = {}, spawn = childProcess.spawn) {
+  return new Promise((resolve) => {
+    let child;
+    try { child = spawn(command, args, { cwd: options.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }); }
+    catch (error) { resolve({ status: null, stdout: "", stderr: "", error }); return; }
+    let stdout = ""; let stderr = ""; let settled = false; let timer = null;
+    const finish = (status, error = null) => {
+      if (settled) return; settled = true; if (timer) clearTimeout(timer);
+      resolve({ status, stdout, stderr, ...(error ? { error } : {}) });
+    };
+    child.stdout?.on("data", (chunk) => { stdout += chunk.toString(); });
+    child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.on("error", (error) => finish(null, error));
+    child.on("close", (code) => finish(code));
+    timer = setTimeout(() => {
+      const error = new Error(`Command timed out after ${options.timeout || COMPILE_TIMEOUT_MS}ms`);
+      finish(null, error);
+      try { child.kill(); } catch { /* already settled */ }
+    }, options.timeout || COMPILE_TIMEOUT_MS);
+  });
+}
+
+async function findCompilerAsync(runCommand = runCommandAsync) {
+  for (const candidate of [
+    { kind: "latexmk", command: "latexmk", args: ["-g", "-xelatex", "-interaction=nonstopmode", "main.tex"] },
+    { kind: "xelatex", command: "xelatex", args: ["-interaction=nonstopmode", "main.tex"] },
+    { kind: "tectonic", command: "tectonic", args: ["main.tex"] }
+  ]) {
+    const result = await runCommand(candidate.command, ["--version"], { timeout: PROBE_TIMEOUT_MS, windowsHide: true });
+    if (result && result.status === 0) return candidate;
+  }
+  return { kind: "missing" };
+}
+
 function extractLatexExcerpt(logText) {
   const lines = String(logText || "").split(/\r?\n/);
   const selected = [];
@@ -131,10 +165,35 @@ function compileTemplate(templateDir, options = {}) {
   };
 }
 
+async function compileTemplateAsync(templateDir, options = {}) {
+  const runCommand = options.runCommand || runCommandAsync;
+  const compiler = options.compiler || await findCompilerAsync(runCommand);
+  if (compiler.kind === "missing") return { ok: false, status: "missing-compiler", compilerKind: "missing", message: MISSING_COMPILER_MESSAGE, logPath: null, excerpt: "" };
+  const logPath = path.join(templateDir, "workbench-build.log");
+  const pdfPath = path.join(templateDir, "main.pdf");
+  const command = [compiler.command, ...compiler.args].join(" ");
+  const passCount = compiler.kind === "xelatex" ? 2 : 1;
+  let result = null; let combinedLog = "";
+  for (let passIndex = 0; passIndex < passCount; passIndex++) {
+    result = await runCommand(compiler.command, compiler.args, { cwd: templateDir, timeout: options.timeoutMs || COMPILE_TIMEOUT_MS, windowsHide: true });
+    const spawnError = result?.error?.message || "";
+    const passLog = `${result?.stdout || ""}${result?.stderr || ""}${spawnError ? `\n${spawnError}\n` : ""}`;
+    combinedLog += passCount > 1 ? `--- xelatex pass ${passIndex + 1} ---\n${passLog}` : passLog;
+    if (result?.status !== 0 || result?.error) break;
+  }
+  fs.writeFileSync(logPath, combinedLog, "utf8");
+  if (result?.status === 0 && fs.existsSync(pdfPath)) return { ok: true, status: "compiled", compilerKind: compiler.kind, message: "Template compiled.", command, exitCode: 0, logPath, excerpt: "", pdfPath };
+  const spawnError = result?.error?.message || "";
+  return { ok: false, status: "compile-failed", compilerKind: compiler.kind, message: spawnError ? `Template compilation failed: ${spawnError}` : "Template compilation failed.", command, exitCode: result?.status ?? null, logPath, excerpt: extractLatexExcerpt(combinedLog) || spawnError };
+}
+
 module.exports = {
   COMPILE_TIMEOUT_MS,
   PROBE_TIMEOUT_MS,
   findCompiler,
+  findCompilerAsync,
+  runCommandAsync,
   extractLatexExcerpt,
-  compileTemplate
+  compileTemplate,
+  compileTemplateAsync
 };

@@ -66,6 +66,33 @@ function markerFiles(cacheRoot, cacheKey) {
   return fs.existsSync(current) ? fs.readdirSync(current).sort() : [];
 }
 
+test("cache DTOs expose their resolved theme hash and readPdf returns active bytes", async () => {
+  const service = createService({ compiler: pdfCompiler("safe bytes") });
+  const result = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+  assert.match(result.themeHash, /^[a-f0-9]{64}$/);
+  assert.equal(result.cacheKey.startsWith(`${result.themeHash}-`), true);
+  assert.equal(service.readPdf(result.cacheKey).toString("utf8"), "safe bytes");
+});
+
+test("readPdf rejects a file swapped after active generation resolution", async () => {
+  let swapPath = null;
+  const outside = path.join(tempDir(), "outside.pdf");
+  fs.writeFileSync(outside, "outside bytes");
+  const service = createService({
+    compiler: pdfCompiler("safe bytes"),
+    beforePdfOpen(pdfPath) {
+      if (swapPath) return;
+      swapPath = pdfPath;
+      fs.renameSync(outside, `${pdfPath}.incoming`);
+      fs.renameSync(pdfPath, `${pdfPath}.old`);
+      fs.renameSync(`${pdfPath}.incoming`, pdfPath);
+    }
+  });
+  const result = await service.compile({ theme: cloneTheme(), sourceVersion: "manual" });
+  assert.equal(service.readPdf(result.cacheKey), null);
+  assert.notEqual(swapPath, null);
+});
+
 test("identical normalized designs compile once despite different source versions", async () => {
   let compiles = 0;
   const cacheRoot = tempDir();

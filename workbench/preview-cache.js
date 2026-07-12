@@ -206,6 +206,7 @@ function createPreviewCache(options = {}) {
       status: "ready",
       cached,
       cacheKey: entry.metadata.cacheKey,
+      themeHash: entry.metadata.themeHash,
       compilerKind: entry.metadata.compilerKind,
       completedAt: entry.metadata.completedAt,
       sourceVersion: entry.metadata.sourceVersion,
@@ -313,6 +314,7 @@ function createPreviewCache(options = {}) {
       status,
       cached: false,
       cacheKey,
+      themeHash,
       message: boundedDiagnostic(message, roots, status === "unavailable" ? "No LaTeX compiler is available." : "Preview compilation failed."),
       ...(status === "failed" ? { excerpt: boundedDiagnostic(excerpt, roots, "") } : {}),
       compilerKind,
@@ -395,10 +397,10 @@ function createPreviewCache(options = {}) {
     }
   }
 
-  function compile({ theme, sourceVersion, force = false }) {
+  function compile({ theme, sourceVersion, force = false, resolvedBundle = null }) {
     let bundle;
     try {
-      bundle = bundleResolver(theme, registry);
+      bundle = resolvedBundle || bundleResolver(theme, registry);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -426,7 +428,44 @@ function createPreviewCache(options = {}) {
     return entry ? entry.pdfPath : null;
   }
 
-  return { compile, resolvePdf };
+  function readPdf(cacheKey) {
+    if (!isSafeCacheKey(cacheKey)) return null;
+    const themeHash = cacheKey.slice(0, 64);
+    const version = cacheKey.slice(65);
+    const entry = readReadyEntry(cacheKey, themeHash, version);
+    if (!entry) return null;
+    let resolvedStat;
+    try { resolvedStat = fs.statSync(entry.pdfPath); } catch { return null; }
+    if (!resolvedStat.isFile()) return null;
+    if (options.beforePdfOpen) options.beforePdfOpen(entry.pdfPath);
+    const noFollow = fs.constants.O_NOFOLLOW || 0;
+    let fd = null;
+    try {
+      fd = fsOps.openSync(entry.pdfPath, fs.constants.O_RDONLY | noFollow);
+      const opened = fsOps.fstatSync(fd);
+      if (!opened.isFile()) return null;
+      const real = fs.realpathSync(entry.pdfPath);
+      if (!isRealPathBeneath(cacheRootReal, real)) return null;
+      const current = fs.statSync(real);
+      const same = opened.dev === resolvedStat.dev && opened.ino === resolvedStat.ino && opened.size === resolvedStat.size
+        && current.dev === opened.dev && current.ino === opened.ino && current.size === opened.size;
+      if (!same) return null;
+      const buffer = Buffer.alloc(opened.size);
+      let offset = 0;
+      while (offset < buffer.length) {
+        const count = fsOps.readSync(fd, buffer, offset, buffer.length - offset, offset);
+        if (!Number.isInteger(count) || count <= 0) return null;
+        offset += count;
+      }
+      return buffer;
+    } catch {
+      return null;
+    } finally {
+      if (fd !== null) try { fsOps.closeSync(fd); } catch { /* best effort */ }
+    }
+  }
+
+  return { compile, resolvePdf, readPdf };
 }
 
 module.exports = { createPreviewCache, isSafeCacheKey, makeCacheKey, writeAllSync };
