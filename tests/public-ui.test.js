@@ -195,3 +195,10 @@ test("browser preview renders trusted corner logos", () => {
   assert.match(css, /\.preview-corner-logo\.is-top-right/);
   assert.match(css, /\.preview-corner-logo\.is-small/);
 });
+
+test("handoff page reveals an already imported AI draft", () => {
+  const script = readPublicFile("app.js");
+  assert.match(script, /function renderAiHandoff\(\)[\s\S]*?state\.workflow\.hasValidAiDraft[\s\S]*?View AI Comparison[\s\S]*?navigateToStep\("ai-compare"\)/);
+  assert.match(script, /function previewThemeForStep\(\)[\s\S]*?ai-handoff[\s\S]*?state\.comparison\.draft/);
+  assert.match(script, /renderThemeInto\(elements\.slidePreview, previewThemeForStep\(\)\)/);
+});

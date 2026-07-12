@@ -421,8 +421,15 @@ async function exportAiHandoff() {
 
 function renderAiHandoff() {
   const wrap = document.createElement("div"); wrap.dataset.region = "ai-handoff";
-  const text = document.createElement("p"); text.id = "handoff-status"; text.textContent = "The handoff is ready. Ask the external agent to read the folder and create ai-draft-theme.json, then continue to import.";
-  const next = document.createElement("button"); next.type = "button"; next.textContent = "Import AI Draft"; next.addEventListener("click", () => navigateToStep("ai-import"));
+  const hasDraft = state.workflow.hasValidAiDraft && state.comparison;
+  const text = document.createElement("p"); text.id = "handoff-status";
+  text.textContent = hasDraft
+    ? "The validated AI draft is ready. The live preview now shows the AI version."
+    : "The handoff is ready. Ask the external agent to create ai-draft-theme.json, then continue to import.";
+  const next = document.createElement("button"); next.type = "button";
+  next.textContent = hasDraft ? "View AI Comparison" : "Import AI Draft";
+  if (hasDraft) next.addEventListener("click", () => navigateToStep("ai-compare"));
+  else next.addEventListener("click", () => navigateToStep("ai-import"));
   wrap.append(text, next); return wrap;
 }
 
@@ -836,8 +843,13 @@ function renderThemeInto(container, theme) {
   replaceChildren(container, [slide]);
 }
 
+function previewThemeForStep() {
+  if (currentStep().id === "ai-handoff" && state.workflow.hasValidAiDraft && state.comparison) return state.comparison.draft;
+  return state.theme;
+}
+
 function renderPreview() {
-  renderThemeInto(elements.slidePreview, state.theme);
+  renderThemeInto(elements.slidePreview, previewThemeForStep());
 }
 
 function reviewGate() {
