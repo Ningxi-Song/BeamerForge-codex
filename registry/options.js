@@ -3,19 +3,22 @@
 const path = require("node:path");
 const { clone } = require("../lib/utils");
 
-function withRendererSupport(options) {
+function defineRegistryCollection(options, supportById) {
   return Object.freeze(Object.fromEntries(
-    Object.entries(options).map(([id, option]) => [
-      id,
-      { ...option, renderers: { html: true, latex: true } }
-    ])
+    Object.entries(options).map(([id, option]) => {
+      const renderers = supportById?.[id];
+      if (typeof renderers?.html !== "boolean" || typeof renderers?.latex !== "boolean") {
+        throw new Error(`Registry option ${id} must explicitly declare renderer support`);
+      }
+      return [id, { ...option, renderers: { ...renderers } }];
+    })
   ));
 }
 
 const PAGE_NUMBER_FOOTLINE =
   "\\setbeamertemplate{footline}{%\\n  \\hfill\\insertframenumber/\\inserttotalframenumber\\hspace{1.2em}\\vspace{0.8em}\\n}";
 
-const PALETTES = withRendererSupport({
+const PALETTES = defineRegistryCollection({
   "academic-blue": {
     id: "academic-blue",
     label: "Academic Blue",
@@ -107,6 +110,14 @@ const PALETTES = withRendererSupport({
       alert: "#CC2D18"
     }
   }
+}, {
+  "academic-blue": { html: true, latex: true },
+  "rose-red": { html: true, latex: true },
+  "midnight-blue": { html: true, latex: true },
+  "forest-minimal": { html: true, latex: true },
+  "slate-teal": { html: true, latex: true },
+  "warm-neutral": { html: true, latex: true },
+  custom: { html: true, latex: true }
 });
 
 function localFont(id, label, fileName, mode, fallback) {
@@ -120,7 +131,7 @@ function localFont(id, label, fileName, mode, fallback) {
   };
 }
 
-const FONTS = withRendererSupport({
+const FONTS = defineRegistryCollection({
   palatino: {
     id: "palatino",
     label: "Palatino",
@@ -201,6 +212,48 @@ const FONTS = withRendererSupport({
   "zilla-slab": localFont("zilla-slab", "Zilla Slab", "Zilla_Slab.ttf", "serif-slab", "Georgia, serif"),
   "space-grotesk": localFont("space-grotesk", "Space Grotesk", "Space_Grotesk.ttf", "sans-modern", "Arial, sans-serif"),
   manrope: localFont("manrope", "Manrope", "Manrope.ttf", "sans-modern", "Arial, sans-serif")
+}, {
+  palatino: { html: true, latex: true },
+  neuton: { html: true, latex: true },
+  "latin-modern": { html: true, latex: true },
+  helvetica: { html: true, latex: true },
+  times: { html: true, latex: true },
+  lato: { html: true, latex: true },
+  "fira-sans": { html: true, latex: true },
+  "source-sans-3": { html: true, latex: true },
+  inter: { html: true, latex: true },
+  roboto: { html: true, latex: true },
+  montserrat: { html: true, latex: true },
+  poppins: { html: true, latex: true },
+  "ibm-plex-sans": { html: true, latex: true },
+  "public-sans": { html: true, latex: true },
+  "open-sans": { html: true, latex: true },
+  "crimson-text": { html: true, latex: true },
+  cardo: { html: true, latex: true },
+  "pt-serif": { html: true, latex: true },
+  merriweather: { html: true, latex: true },
+  "source-serif-4": { html: true, latex: true },
+  "ibm-plex-serif": { html: true, latex: true },
+  arvo: { html: true, latex: true },
+  lora: { html: true, latex: true },
+  "eb-garamond": { html: true, latex: true },
+  literata: { html: true, latex: true },
+  "fira-code": { html: true, latex: true },
+  "jetbrains-mono": { html: true, latex: true },
+  "ibm-plex-mono": { html: true, latex: true },
+  inconsolata: { html: true, latex: true },
+  "space-mono": { html: true, latex: true },
+  "source-code-pro": { html: true, latex: true },
+  "bebas-neue": { html: true, latex: true },
+  oswald: { html: true, latex: true },
+  rajdhani: { html: true, latex: true },
+  orbitron: { html: true, latex: true },
+  "playfair-display": { html: true, latex: true },
+  "dm-serif-display": { html: true, latex: true },
+  "abril-fatface": { html: true, latex: true },
+  "zilla-slab": { html: true, latex: true },
+  "space-grotesk": { html: true, latex: true },
+  manrope: { html: true, latex: true }
 });
 
 function bullet(id, label, packageLine, itemTemplate, subitemTemplate, cssMarker) {
@@ -211,7 +264,7 @@ const PIFONT = "\\usepackage{pifont}";
 const AMSSYMB = "\\usepackage{amssymb}";
 const TIKZ_SHAPES = "\\RequirePackage{tikz}\\n\\usetikzlibrary{shapes.geometric}";
 
-const BULLETS = withRendererSupport({
+const BULLETS = defineRegistryCollection({
   "pifont-outline": bullet("pifont-outline", "Pifont Outline", PIFONT, "\\ding{109}", "\\ding{119}", "□"),
   triangle: bullet("triangle", "Triangle", AMSSYMB, "$\\blacktriangleright$", "$\\triangleright$", ">"),
   "ding-arrow": bullet("ding-arrow", "Ding Arrow", PIFONT, "\\ding{220}", "\\ding{216}", "➜"),
@@ -244,9 +297,37 @@ const BULLETS = withRendererSupport({
   "tikz-octagon": bullet("tikz-octagon", "TikZ Octagon", TIKZ_SHAPES,
     "\\tikz[baseline=-0.5ex] \\node[regular polygon, regular polygon sides=8, fill=black, inner sep=1.5pt] {};",
     "$\\circ$", "⬣")
+}, {
+  "pifont-outline": { html: true, latex: true },
+  triangle: { html: true, latex: true },
+  "ding-arrow": { html: true, latex: true },
+  square: { html: true, latex: true },
+  star: { html: true, latex: true },
+  diamond: { html: true, latex: true },
+  "pifont-ding32": { html: true, latex: true },
+  "pifont-ding67": { html: true, latex: true },
+  "pifont-ding70": { html: true, latex: true },
+  "pifont-ding109": { html: true, latex: true },
+  "pifont-ding110": { html: true, latex: true },
+  "pifont-ding168": { html: true, latex: true },
+  "math-bullet": { html: true, latex: true },
+  "math-star": { html: true, latex: true },
+  "math-asterisk": { html: true, latex: true },
+  "math-dagger": { html: true, latex: true },
+  "math-ddagger": { html: true, latex: true },
+  "math-oplus": { html: true, latex: true },
+  "math-ominus": { html: true, latex: true },
+  "math-otimes": { html: true, latex: true },
+  "math-odot": { html: true, latex: true },
+  "math-oslash": { html: true, latex: true },
+  "math-circledast": { html: true, latex: true },
+  "tikz-cross": { html: true, latex: true },
+  "tikz-plus": { html: true, latex: true },
+  "tikz-arrow": { html: true, latex: true },
+  "tikz-octagon": { html: true, latex: true }
 });
 
-const BLOCKS = withRendererSupport({
+const BLOCKS = defineRegistryCollection({
   classic: {
     id: "classic",
     label: "Classic",
@@ -268,9 +349,13 @@ const BLOCKS = withRendererSupport({
     cssRadius: "6px",
     cssShadow: "0 10px 24px rgba(15, 23, 42, 0.18)"
   }
+}, {
+  classic: { html: true, latex: true },
+  rounded: { html: true, latex: true },
+  shadowed: { html: true, latex: true }
 });
 
-const NAVIGATION = withRendererSupport({
+const NAVIGATION = defineRegistryCollection({
   none: {
     id: "none",
     label: "None",
@@ -303,17 +388,24 @@ const NAVIGATION = withRendererSupport({
     hasHeader: true,
     hasFootline: true
   }
+}, {
+  none: { html: true, latex: true },
+  "page-number": { html: true, latex: true },
+  "plain-footer": { html: true, latex: true },
+  "soft-miniframes": { html: true, latex: true }
 });
 
-const TITLE_PAGES = withRendererSupport({
+const TITLE_PAGES = defineRegistryCollection({
   "left-curtain": {
     id: "left-curtain",
     label: "Left Curtain",
     description: "Left-aligned title block with generous whitespace."
   }
+}, {
+  "left-curtain": { html: true, latex: true }
 });
 
-const LOGOS = withRendererSupport({
+const LOGOS = defineRegistryCollection({
   none: { id: "none", label: "No Logo", asset: null, previewUrl: "" },
   duck: {
     id: "duck",
@@ -321,6 +413,9 @@ const LOGOS = withRendererSupport({
     asset: "elements/decorations/logos/duck.svg",
     previewUrl: "/assets/elements/decorations/logos/duck.svg"
   }
+}, {
+  none: { html: true, latex: true },
+  duck: { html: true, latex: true }
 });
 
 function getRegistry() {
@@ -353,6 +448,7 @@ function resolveAssetPath(rootDir, assetPath) {
 }
 
 module.exports = {
+  defineRegistryCollection,
   getRegistry,
   resolveThemeChoices,
   resolveAssetPath

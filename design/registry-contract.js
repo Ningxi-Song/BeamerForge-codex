@@ -12,11 +12,25 @@ const COLLECTIONS = [
 
 function validateRegistryContract(registry) {
   const errors = [];
+  const registryObject = registry && typeof registry === "object" && !Array.isArray(registry)
+    ? registry
+    : {};
 
   for (const collection of COLLECTIONS) {
-    for (const [id, option] of Object.entries(registry[collection] || {})) {
+    const options = registryObject[collection];
+    if (!options || typeof options !== "object" || Array.isArray(options)) {
+      errors.push({
+        collection,
+        id: null,
+        renderer: null,
+        message: "collection must be an object"
+      });
+      continue;
+    }
+
+    for (const [id, option] of Object.entries(options)) {
       for (const renderer of ["html", "latex"]) {
-        if (typeof option.renderers?.[renderer] !== "boolean") {
+        if (typeof option?.renderers?.[renderer] !== "boolean") {
           errors.push({
             collection,
             id,
