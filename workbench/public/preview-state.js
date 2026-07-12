@@ -12,18 +12,18 @@
     const setTimeoutFn = options.setTimeoutFn || setTimeout;
     const clearTimeoutFn = options.clearTimeoutFn || clearTimeout;
     const debounceMs = options.debounceMs === undefined ? 50 : options.debounceMs;
-    const state = { sequence: 0, successfulKey: null, pendingKey: null, timer: null };
+    const state = { sequence: 0, desiredKey: null, successfulKey: null, pendingKey: null, timer: null };
 
     async function perform(input, key, sequence, context) {
       try {
         const design = await resolve(input);
-        if (sequence !== state.sequence || key !== state.pendingKey) return null;
+        if (sequence !== state.sequence || key !== state.pendingKey || key !== state.desiredKey) return null;
         state.successfulKey = key;
         state.pendingKey = null;
         onSuccess(design, { key, context });
         return design;
       } catch (error) {
-        if (sequence !== state.sequence || key !== state.pendingKey) return null;
+        if (sequence !== state.sequence || key !== state.pendingKey || key !== state.desiredKey) return null;
         state.pendingKey = null;
         onError(error, { key, context });
         return null;
@@ -31,7 +31,17 @@
     }
 
     function begin(input, key, context, delayed) {
-      if (key === state.successfulKey || key === state.pendingKey) return delayed ? false : Promise.resolve(null);
+      state.desiredKey = key;
+      if (key === state.successfulKey) {
+        if (state.pendingKey !== null && state.pendingKey !== key) {
+          if (state.timer !== null) clearTimeoutFn(state.timer);
+          state.timer = null;
+          state.pendingKey = null;
+          state.sequence++;
+        }
+        return delayed ? false : Promise.resolve(null);
+      }
+      if (key === state.pendingKey) return delayed ? false : Promise.resolve(null);
       if (state.timer !== null) clearTimeoutFn(state.timer);
       const sequence = ++state.sequence;
       state.pendingKey = key;

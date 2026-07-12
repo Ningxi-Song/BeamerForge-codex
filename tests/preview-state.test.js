@@ -94,10 +94,51 @@ test("same key dedupes while pending and after success", async () => {
   await h.timers.runNext();
   assert.equal(h.successes.length, 1);
   assert.equal(h.lifecycle.state.successfulKey, "A");
+  assert.equal(h.lifecycle.state.desiredKey, "A");
   assert.equal(h.lifecycle.state.pendingKey, null);
   assert.equal(h.lifecycle.schedule({ value: "A" }, "A"), false);
   assert.equal(calls, 1);
 });
+
+test("reverting A to B to A cancels B before its timer runs", async () => {
+  const calls = [];
+  const h = lifecycleHarness(async (input) => { calls.push(input.id); return input; });
+  h.lifecycle.schedule({ id: "A" }, "A");
+  await h.timers.runNext();
+  h.lifecycle.schedule({ id: "B" }, "B");
+
+  assert.equal(h.timers.size, 1);
+  assert.equal(h.lifecycle.schedule({ id: "A" }, "A"), false);
+  assert.equal(h.timers.size, 0);
+  assert.equal(h.lifecycle.state.desiredKey, "A");
+  assert.equal(h.lifecycle.state.pendingKey, null);
+  assert.equal(h.lifecycle.state.successfulKey, "A");
+  assert.deepEqual(calls, ["A"]);
+});
+
+for (const outcome of ["success", "failure"]) {
+  test(`reverting A to B to A ignores late in-flight B ${outcome}`, async () => {
+    const b = deferred();
+    const h = lifecycleHarness((input) => input.id === "A" ? Promise.resolve(input) : b.promise);
+    h.lifecycle.schedule({ id: "A" }, "A");
+    await h.timers.runNext();
+    h.lifecycle.schedule({ id: "B" }, "B");
+    const bRun = h.timers.runNext();
+
+    assert.equal(h.lifecycle.schedule({ id: "A" }, "A"), false);
+    assert.equal(h.lifecycle.state.desiredKey, "A");
+    assert.equal(h.lifecycle.state.pendingKey, null);
+    if (outcome === "success") b.resolve({ id: "B" });
+    else b.reject(new Error("late B"));
+    await bRun;
+
+    assert.equal(h.lifecycle.state.successfulKey, "A");
+    assert.equal(h.lifecycle.state.desiredKey, "A");
+    assert.equal(h.lifecycle.state.pendingKey, null);
+    assert.deepEqual(h.successes.map((item) => item.design.id), ["A"]);
+    assert.equal(h.errors.length, 0);
+  });
+}
 
 test("current failure clears pending and permits an identical retry", async () => {
   let calls = 0;
