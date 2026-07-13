@@ -363,6 +363,19 @@ test("PUT /api/theme persists a valid theme", async (t) => {
   assert.equal(saved.identity.name, "server-theme");
 });
 
+test("server exposes curated beginner directions without registry internals", async (t) => {
+  const stateDir = tempDir("beamerforge-directions-");
+  const baseUrl = await withServer(t, { stateDir });
+  const response = await fetch(`${baseUrl}/api/directions`);
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.deepEqual(body.directions.map((direction) => direction.id), ["quiet-academic", "clean-modern", "bold-editorial"]);
+  assert.equal(body.directions.every((direction) => direction.swatches.length === 5), true);
+  assert.equal(Object.hasOwn(body, "registry"), false);
+});
+
 test("POST /api/design/resolve returns a resolved design without persisting the theme", async (t) => {
   const stateDir = tempDir("beamerforge-server-");
   const baseUrl = await withServer(t, { stateDir });

@@ -22,6 +22,7 @@ const { createHandoff, importAiDraft } = require("./ai-handoff");
 const { diffThemes } = require("./theme-diff");
 const { renderSvg } = require("../design/vector-renderers");
 const { canonicalJson } = require("../lib/canonical-json");
+const { listDirections } = require("./design-directions");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_MULTIPART_BYTES = 101 * 1024 * 1024;
@@ -520,6 +521,10 @@ function createWorkbenchServer(options = {}) {
     try {
       if (req.method === "GET" && url.pathname === "/api/options") {
         sendJson(res, 200, registry);
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/directions") {
+        sendJson(res, 200, { ok: true, directions: listDirections(registry) });
         return;
       }
       if (req.method === "GET" && url.pathname === "/api/theme") {
