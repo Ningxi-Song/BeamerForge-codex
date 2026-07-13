@@ -167,6 +167,21 @@ test("browser script renders wizard steps and preserves cumulative choices", () 
   assert.doesNotMatch(script, /syncThemeFromControls/);
 });
 
+test("start step asks for a vibe and offers curated visual directions", () => {
+  const script = readPublicFile("app.js");
+  const start = functionSource(script, "renderStart");
+  for (const token of ["vibeInput", "direction-grid", "state.directions", "applyDirectionChoice"]) {
+    assert.match(start, new RegExp(escapeRegExp(token)));
+  }
+  const apply = functionSource(script, "applyDirectionChoice");
+  assert.match(apply, /state\.registry\.palettes/);
+  assert.match(apply, /state\.registry\.fonts/);
+  assert.match(apply, /markManualMutation\(\)/);
+  assert.match(script, /api\("\/api\/directions"\)/);
+  assert.match(script, /beamerforge:vibe/);
+  assert.match(script, /beamerforge:direction/);
+});
+
 test("browser script gates compile behind wizard review", () => {
   const script = readPublicFile("app.js");
   assert.match(

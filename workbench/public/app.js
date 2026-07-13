@@ -37,6 +37,7 @@ const CUBE_HALF = 1;
 
 const state = {
   registry: null, theme: null, resolvedDesign: null, validationErrors: [], previewValidationErrors: [], statuses: [], busy: false,
+  vibe: "", directions: [], directionId: null,
   previewResolution: null, previewErrorActive: false, previewBuildStatusBeforeError: null, previewBuildErrorPresentation: null,
   baseColor: { r: 69, g: 105, b: 144 }, scheme: "complementary",
   savedPalettes: [], paletteCounter: 0,
@@ -286,7 +287,7 @@ function updateActions() {
   elements.back.disabled = state.busy || currentStep().id === "start";
   const step = currentStep();
   const nextId = wizard.nextStepId(step.id);
-  elements.next.disabled = state.busy || step.id === "final-review" || !wizard.canEnterStep(nextId, state.workflow);
+  elements.next.disabled = state.busy || (step.id === "start" && !state.directionId) || step.id === "final-review" || !wizard.canEnterStep(nextId, state.workflow);
   elements.reviewGenerate.disabled = state.busy || !selectionState.canBuild(state.workflow);
   elements.compileTheme.disabled = state.busy || !selectionState.canBuild(state.workflow);
 }
@@ -497,11 +498,76 @@ function renderSummary() {
   replaceChildren(elements.summaryList, rows);
 }
 
+function applyDirectionChoice(direction) {
+  const palette = state.registry.palettes[direction.paletteId];
+  const font = state.registry.fonts[direction.fontId];
+  if (!palette || !font) return;
+  state.theme.colors.paletteId = palette.id;
+  Object.assign(state.theme.colors, clone(palette.colors));
+  state.theme.fonts.body = font.id;
+  state.theme.fonts.title = font.id;
+  state.theme.fonts.mode = font.mode;
+  state.directionId = direction.id;
+  window.sessionStorage.setItem("beamerforge:direction", direction.id);
+  markManualMutation();
+  state.validationErrors = state.validationErrors.filter((error) => !["color", "font"].includes(errorStep(error)));
+  state.previewValidationErrors = state.previewValidationErrors.filter((error) => !["color", "font"].includes(errorStep(error)));
+  setStatus("Unsaved");
+  render();
+}
+
 function renderStart() {
   const frag = document.createDocumentFragment();
-  const intro = document.createElement("p"); intro.textContent = "The default template is loaded. Move through the steps to replace only the part you choose while preserving previous and later selections.";
-  const name = document.createElement("p"); name.textContent = `Template slug: ${state.theme.identity.name}`;
-  frag.append(intro, name); return frag;
+  const intro = document.createElement("p");
+  intro.textContent = "What should your presentation feel like? Describe it briefly, then choose the closest visual direction.";
+
+  const vibeLabel = document.createElement("label");
+  vibeLabel.className = "vibe-form";
+  vibeLabel.htmlFor = "vibeInput";
+  vibeLabel.textContent = "Your presentation vibe";
+  const vibeInput = document.createElement("input");
+  vibeInput.id = "vibeInput";
+  vibeInput.type = "text";
+  vibeInput.value = state.vibe;
+  vibeInput.placeholder = "For example: calm, credible, and modern";
+  vibeInput.addEventListener("input", () => {
+    state.vibe = vibeInput.value;
+    window.sessionStorage.setItem("beamerforge:vibe", state.vibe);
+  });
+  vibeLabel.appendChild(vibeInput);
+
+  const prompt = document.createElement("h3");
+  prompt.textContent = "Choose a starting direction";
+  const grid = document.createElement("div");
+  grid.className = "direction-grid";
+  for (const direction of state.directions) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = direction.id === state.directionId ? "direction-card is-selected" : "direction-card";
+    card.setAttribute("aria-pressed", direction.id === state.directionId ? "true" : "false");
+
+    const label = document.createElement("strong");
+    label.textContent = direction.label;
+    const description = document.createElement("span");
+    description.textContent = direction.description;
+    const colors = document.createElement("span");
+    colors.className = "direction-swatches";
+    for (const color of direction.swatches) {
+      const swatch = document.createElement("span");
+      swatch.style.backgroundColor = color;
+      swatch.setAttribute("aria-hidden", "true");
+      colors.appendChild(swatch);
+    }
+    const fontSample = document.createElement("span");
+    fontSample.className = "direction-font-sample";
+    fontSample.textContent = state.registry.fonts[direction.fontId]?.label || direction.fontId;
+    card.append(label, description, colors, fontSample);
+    card.addEventListener("click", () => applyDirectionChoice(direction));
+    grid.appendChild(card);
+  }
+
+  frag.append(intro, vibeLabel, prompt, grid);
+  return frag;
 }
 
 function renderReview() {
@@ -1172,8 +1238,15 @@ function registerFontFaces(reg) {
 async function boot() {
   setBuildStatus("Loading options and theme...");
   let comparisonError = null;
-  const [reg, themeResult] = await Promise.all([api("/api/options"), api("/api/theme?validated=1")]);
+  const [reg, themeResult, directionsResult] = await Promise.all([
+    api("/api/options"),
+    api("/api/theme?validated=1"),
+    api("/api/directions")
+  ]);
   state.registry = reg; state.theme = clone(themeResult.theme);
+  state.directions = directionsResult.directions;
+  state.vibe = window.sessionStorage.getItem("beamerforge:vibe") || "";
+  state.directionId = window.sessionStorage.getItem("beamerforge:direction") || null;
   state.workflow = selectionState.applyPersistedSelection(state.workflow, themeResult.selection);
   state.validationErrors = Array.isArray(themeResult.errors) ? themeResult.errors : [];
   initializePreviewResolution();
