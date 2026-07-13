@@ -16,9 +16,14 @@ const { clone, isPlainObject } = require("../lib/utils");
 const {
   freezeManualTheme,
   readManualTheme,
-  readAiDraft
+  readAiDraft,
+  saveAiDraft
 } = require("./theme-state");
 const { createHandoff, importAiDraft } = require("./ai-handoff");
+const { createProviderService } = require("./ai/provider-service");
+const { buildReferenceContext } = require("./ai/reference-context");
+const { createMessages, parseCandidate } = require("./ai/suggestion-prompt");
+const { createSuggestionCoordinator } = require("./ai/suggestion-coordinator");
 const { diffThemes } = require("./theme-diff");
 const { renderSvg } = require("../design/vector-renderers");
 const { canonicalJson } = require("../lib/canonical-json");
@@ -159,6 +164,24 @@ async function readMultipart(req, maxBytes = MAX_MULTIPART_BYTES) {
     req.off("aborted", abortBody);
     req.off("error", abortBody);
   }
+}
+
+async function referencesFromForm(form) {
+  const files = form.getAll("references").filter((entry) => typeof entry !== "string");
+  let relativePaths;
+  try {
+    relativePaths = JSON.parse(String(form.get("relativePaths") || "[]"));
+  } catch {
+    throw new HttpError(400, "relativePaths must be valid JSON");
+  }
+  if (!Array.isArray(relativePaths) || relativePaths.length !== files.length) {
+    throw new HttpError(400, "Reference path count does not match files");
+  }
+  return Promise.all(files.map(async (file, index) => ({
+    name: file.name,
+    relativePath: relativePaths[index],
+    bytes: Buffer.from(await file.arrayBuffer())
+  })));
 }
 
 function ensureDir(dir) { fs.mkdirSync(dir, { recursive: true }); }
@@ -539,6 +562,11 @@ function createWorkbenchServer(options = {}) {
     ? options.multipartMaxBytes : MAX_MULTIPART_BYTES;
   const registry = deepFreeze(assertRegistryContract(clone(options.registry || getRegistry())));
   adoptLegacyState(stateDir, registry);
+  const providerService = options.providerService || createProviderService({
+    fetchImpl: options.providerFetch || fetch,
+    env: options.providerEnv || process.env
+  });
+  const suggestionCoordinator = options.suggestionCoordinator || createSuggestionCoordinator();
   const projectWriter = options.writeTemplateProject || writeTemplateProject;
   const templateCompiler = options.compileTemplate || compileTemplate;
   const previewCache = options.previewCache || createPreviewCache({
@@ -656,19 +684,99 @@ function createWorkbenchServer(options = {}) {
         sendJson(res, 200, { ok: true, theme: manual, ...marker });
         return;
       }
+      if (req.method === "GET" && url.pathname === "/api/ai/connection") {
+        sendJson(res, 200, providerService.status());
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/ai/connect") {
+        const connection = await providerService.connect(await readJsonBody(req));
+        sendJson(res, 200, connection);
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/ai/disconnect") {
+        const disconnected = providerService.disconnect();
+        sendJson(res, 200, { ok: true, disconnected });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/ai/cancel") {
+        const cancelled = suggestionCoordinator.cancel();
+        sendJson(res, 200, { ok: true, cancelled });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/ai/suggest") {
+        const form = await readMultipart(req, multipartMaxBytes);
+        const { marker: baselineMarker, manual } = currentBaseline(stateDir, registry);
+        const binding = {
+          cycleId: String(form.get("cycleId") || ""),
+          reviewRevision: String(form.get("reviewRevision") || ""),
+          manualThemeHash: String(form.get("expectedManualThemeHash") || "")
+        };
+        if (binding.cycleId !== baselineMarker.cycleId
+          || binding.reviewRevision !== baselineMarker.reviewRevision
+          || binding.manualThemeHash !== baselineMarker.manualThemeHash) {
+          throw new HttpError(409, "Your reviewed design changed. Review it and try again.");
+        }
+
+        const connection = providerService.status();
+        if (!connection.connected) {
+          throw Object.assign(new Error("Connect an AI provider first"), {
+            code: "provider_not_connected",
+            statusCode: 409
+          });
+        }
+        const references = await referencesFromForm(form);
+        const referenceContext = buildReferenceContext(references, connection.capabilities);
+        const messages = createMessages({
+          baseline: manual,
+          brief: String(form.get("brief") || ""),
+          referenceContext
+        });
+        const request = suggestionCoordinator.begin(binding);
+        try {
+          const content = await providerService.complete({ messages, signal: request.signal });
+          const candidate = parseCandidate(content, { registry, validateTheme });
+          let latest;
+          try {
+            latest = currentBaseline(stateDir, registry);
+          } catch {
+            throw new HttpError(409, "Your reviewed design changed while AI was working. Review it and try again.");
+          }
+          if (!suggestionCoordinator.isCurrent(request)
+            || latest.marker.cycleId !== binding.cycleId
+            || latest.marker.reviewRevision !== binding.reviewRevision
+            || latest.marker.manualThemeHash !== binding.manualThemeHash) {
+            throw new HttpError(409, "Your reviewed design changed while AI was working. Review it and try again.");
+          }
+
+          const marker = {
+            cycleId: binding.cycleId,
+            reviewRevision: randomUUID(),
+            manualThemeHash: binding.manualThemeHash,
+            draftThemeHash: resolvedThemeHash(candidate, registry)
+          };
+          saveAiDraft(stateDir, candidate);
+          invalidateSelection(stateDir);
+          writeJsonAtomic(baselineMarkerPath(stateDir), {
+            ...latest.marker,
+            reviewRevision: marker.reviewRevision
+          });
+          writeComparisonMarker(stateDir, marker);
+          sendJson(res, 200, {
+            ok: true,
+            manual: latest.manual,
+            draft: candidate,
+            ...marker,
+            changes: diffThemes(latest.manual, candidate)
+          });
+        } finally {
+          suggestionCoordinator.finish(request);
+        }
+        return;
+      }
       if (req.method === "POST" && url.pathname === "/api/ai/handoff") {
         const { marker } = currentBaseline(stateDir, registry);
         const form = await readMultipart(req, multipartMaxBytes);
-        const files = form.getAll("references").filter((entry) => typeof entry !== "string");
-        let relativePaths;
-        try { relativePaths = JSON.parse(String(form.get("relativePaths") || "[]")); }
-        catch { throw new HttpError(400, "relativePaths must be valid JSON"); }
-        if (!Array.isArray(relativePaths) || relativePaths.length !== files.length) throw new HttpError(400, "Reference path count does not match files");
-        const references = await Promise.all(files.map(async (file, index) => ({
-          name: file.name,
-          relativePath: relativePaths[index],
-          bytes: Buffer.from(await file.arrayBuffer())
-        })));
+        const references = await referencesFromForm(form);
         const result = createHandoff({ stateDir, handoffRoot, brief: String(form.get("brief") || ""), references });
         writeJsonAtomic(handoffMarkerPath(stateDir), { cycleId: marker.cycleId, reviewRevision: marker.reviewRevision, manualThemeHash: marker.manualThemeHash });
         sendJson(res, 200, { ok: true, ...result, cycleId: marker.cycleId });
@@ -806,8 +914,10 @@ function createWorkbenchServer(options = {}) {
     } catch (error) {
       if (res.writableEnded) return;
       const code = error.statusCode || 500;
-      if (error.errors) { sendJson(res, code, { ok: false, errors: error.errors }); return; }
-      sendJson(res, code, { ok: false, error: error.message });
+      const body = { ok: false, error: error.message };
+      if (typeof error.code === "string") body.code = error.code;
+      if (Array.isArray(error.errors)) body.errors = error.errors;
+      sendJson(res, code, body);
     }
   });
 }
