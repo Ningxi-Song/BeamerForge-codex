@@ -3,6 +3,7 @@
 const wizard = window.BeamerForgeWizard;
 const previewState = window.BeamerForgePreviewState;
 const authoritativeState = window.BeamerForgeAuthoritativePreviewState;
+const selectionState = window.BeamerForgeSelectionState;
 
 const STEP_DESC = Object.freeze({
   start: "Start from the default BeamerForge template, then make one cumulative design decision per step.",
@@ -37,8 +38,8 @@ const state = {
   previewResolution: null, previewErrorActive: false, previewBuildStatusBeforeError: null, previewBuildErrorPresentation: null,
   baseColor: { r: 69, g: 105, b: 144 }, scheme: "complementary",
   savedPalettes: [], paletteCounter: 0,
-  workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null },
-  aiBrief: "", comparison: null, authoritativePreviews: { manual: null, ai: null, selected: null },
+  workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null, selectedThemeHash: null, cycleId: null, reviewRevision: null },
+  aiBrief: "", manualReview: null, comparison: null, authoritativePreviews: { manual: null, ai: null, selected: null },
   manualPreviewSave: { savedInputKey: null, themeHash: null, pendingInputKey: null, promise: null },
   cube: { yaw: -0.72, pitch: -0.42, dragging: false, dragMoved: false, lx: 0, ly: 0 }
 };
@@ -77,7 +78,7 @@ async function sendAuthoritativeRequest(source, force, { themeHash }) {
 }
 
 async function prepareAuthoritativeRequest(source, { route, themeHash }) {
-  if (source !== "manual" || route !== "manual-review" || state.workflow.hasManualBaseline) return { themeHash };
+  if (source !== "manual" || route !== "manual-review") return { themeHash };
   const inputKey = JSON.stringify(state.theme);
   const gate = state.manualPreviewSave;
   if (gate.savedInputKey === inputKey && gate.themeHash) return { themeHash: gate.themeHash };
@@ -90,6 +91,8 @@ async function prepareAuthoritativeRequest(source, { route, themeHash }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(state.theme)
       });
+      state.workflow = selectionState.invalidateForManualMutation(state.workflow);
+      state.comparison = null;
       const design = await requestResolvedDesign(saved.theme);
       const savedInputKey = JSON.stringify(saved.theme);
       if (JSON.stringify(state.theme) === inputKey) {
@@ -162,6 +165,13 @@ function errorStep(err) {
   return "manual-review";
 }
 
+function markManualMutation() {
+  state.workflow = selectionState.invalidateForManualMutation(state.workflow);
+  state.comparison = null;
+  setBuildStatus("Design changed. Review the manual design and select a version again before generating.");
+  if (currentStep().id === "final-review") window.history.replaceState({ stepId: "manual-review" }, "", "/manual-review");
+}
+
 function applyChoice(stepId, optId) {
   const coll = collectionFor(stepId);
   const opt = coll[optId]; if (!state.theme || !opt) return;
@@ -172,6 +182,7 @@ function applyChoice(stepId, optId) {
   if (stepId === "blocks") t.blocks.style = opt.id;
   if (stepId === "navigation") t.navigation.style = opt.id;
   if (stepId === "title-page") t.titlePage.layout = opt.id;
+  markManualMutation();
   state.validationErrors = state.validationErrors.filter((e) => errorStep(e) !== stepId);
   state.previewValidationErrors = state.previewValidationErrors.filter((e) => errorStep(e) !== stepId);
   setStatus("Unsaved"); render();
@@ -254,13 +265,15 @@ function updateActions() {
   const step = currentStep();
   const nextId = wizard.nextStepId(step.id);
   elements.next.disabled = state.busy || step.id === "final-review" || !wizard.canEnterStep(nextId, state.workflow);
-  elements.reviewGenerate.disabled = state.busy || !wizard.canFinalize(state.workflow);
-  elements.compileTheme.disabled = state.busy || !wizard.canFinalize(state.workflow);
+  elements.reviewGenerate.disabled = state.busy || !selectionState.canBuild(state.workflow);
+  elements.compileTheme.disabled = state.busy || !selectionState.canBuild(state.workflow);
 }
 
 async function saveDraft() {
   try {
     const r = await api("/api/theme", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(state.theme) });
+    state.workflow = selectionState.invalidateForManualMutation(state.workflow);
+    state.comparison = null;
     state.theme = clone(r.theme); state.validationErrors = []; state.previewValidationErrors = []; refreshStatuses();
     setStatus("Saved", "is-saved"); return r;
   } catch (err) {
@@ -370,6 +383,7 @@ function applyGeneratedScheme(opts = {}) {
   const primary = colors[0], accent = colors[1] || primary, alert = colors[2] || accent;
   const bg = tintForSurface(primary);
   Object.assign(state.theme.colors, { paletteId: "custom", background: bg, primary: primary.hex, accent: accent.hex, text: textColorFor(bg), blockBody: lightenForBlock(primary), alert: alert.hex });
+  markManualMutation();
   state.validationErrors = state.validationErrors.filter((e) => errorStep(e) !== "color");
   state.previewValidationErrors = state.previewValidationErrors.filter((e) => errorStep(e) !== "color");
   setStatus("Unsaved");
@@ -501,7 +515,9 @@ async function freezeManualBaseline(options = {}) {
     setBusy(true); await saveDraft();
     const result = await api("/api/manual-baseline", { method: "POST" });
     state.workflow.hasManualBaseline = true;
-    state.workflow.selectedVersion = "manual";
+    state.workflow = selectionState.invalidateForManualMutation(state.workflow);
+    state.manualReview = result;
+    state.comparison = null;
     state.theme = clone(result.theme);
     if (options.navigate !== false) navigateToStep("ai-customize"); else render();
   } catch (error) { setBuildStatus(error.details || error.message); }
@@ -558,7 +574,13 @@ async function importAiDraft() {
   try {
     setBusy(true); const raw = document.getElementById("aiDraftJson")?.value || "";
     let draft; try { draft = JSON.parse(raw); } catch { throw new Error("AI draft is not valid JSON"); }
-    await api("/api/ai/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draft) });
+    state.workflow = selectionState.invalidateForManualMutation(state.workflow);
+    state.comparison = null;
+    renderSummary();
+    const result = await api("/api/ai/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draft) });
+    state.workflow = selectionState.invalidateForReviewMutation(state.workflow, result);
+    state.comparison = null;
+    renderSummary();
     await loadAiComparison(); navigateToStep("ai-compare");
   } catch (error) { setBuildStatus(error.details || error.message); }
   finally { setBusy(false); }
@@ -698,7 +720,12 @@ function renderAiCompare() {
 async function selectFinalVersion(version) {
   try {
     setBusy(true); const endpoint = version === "ai" ? "/api/ai/accept" : "/api/ai/restore";
-    const result = await api(endpoint, { method: "POST" }); state.workflow.selectedVersion = version; state.theme = clone(result.theme); navigateToStep("final-review");
+    const reviewed = version === "ai" ? state.comparison : (state.comparison || state.manualReview);
+    const request = selectionState.reviewRequest(reviewed);
+    if (!request) throw new Error("Review the current manual and AI versions again before selecting one.");
+    const result = await api(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request) });
+    state.workflow = selectionState.applyServerSelection(state.workflow, result);
+    state.theme = clone(result.theme); navigateToStep("final-review");
   } catch (error) { setBuildStatus(error.details || error.message); }
   finally { setBusy(false); }
 }
@@ -1045,7 +1072,7 @@ function appendCornerLogo(parent, design) {
   image.className = `preview-corner-logo is-${logo.position}`;
   image.src = previewUrl;
   image.alt = `${logo.label} corner logo`;
-  image.style.width = `${logo.sizeUnits * 6.25}%`;
+  image.style.width = `${logo.widthFraction * 100}%`;
   image.dataset.scope = logo.scope;
   parent.appendChild(image);
 }
@@ -1075,20 +1102,20 @@ function renderPreview() {
 function reviewGate() {
   refreshStatuses(); renderSummary();
   if (!wizard.canGenerate(state.statuses)) { setBuildStatus("Review required before generation."); navigateToStep("manual-review"); return false; }
-  if (!wizard.canFinalize(state.workflow)) { setBuildStatus("Choose the manual or AI version before generation."); return false; }
+  if (!selectionState.canBuild(state.workflow)) { setBuildStatus("Choose the manual or AI version again before generation."); return false; }
   return true;
 }
 
 async function generateTheme() {
   if (!reviewGate()) return;
-  try { setBusy(true); setStatus("Saving"); await saveDraft(); setStatus("Generating"); const r = await api("/api/generate", { method: "POST" }); setBuildStatus(r); setStatus("Saved", "is-saved"); }
+  try { setBusy(true); setStatus("Generating"); const r = await api("/api/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(selectionState.buildRequest(state.workflow)) }); setBuildStatus(r); setStatus("Saved", "is-saved"); }
   catch (err) { setBuildStatus(err.details || err.message); setStatus("Error", "is-error"); }
   finally { setBusy(false); render(); }
 }
 
 async function compileTheme() {
   if (!reviewGate()) return;
-  try { setBusy(true); setStatus("Saving"); await saveDraft(); setStatus("Compiling"); const r = await api("/api/compile", { method: "POST" }); setBuildStatus(r); setStatus("Saved", "is-saved"); }
+  try { setBusy(true); setStatus("Compiling"); const r = await api("/api/compile", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(selectionState.buildRequest(state.workflow)) }); setBuildStatus(r); setStatus("Saved", "is-saved"); }
   catch (err) { setBuildStatus(err.details || err.message); setStatus("Error", "is-error"); }
   finally { setBusy(false); render(); }
 }
@@ -1124,28 +1151,28 @@ async function boot() {
   let comparisonError = null;
   const [reg, themeResult] = await Promise.all([api("/api/options"), api("/api/theme?validated=1")]);
   state.registry = reg; state.theme = clone(themeResult.theme);
+  state.workflow = selectionState.applyPersistedSelection(state.workflow, themeResult.selection);
   state.validationErrors = Array.isArray(themeResult.errors) ? themeResult.errors : [];
   initializePreviewResolution();
   const baselineResponse = await fetch("/api/manual-baseline");
   state.workflow.hasManualBaseline = baselineResponse.ok;
+  if (baselineResponse.ok) state.manualReview = await baselineResponse.json();
   const handoffResponse = await fetch("/api/ai/handoff");
   state.workflow.hasHandoff = handoffResponse.ok;
   const comparisonResponse = await fetch("/api/ai/comparison");
   if (comparisonResponse.ok) {
     const comparison = await comparisonResponse.json();
-    try {
-      await loadAiComparison(comparison);
-      if (JSON.stringify(state.theme) === JSON.stringify(state.comparison.draft)) state.workflow.selectedVersion = "ai";
-      else if (JSON.stringify(state.theme) === JSON.stringify(state.comparison.manual)) state.workflow.selectedVersion = "manual";
-    } catch (error) { comparisonError = error; }
-  } else if (state.workflow.hasManualBaseline) {
-    const baseline = await baselineResponse.json();
-    if (JSON.stringify(state.theme) === JSON.stringify(baseline.theme)) state.workflow.selectedVersion = "manual";
+    if (selectionState.isComparisonCurrent(themeResult.cycleId, themeResult.themeHash, comparison)) {
+      try { await loadAiComparison(comparison); }
+      catch (error) { comparisonError = error; }
+    }
   }
   const initialInputKey = JSON.stringify(state.theme);
   const initialDesign = await resolvePreviewDesign(clone(state.theme), { render: false, inputKey: initialInputKey });
   syncBase(); registerFontFaces(reg); bindControls();
-  if (window.location.pathname === "/") navigateToStep("start", { replace: true, schedulePreview: false }); else render({ schedulePreview: false });
+  if (window.location.pathname === "/") navigateToStep("start", { replace: true, schedulePreview: false });
+  else if (window.location.pathname === "/final-review" && !selectionState.canBuild(state.workflow)) navigateToStep("manual-review", { replace: true, schedulePreview: false });
+  else render({ schedulePreview: false });
   if (initialDesign) setStatus("Idle");
   if (initialDesign && !comparisonError) setBuildStatus("No build yet.");
 }

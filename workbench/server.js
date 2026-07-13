@@ -3,6 +3,8 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { randomUUID } = require("node:crypto");
+const { Transform } = require("node:stream");
 const { DEFAULT_THEME, validateTheme } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
 const { resolveDesign, resolveDesignBundle, deepFreeze, ThemeValidationError } = require("../design/resolve-design");
@@ -14,9 +16,7 @@ const { clone, isPlainObject } = require("../lib/utils");
 const {
   freezeManualTheme,
   readManualTheme,
-  readAiDraft,
-  acceptAiDraft,
-  restoreManualTheme
+  readAiDraft
 } = require("./theme-state");
 const { createHandoff, importAiDraft } = require("./ai-handoff");
 const { diffThemes } = require("./theme-diff");
@@ -24,6 +24,7 @@ const { renderSvg } = require("../design/vector-renderers");
 const { canonicalJson } = require("../lib/canonical-json");
 
 const MAX_BODY_BYTES = 1024 * 1024;
+const MAX_MULTIPART_BYTES = 101 * 1024 * 1024;
 const WIZARD_ROUTES = new Set([
   "/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page", "/review",
   "/manual-review", "/ai-customize", "/ai-handoff", "/ai-import", "/ai-compare", "/final-review"
@@ -83,19 +84,62 @@ function sendText(res, status, body, contentType = "text/plain; charset=utf-8") 
   res.end(buf);
 }
 
-async function readMultipart(req) {
-  const contentLength = Number(req.headers["content-length"] || 0);
-  if (contentLength > 101 * 1024 * 1024) throw new HttpError(413, "Upload too large");
+async function readMultipart(req, maxBytes = MAX_MULTIPART_BYTES) {
+  const rawContentLength = req.headers["content-length"];
+  let contentLength = null;
+  if (rawContentLength !== undefined) {
+    if (Array.isArray(rawContentLength) || !/^(0|[1-9]\d*)$/.test(rawContentLength)) {
+      req.resume();
+      throw new HttpError(400, "Invalid Content-Length");
+    }
+    contentLength = Number(rawContentLength);
+    if (!Number.isSafeInteger(contentLength)) {
+      req.resume();
+      throw new HttpError(400, "Invalid Content-Length");
+    }
+    if (contentLength > maxBytes) {
+      req.resume();
+      throw new HttpError(413, "Upload too large");
+    }
+  }
+
+  let bytes = 0;
+  let limitError = null;
+  const limitedBody = new Transform({
+    transform(chunk, encoding, callback) {
+      bytes += chunk.length;
+      if (bytes > maxBytes) {
+        limitError = new HttpError(413, "Upload too large");
+        callback(limitError);
+        return;
+      }
+      callback(null, chunk);
+    }
+  });
+  const abortBody = () => {
+    if (!limitedBody.destroyed) limitedBody.destroy(new HttpError(400, "Invalid multipart request body"));
+  };
+  req.once("aborted", abortBody);
+  req.once("error", abortBody);
+  req.pipe(limitedBody);
   const request = new Request("http://localhost/upload", {
     method: "POST",
     headers: req.headers,
-    body: req,
+    body: limitedBody,
     duplex: "half"
   });
   try {
-    return await request.formData();
+    const form = await request.formData();
+    if (contentLength !== null && bytes !== contentLength) throw new HttpError(400, "Invalid multipart request body");
+    return form;
   } catch {
+    req.unpipe(limitedBody);
+    req.resume();
+    if (limitError) throw limitError;
     throw new HttpError(400, "Invalid multipart request body");
+  } finally {
+    req.off("aborted", abortBody);
+    req.off("error", abortBody);
   }
 }
 
@@ -103,6 +147,14 @@ function ensureDir(dir) { fs.mkdirSync(dir, { recursive: true }); }
 
 function themePath(stateDir) { return path.join(stateDir, "theme.json"); }
 function buildStatusPath(stateDir) { return path.join(stateDir, "build-status.json"); }
+function selectionPath(stateDir) { return path.join(stateDir, "selection.json"); }
+function comparisonMarkerPath(stateDir) { return path.join(stateDir, "comparison-current.json"); }
+function cycleMarkerPath(stateDir) { return path.join(stateDir, "workflow-cycle.json"); }
+function baselineMarkerPath(stateDir) { return path.join(stateDir, "manual-baseline-current.json"); }
+function handoffMarkerPath(stateDir) { return path.join(stateDir, "handoff-current.json"); }
+
+const HASH_RE = /^[a-f0-9]{64}$/;
+const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 
 function readTheme(stateDir) {
   const f = themePath(stateDir);
@@ -113,6 +165,183 @@ function readTheme(stateDir) {
 function writeTheme(stateDir, theme) {
   ensureDir(stateDir);
   fs.writeFileSync(themePath(stateDir), `${JSON.stringify(theme, null, 2)}\n`, "utf8");
+}
+
+function invalidateSelection(stateDir) {
+  try { fs.unlinkSync(selectionPath(stateDir)); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+}
+
+function invalidateComparison(stateDir) {
+  try { fs.unlinkSync(comparisonMarkerPath(stateDir)); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+}
+
+function removeFile(file) {
+  try { fs.unlinkSync(file); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+}
+
+function writeJsonAtomic(target, value) {
+  ensureDir(path.dirname(target));
+  const temporary = `${target}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    fs.renameSync(temporary, target);
+  } finally { removeFile(temporary); }
+}
+
+function readJsonObject(file) {
+  try {
+    const value = JSON.parse(fs.readFileSync(file, "utf8"));
+    return isPlainObject(value) ? value : null;
+  } catch { return null; }
+}
+
+function validReviewMarker(marker) {
+  return isPlainObject(marker) && UUID_RE.test(marker.cycleId || "") && UUID_RE.test(marker.reviewRevision || "")
+    && HASH_RE.test(marker.manualThemeHash || "") && HASH_RE.test(marker.draftThemeHash || "");
+}
+
+function readCycle(stateDir) {
+  const marker = readJsonObject(cycleMarkerPath(stateDir));
+  return UUID_RE.test(marker?.cycleId || "") ? marker.cycleId : null;
+}
+
+function startNewCycle(stateDir) {
+  const cycleId = randomUUID();
+  writeJsonAtomic(cycleMarkerPath(stateDir), { cycleId });
+  invalidateSelection(stateDir);
+  invalidateComparison(stateDir);
+  removeFile(baselineMarkerPath(stateDir));
+  removeFile(handoffMarkerPath(stateDir));
+  return cycleId;
+}
+
+function readValidatedSource(file, registry, message) {
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch { throw new HttpError(409, message); }
+  return validatePreviewTheme(raw, registry, message);
+}
+
+function readBaselineMarker(stateDir) {
+  const marker = readJsonObject(baselineMarkerPath(stateDir));
+  return validReviewMarker(marker) ? marker : null;
+}
+
+function readHandoffMarker(stateDir) {
+  const marker = readJsonObject(handoffMarkerPath(stateDir));
+  return isPlainObject(marker) && UUID_RE.test(marker.cycleId || "") && UUID_RE.test(marker.reviewRevision || "")
+    && HASH_RE.test(marker.manualThemeHash || "") ? marker : null;
+}
+
+function resolvedThemeHash(theme, registry) {
+  return resolveDesignBundle(theme, registry).design.source.themeHash;
+}
+
+function writeSelection(stateDir, selection) {
+  writeJsonAtomic(selectionPath(stateDir), selection);
+}
+
+function writeComparisonMarker(stateDir, marker) {
+  writeJsonAtomic(comparisonMarkerPath(stateDir), marker);
+}
+
+function readComparisonMarker(stateDir) {
+  const marker = readJsonObject(comparisonMarkerPath(stateDir));
+  return validReviewMarker(marker) ? marker : null;
+}
+
+function readActiveReviewMarker(stateDir) {
+  const cycleId = readCycle(stateDir);
+  const baseline = readBaselineMarker(stateDir);
+  if (!baseline || baseline.cycleId !== cycleId) return null;
+  const comparison = readComparisonMarker(stateDir);
+  if (comparison && comparison.cycleId === cycleId
+    && comparison.reviewRevision === baseline.reviewRevision
+    && comparison.manualThemeHash === baseline.manualThemeHash) return comparison;
+  return baseline;
+}
+
+function readCurrentSelection(stateDir, registry) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(selectionPath(stateDir), "utf8"));
+    if (!isPlainObject(raw) || !["manual", "ai"].includes(raw.version) || !HASH_RE.test(raw.themeHash || "")
+      || !UUID_RE.test(raw.cycleId || "") || !UUID_RE.test(raw.reviewRevision || "") || raw.cycleId !== readCycle(stateDir)) return null;
+    const marker = readActiveReviewMarker(stateDir);
+    if (!marker || marker.reviewRevision !== raw.reviewRevision
+      || raw.themeHash !== (raw.version === "ai" ? marker.draftThemeHash : marker.manualThemeHash)) return null;
+    const manual = readValidatedSource(path.join(stateDir, "manual-theme.json"), registry, "Valid manual baseline required");
+    if (resolvedThemeHash(manual, registry) !== marker.manualThemeHash) return null;
+    if (raw.version === "ai" && marker.draftThemeHash !== marker.manualThemeHash) {
+      const draft = readValidatedSource(path.join(stateDir, "ai-draft-theme.json"), registry, "Valid AI draft required");
+      if (resolvedThemeHash(draft, registry) !== marker.draftThemeHash) return null;
+    }
+    const current = readValidatedTheme(stateDir, registry);
+    return resolvedThemeHash(current, registry) === raw.themeHash
+      ? { version: raw.version, themeHash: raw.themeHash, cycleId: raw.cycleId, reviewRevision: raw.reviewRevision } : null;
+  } catch { return null; }
+}
+
+function adoptLegacyState(stateDir, registry) {
+  if (readCycle(stateDir)) return;
+  const cycleId = randomUUID();
+  writeJsonAtomic(cycleMarkerPath(stateDir), { cycleId });
+  const manualFile = path.join(stateDir, "manual-theme.json");
+  let manual = null;
+  try { if (fs.existsSync(manualFile)) manual = readValidatedSource(manualFile, registry, "Valid manual baseline required"); } catch {}
+  if (!manual) { invalidateSelection(stateDir); invalidateComparison(stateDir); return; }
+  const manualThemeHash = resolvedThemeHash(manual, registry);
+  const legacyComparison = readJsonObject(comparisonMarkerPath(stateDir));
+  let draft = null;
+  try {
+    const draftFile = path.join(stateDir, "ai-draft-theme.json");
+    if (fs.existsSync(draftFile)) draft = readValidatedSource(draftFile, registry, "Valid AI draft required");
+  } catch {}
+  const draftThemeHash = draft ? resolvedThemeHash(draft, registry) : manualThemeHash;
+  const reviewRevision = randomUUID();
+  const baseline = { cycleId, reviewRevision, manualThemeHash, draftThemeHash: manualThemeHash };
+  writeJsonAtomic(baselineMarkerPath(stateDir), baseline);
+  let currentThemeHash = null;
+  try { currentThemeHash = resolvedThemeHash(readValidatedTheme(stateDir, registry), registry); } catch {}
+  const legacyHashesMatch = !legacyComparison || (legacyComparison.manualThemeHash === manualThemeHash && legacyComparison.draftThemeHash === draftThemeHash);
+  if (draft && currentThemeHash === manualThemeHash && legacyHashesMatch) {
+    writeComparisonMarker(stateDir, { cycleId, reviewRevision, manualThemeHash, draftThemeHash });
+  } else invalidateComparison(stateDir);
+  const legacySelection = readJsonObject(selectionPath(stateDir));
+  if (legacySelection && ["manual", "ai"].includes(legacySelection.version) && legacySelection.themeHash === resolvedThemeHash(readValidatedTheme(stateDir, registry), registry)) {
+    const reviewed = legacySelection.version === "manual" || Boolean(readComparisonMarker(stateDir));
+    if (reviewed) writeSelection(stateDir, { version: legacySelection.version, themeHash: legacySelection.themeHash, cycleId, reviewRevision });
+    else invalidateSelection(stateDir);
+  } else invalidateSelection(stateDir);
+}
+
+function currentBaseline(stateDir, registry) {
+  const marker = readBaselineMarker(stateDir);
+  const cycleId = readCycle(stateDir);
+  if (!marker || marker.cycleId !== cycleId) throw new HttpError(409, "Manual baseline belongs to an earlier design cycle");
+  const manual = readValidatedSource(path.join(stateDir, "manual-theme.json"), registry, "Valid manual baseline required");
+  if (resolvedThemeHash(manual, registry) !== marker.manualThemeHash) throw new HttpError(409, "Manual baseline changed; save it again before continuing");
+  return { marker, manual };
+}
+
+function reviewedSources(stateDir, registry, body) {
+  const marker = readActiveReviewMarker(stateDir);
+  const cycleId = readCycle(stateDir);
+  if (!marker || marker.cycleId !== cycleId || body?.cycleId !== marker.cycleId || body?.reviewRevision !== marker.reviewRevision
+    || body?.expectedManualThemeHash !== marker.manualThemeHash || body?.expectedDraftThemeHash !== marker.draftThemeHash) {
+    throw new HttpError(409, "Reviewed design changed; review it again before selecting");
+  }
+  const manual = readValidatedSource(path.join(stateDir, "manual-theme.json"), registry, "Valid manual baseline required");
+  const manualThemeHash = resolvedThemeHash(manual, registry);
+  if (manualThemeHash !== marker.manualThemeHash) throw new HttpError(409, "Manual baseline changed; review it again before selecting");
+  let draft = manual;
+  if (marker.draftThemeHash !== marker.manualThemeHash) {
+    draft = readValidatedSource(path.join(stateDir, "ai-draft-theme.json"), registry, "Valid AI draft required");
+    if (resolvedThemeHash(draft, registry) !== marker.draftThemeHash) throw new HttpError(409, "AI draft changed; review it again before selecting");
+  }
+  return { marker, manual, draft };
 }
 
 function writeBuildStatus(stateDir, status) {
@@ -129,7 +358,12 @@ function readBuildStatus(stateDir) {
 function validatedResponse(stateDir, registry) {
   const theme = readTheme(stateDir);
   const validation = validateTheme(theme, { registry });
-  return { ok: true, valid: validation.ok, theme: mergeThemeForClient(DEFAULT_THEME, theme), errors: validation.errors };
+  return {
+    ok: true, valid: validation.ok, theme: mergeThemeForClient(DEFAULT_THEME, theme), errors: validation.errors,
+    selection: validation.ok ? readCurrentSelection(stateDir, registry) : null,
+    themeHash: validation.ok ? resolvedThemeHash(validation.value, registry) : null,
+    cycleId: readCycle(stateDir)
+  };
 }
 
 function readValidatedTheme(stateDir, registry) {
@@ -149,13 +383,22 @@ function validatePreviewTheme(theme, registry, message) {
   return validation.value;
 }
 
-function previewThemeForSource(stateDir, registry, source) {
-  if (source === "selected") return readValidatedTheme(stateDir, registry);
+function previewThemeForSource(stateDir, registry, source, expectedThemeHash) {
+  if (source === "selected") {
+    const selection = readCurrentSelection(stateDir, registry);
+    if (!selection || selection.themeHash !== expectedThemeHash) throw new HttpError(409, "Select a version again before compiling preview");
+    return readValidatedTheme(stateDir, registry);
+  }
   if (source === "manual") {
+    const current = readValidatedTheme(stateDir, registry);
+    if (resolvedThemeHash(current, registry) === expectedThemeHash) return current;
     const manualPath = path.join(stateDir, "manual-theme.json");
-    if (!fs.existsSync(manualPath)) return readValidatedTheme(stateDir, registry);
-    try { return validatePreviewTheme(readManualTheme(stateDir), registry, "Valid manual baseline required"); }
+    if (!fs.existsSync(manualPath)) throw new HttpError(409, "Theme changed; refresh the review before compiling preview");
+    let manual;
+    try { manual = validatePreviewTheme(readManualTheme(stateDir), registry, "Valid manual baseline required"); }
     catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(409, "Valid manual baseline required"); }
+    if (resolvedThemeHash(manual, registry) !== expectedThemeHash) throw new HttpError(409, "Theme changed; refresh the review before compiling preview");
+    return manual;
   }
   const draftPath = path.join(stateDir, "ai-draft-theme.json");
   if (!fs.existsSync(draftPath)) throw new HttpError(409, "Valid AI draft required");
@@ -258,7 +501,10 @@ function createWorkbenchServer(options = {}) {
   const outputRoot = options.outputRoot || path.join(rootDir, "templates");
   const publicDir = options.publicDir || path.join(rootDir, "workbench", "public");
   const handoffRoot = options.handoffRoot || path.join(stateDir, "ai-handoff");
+  const multipartMaxBytes = Number.isSafeInteger(options.multipartMaxBytes) && options.multipartMaxBytes > 0
+    ? options.multipartMaxBytes : MAX_MULTIPART_BYTES;
   const registry = deepFreeze(assertRegistryContract(clone(options.registry || getRegistry())));
+  adoptLegacyState(stateDir, registry);
   const projectWriter = options.writeTemplateProject || writeTemplateProject;
   const templateCompiler = options.compileTemplate || compileTemplate;
   const previewCache = options.previewCache || createPreviewCache({
@@ -284,12 +530,17 @@ function createWorkbenchServer(options = {}) {
         }
         return;
       }
+      if (req.method === "GET" && url.pathname === "/api/selection") {
+        sendJson(res, 200, { ok: true, selection: readCurrentSelection(stateDir, registry) });
+        return;
+      }
       if (req.method === "PUT" && url.pathname === "/api/theme") {
         const theme = await readJsonBody(req);
         const v = validateTheme(theme, { registry });
         if (!v.ok) { sendJson(res, 400, { ok: false, errors: v.errors }); return; }
         writeTheme(stateDir, v.value);
-        sendJson(res, 200, { ok: true, theme: v.value });
+        const cycleId = startNewCycle(stateDir);
+        sendJson(res, 200, { ok: true, theme: v.value, cycleId });
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/design/resolve") {
@@ -320,7 +571,7 @@ function createWorkbenchServer(options = {}) {
           throw new HttpError(400, "expectedThemeHash must be a lowercase 64-character hash");
         }
         try {
-          const theme = previewThemeForSource(stateDir, registry, body.source);
+          const theme = previewThemeForSource(stateDir, registry, body.source, body.expectedThemeHash);
           const resolvedBundle = resolveDesignBundle(theme, registry);
           if (resolvedBundle.design.source.themeHash !== body.expectedThemeHash) {
             throw new HttpError(409, "Theme changed; refresh the review before compiling preview");
@@ -351,17 +602,25 @@ function createWorkbenchServer(options = {}) {
       if (req.method === "POST" && url.pathname === "/api/manual-baseline") {
         const theme = readValidatedTheme(stateDir, registry);
         freezeManualTheme(stateDir, theme);
-        sendJson(res, 200, { ok: true, theme });
+        const cycleId = readCycle(stateDir) || startNewCycle(stateDir);
+        const manualThemeHash = resolvedThemeHash(theme, registry);
+        const marker = { cycleId, reviewRevision: randomUUID(), manualThemeHash, draftThemeHash: manualThemeHash };
+        invalidateSelection(stateDir);
+        invalidateComparison(stateDir);
+        removeFile(handoffMarkerPath(stateDir));
+        writeJsonAtomic(baselineMarkerPath(stateDir), marker);
+        sendJson(res, 200, { ok: true, theme, ...marker });
         return;
       }
       if (req.method === "GET" && url.pathname === "/api/manual-baseline") {
         if (!fs.existsSync(path.join(stateDir, "manual-theme.json"))) { sendJson(res, 404, { ok: false, error: "Manual baseline not found" }); return; }
-        sendJson(res, 200, { ok: true, theme: readManualTheme(stateDir) });
+        const { marker, manual } = currentBaseline(stateDir, registry);
+        sendJson(res, 200, { ok: true, theme: manual, ...marker });
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/ai/handoff") {
-        if (!fs.existsSync(path.join(stateDir, "manual-theme.json"))) throw new HttpError(409, "Manual baseline required");
-        const form = await readMultipart(req);
+        const { marker } = currentBaseline(stateDir, registry);
+        const form = await readMultipart(req, multipartMaxBytes);
         const files = form.getAll("references").filter((entry) => typeof entry !== "string");
         let relativePaths;
         try { relativePaths = JSON.parse(String(form.get("relativePaths") || "[]")); }
@@ -373,43 +632,70 @@ function createWorkbenchServer(options = {}) {
           bytes: Buffer.from(await file.arrayBuffer())
         })));
         const result = createHandoff({ stateDir, handoffRoot, brief: String(form.get("brief") || ""), references });
-        sendJson(res, 200, { ok: true, ...result });
+        writeJsonAtomic(handoffMarkerPath(stateDir), { cycleId: marker.cycleId, reviewRevision: marker.reviewRevision, manualThemeHash: marker.manualThemeHash });
+        sendJson(res, 200, { ok: true, ...result, cycleId: marker.cycleId });
         return;
       }
       if (req.method === "GET" && url.pathname === "/api/ai/handoff") {
         if (!fs.existsSync(handoffRoot)) { sendJson(res, 404, { ok: false, error: "AI handoff not found" }); return; }
-        sendJson(res, 200, { ok: true, handoffRoot });
+        const marker = readHandoffMarker(stateDir);
+        if (!marker || marker.cycleId !== readCycle(stateDir)) throw new HttpError(409, "AI handoff belongs to an earlier design cycle");
+        sendJson(res, 200, { ok: true, handoffRoot, ...marker });
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/ai/import") {
-        if (!fs.existsSync(path.join(stateDir, "manual-theme.json"))) throw new HttpError(409, "Manual baseline required");
+        const { marker: baselineMarker, manual } = currentBaseline(stateDir, registry);
         const draft = await readJsonBody(req);
+        invalidateSelection(stateDir);
         const result = importAiDraft({ stateDir, draftBuffer: Buffer.from(JSON.stringify(draft)), registry });
-        sendJson(res, result.ok ? 200 : 400, result);
+        if (result.ok) {
+          const marker = { cycleId: baselineMarker.cycleId, reviewRevision: randomUUID(), manualThemeHash: resolvedThemeHash(manual, registry), draftThemeHash: resolvedThemeHash(result.theme, registry) };
+          writeJsonAtomic(baselineMarkerPath(stateDir), { ...baselineMarker, reviewRevision: marker.reviewRevision });
+          writeComparisonMarker(stateDir, marker);
+          sendJson(res, 200, { ...result, ...marker });
+        } else sendJson(res, 400, result);
         return;
       }
       if (req.method === "GET" && url.pathname === "/api/ai/comparison") {
         if (!fs.existsSync(path.join(stateDir, "manual-theme.json")) || !fs.existsSync(path.join(stateDir, "ai-draft-theme.json"))) {
           throw new HttpError(409, "Manual baseline and AI draft required");
         }
-        const manual = readManualTheme(stateDir);
-        const draft = readAiDraft(stateDir);
-        sendJson(res, 200, { ok: true, manual, draft, changes: diffThemes(manual, draft) });
+        const manual = readValidatedSource(path.join(stateDir, "manual-theme.json"), registry, "Valid manual baseline required");
+        const draft = readValidatedSource(path.join(stateDir, "ai-draft-theme.json"), registry, "Valid AI draft required");
+        const hashes = { manualThemeHash: resolvedThemeHash(manual, registry), draftThemeHash: resolvedThemeHash(draft, registry) };
+        const marker = readComparisonMarker(stateDir);
+        const baselineMarker = readBaselineMarker(stateDir);
+        if (!marker || !baselineMarker || marker.cycleId !== readCycle(stateDir)
+          || marker.reviewRevision !== baselineMarker.reviewRevision
+          || marker.manualThemeHash !== hashes.manualThemeHash || marker.draftThemeHash !== hashes.draftThemeHash) throw new HttpError(409, "AI comparison belongs to an earlier manual design cycle");
+        sendJson(res, 200, { ok: true, manual, draft, ...marker, changes: diffThemes(manual, draft) });
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/ai/accept") {
-        if (!fs.existsSync(path.join(stateDir, "ai-draft-theme.json"))) throw new HttpError(409, "AI draft required");
-        acceptAiDraft(stateDir);
-        sendJson(res, 200, { ok: true, selectedVersion: "ai", theme: readTheme(stateDir) });
+        const body = await readJsonBody(req);
+        const { marker, draft: theme } = reviewedSources(stateDir, registry, body);
+        if (marker.draftThemeHash === marker.manualThemeHash && !fs.existsSync(path.join(stateDir, "ai-draft-theme.json"))) throw new HttpError(409, "AI draft required");
+        writeTheme(stateDir, theme);
+        const selection = { version: "ai", themeHash: resolvedThemeHash(theme, registry), cycleId: marker.cycleId, reviewRevision: marker.reviewRevision };
+        writeSelection(stateDir, selection);
+        sendJson(res, 200, { ok: true, selectedVersion: selection.version, themeHash: selection.themeHash, cycleId: selection.cycleId, reviewRevision: selection.reviewRevision, theme });
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/ai/restore") {
         if (!fs.existsSync(path.join(stateDir, "manual-theme.json"))) throw new HttpError(409, "Manual baseline required");
-        restoreManualTheme(stateDir);
-        sendJson(res, 200, { ok: true, selectedVersion: "manual", theme: readTheme(stateDir) });
+        const body = await readJsonBody(req);
+        const { marker, manual: theme } = reviewedSources(stateDir, registry, body);
+        writeTheme(stateDir, theme);
+        const selection = { version: "manual", themeHash: resolvedThemeHash(theme, registry), cycleId: marker.cycleId, reviewRevision: marker.reviewRevision };
+        writeSelection(stateDir, selection);
+        sendJson(res, 200, { ok: true, selectedVersion: selection.version, themeHash: selection.themeHash, cycleId: selection.cycleId, reviewRevision: selection.reviewRevision, theme });
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/generate") {
+        const body = await readJsonBody(req);
+        const selection = readCurrentSelection(stateDir, registry);
+        if (!selection || body.selectedVersion !== selection.version || body.expectedThemeHash !== selection.themeHash
+          || body.cycleId !== selection.cycleId || body.reviewRevision !== selection.reviewRevision) throw new HttpError(409, "Select a version again before generating");
         const theme = readValidatedTheme(stateDir, registry);
         const templateDir = resolveTemplateDir(outputRoot, theme.identity.name);
         const manifest = projectWriter(theme, templateDir, { registry, rootDir, outputRoot });
@@ -419,6 +705,10 @@ function createWorkbenchServer(options = {}) {
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/compile") {
+        const body = await readJsonBody(req);
+        const selection = readCurrentSelection(stateDir, registry);
+        if (!selection || body.selectedVersion !== selection.version || body.expectedThemeHash !== selection.themeHash
+          || body.cycleId !== selection.cycleId || body.reviewRevision !== selection.reviewRevision) throw new HttpError(409, "Select a version again before compiling");
         const theme = readValidatedTheme(stateDir, registry);
         const templateDir = resolveTemplateDir(outputRoot, theme.identity.name);
         projectWriter(theme, templateDir, { registry, rootDir, outputRoot });

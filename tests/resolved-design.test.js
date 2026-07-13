@@ -35,13 +35,15 @@ test("resolved design contains full identity, exact canvas, colors, and componen
   assert.deepEqual(design.canvas, {
     aspectRatio: "16:9",
     widthUnits: 16,
-    heightUnits: 9
+    heightUnits: 9,
+    widthCm: 16,
+    heightCm: 9
   });
   assert.equal(design.colors.primary, "#456990");
   assert.equal(design.components.bullet.id, "pifont-outline");
   assert.equal(design.components.navigation.id, "page-number");
   assert.equal(design.source.generatorVersion, GENERATOR_VERSION);
-  assert.equal(GENERATOR_VERSION, "3");
+  assert.equal(GENERATOR_VERSION, "4");
   assert.match(design.source.themeHash, /^[a-f0-9]{64}$/);
 });
 
@@ -229,7 +231,9 @@ test("4:3 themes resolve to normalized canvas units", () => {
   assert.deepEqual(resolveDesign(theme, getRegistry()).canvas, {
     aspectRatio: "4:3",
     widthUnits: 4,
-    heightUnits: 3
+    heightUnits: 3,
+    widthCm: 12.8,
+    heightCm: 9.6
   });
 });
 
@@ -287,6 +291,7 @@ test("medium duck logos resolve normalized size, vector identity, and canonical 
     label: "Duck",
     position: "top-left",
     sizeUnits: 1.2,
+    widthFraction: 0.075,
     scope: "all-frames",
     vectorId: "duck",
     previewUrl: "/assets/generated/logos/duck.svg",

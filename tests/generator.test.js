@@ -48,7 +48,7 @@ test("all renderer parity stress fixtures resolve and generate stable overview l
     assert.equal(bundle.design.capabilities.latex, true, fixture.id);
     assert.match(files["theme.cls"], bundle.design.canvas.aspectRatio === "4:3" ? /aspectratio=43/ : /aspectratio=169/);
     assert.ok(files["content/overview.tex"].includes(bundle.design.content.sampleTitle), fixture.id);
-    assert.equal(files["theme.cls"].includes("tikzpicture"), fixture.id === "duck", fixture.id);
+    assert.equal(files["theme.cls"].includes("tikzpicture"), bundle.design.components.cornerLogo.vectorId === "duck", fixture.id);
   }
 });
 

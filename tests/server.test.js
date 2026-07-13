@@ -3,6 +3,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const http = require("node:http");
+const net = require("node:net");
 const { createWorkbenchServer, generatedLogoAssets } = require("../workbench/server");
 const { DEFAULT_THEME } = require("../schema/theme-schema");
 const { getRegistry } = require("../registry/options");
@@ -43,6 +45,49 @@ function cloneTheme() {
 
 function expectedHash(theme = DEFAULT_THEME) { return resolveDesign(theme, getRegistry()).source.themeHash; }
 function deferred() { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; }
+async function selectCurrentManual(baseUrl) {
+  const baseline = await fetch(`${baseUrl}/api/manual-baseline`, { method: "POST" }).then((response) => response.json());
+  const response = await fetch(`${baseUrl}/api/ai/restore`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+    expectedManualThemeHash: baseline.manualThemeHash,
+    expectedDraftThemeHash: baseline.draftThemeHash,
+    cycleId: baseline.cycleId,
+    reviewRevision: baseline.reviewRevision
+  }) });
+  assert.equal(response.status, 200);
+  return response.json();
+}
+function selectedPost(baseUrl, endpoint, selection) {
+  return fetch(`${baseUrl}${endpoint}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedVersion: selection.selectedVersion, expectedThemeHash: selection.themeHash, cycleId: selection.cycleId, reviewRevision: selection.reviewRevision })
+  });
+}
+
+function postChunks(url, headers, chunks) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(url);
+    const req = http.request({ hostname: target.hostname, port: target.port, path: target.pathname, method: "POST", headers }, (res) => {
+      const body = [];
+      res.on("data", (chunk) => body.push(chunk));
+      res.on("end", () => resolve({ status: res.statusCode, body: Buffer.concat(body).toString("utf8") }));
+    });
+    req.on("error", reject);
+    for (const chunk of chunks) req.write(chunk);
+    req.end();
+  });
+}
+
+function rawHttp(port, request) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: "127.0.0.1", port });
+    const chunks = [];
+    const timer = setTimeout(() => { socket.destroy(); reject(new Error("raw HTTP request did not close")); }, 2000);
+    socket.on("connect", () => socket.end(request));
+    socket.on("data", (chunk) => chunks.push(chunk));
+    socket.on("end", () => { clearTimeout(timer); resolve(Buffer.concat(chunks).toString("latin1")); });
+    socket.on("error", (error) => { clearTimeout(timer); reject(error); });
+  });
+}
 
 test("preview compile rejects stale expected hashes before invoking the cache", async (t) => {
   const stateDir = tempDir("beamerforge-server-"); fs.mkdirSync(stateDir, { recursive: true });
@@ -57,7 +102,7 @@ test("preview compile rejects stale expected hashes before invoking the cache", 
   for (const source of ["manual", "ai", "selected"]) {
     const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, expectedThemeHash: expectedHash(original) }) });
     assert.equal(response.status, 409);
-    assert.match((await response.json()).error, /changed.*refresh/i);
+    assert.match((await response.json()).error, source === "selected" ? /select.*again/i : /changed.*refresh/i);
   }
   assert.equal(compiles, 0);
 });
@@ -70,7 +115,7 @@ test("default preview compilation does not block unrelated theme requests", asyn
     previewProjectWriter(theme, target) { fs.writeFileSync(path.join(target, "main.tex"), theme.identity.title); },
     async previewCompiler(target) { started.resolve(); await release.promise; fs.writeFileSync(path.join(target, "main.pdf"), "%PDF"); return { ok: true, compilerKind: "fake" }; }
   });
-  const compilePromise = fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected", expectedThemeHash: expectedHash() }) });
+  const compilePromise = fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "manual", expectedThemeHash: expectedHash() }) });
   await started.promise;
   const themeResponse = await fetch(`${baseUrl}/api/theme`);
   assert.equal(themeResponse.status, 200);
@@ -116,10 +161,11 @@ test("POST /api/preview/compile compiles the requested manual source and returns
 test("preview compile enforces source prerequisites, validates input, and keeps failures at HTTP 200", async (t) => {
   const stateDir = tempDir("beamerforge-server-");
   fs.writeFileSync(path.join(stateDir, "theme.json"), `${JSON.stringify(DEFAULT_THEME)}\n`);
-  const manual = cloneTheme(); manual.identity.name = "manual-source";
+  const manual = cloneTheme();
   fs.writeFileSync(path.join(stateDir, "manual-theme.json"), `${JSON.stringify(manual)}\n`);
   const ai = cloneTheme(); ai.identity.name = "ai-source";
   fs.writeFileSync(path.join(stateDir, "ai-draft-theme.json"), `${JSON.stringify(ai)}\n`);
+  fs.writeFileSync(path.join(stateDir, "selection.json"), JSON.stringify({ version: "manual", themeHash: expectedHash(DEFAULT_THEME) }));
   const calls = [];
   const previewCache = {
     async compile(input) {
@@ -140,7 +186,7 @@ test("preview compile enforces source prerequisites, validates input, and keeps 
     if (source === "ai") assert.equal(body.stalePdfUrl, `/api/preview/${hashes.ai}-v1/main.pdf`);
     else assert.equal(body.status, "unavailable");
   }
-  assert.deepEqual(calls.map((call) => call.theme.identity.name), ["manual-source", "ai-source", DEFAULT_THEME.identity.name]);
+  assert.deepEqual(calls.map((call) => call.theme.identity.name), [DEFAULT_THEME.identity.name, "ai-source", DEFAULT_THEME.identity.name]);
   assert.deepEqual(calls.map((call) => call.force), [false, false, false]);
   for (const invalid of [{}, { source: "bogus", expectedThemeHash: hashes.manual }, { source: "manual", force: 1, expectedThemeHash: hashes.manual }, { source: "manual", expectedThemeHash: "BAD" }]) {
     assert.equal((await post(invalid)).status, 400);
@@ -178,7 +224,7 @@ test("preview cache rejections return a generic error without internal paths", a
   const stateDir = tempDir("beamerforge-server-");
   const previewCache = { async compile() { throw new Error("C:\\secret\\cache failure"); }, readPdf() { throw new Error("C:\\secret"); } };
   const baseUrl = await withServer(t, { stateDir, previewCache });
-  const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected", expectedThemeHash: expectedHash() }) });
+  const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "manual", expectedThemeHash: expectedHash() }) });
   assert.equal(response.status, 500);
   assert.deepEqual(await response.json(), { ok: false, error: "Unable to compile preview" });
   const pdfResponse = await fetch(`${baseUrl}/api/preview/${"e".repeat(64)}-v1/main.pdf`);
@@ -194,7 +240,7 @@ test("preview API sanitizes injected diagnostics and rejects mismatched cache DT
     return { status: "failed", themeHash: hash, cacheKey: `${hash}-v1`, message: `C:\\private\\cache\u0000`, excerpt: "/secret/root/main.tex" };
   }, readPdf() { return null; } };
   const baseUrl = await withServer(t, { stateDir, previewCache });
-  const request = () => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected", expectedThemeHash: hash }) });
+  const request = () => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "manual", expectedThemeHash: hash }) });
   const safe = await request(); const body = await safe.json();
   assert.equal(safe.status, 200); assert.doesNotMatch(JSON.stringify(body), /private|secret|main\.tex/i);
   mismatch = true; const rejected = await request();
@@ -206,8 +252,10 @@ test("malformed manual and AI preview state returns prerequisite conflicts", asy
   fs.writeFileSync(path.join(stateDir, "manual-theme.json"), "{"); fs.writeFileSync(path.join(stateDir, "ai-draft-theme.json"), "{");
   const previewCache = { compile() { throw new Error("must not compile"); }, readPdf() { return null; } };
   const baseUrl = await withServer(t, { stateDir, previewCache });
+  const otherTheme = cloneTheme(); otherTheme.colors.primary = "#123456";
+  const hashes = { manual: expectedHash(otherTheme), ai: expectedHash() };
   for (const source of ["manual", "ai"]) {
-    const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, expectedThemeHash: expectedHash() }) });
+    const response = await fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, expectedThemeHash: hashes[source] }) });
     assert.equal(response.status, 409); assert.doesNotMatch(JSON.stringify(await response.json()), /stateDir|manual-theme|ai-draft|[A-Z]:\\/i);
   }
 });
@@ -222,7 +270,7 @@ test("server creates one default preview cache at the configured root", async (t
     previewProjectWriter(theme, target) { writes++; fs.writeFileSync(path.join(target, "main.tex"), theme.identity.name); },
     async previewCompiler(target) { compiles++; fs.writeFileSync(path.join(target, "main.pdf"), "%PDF-1.4\n"); return { ok: true, compilerKind: "fake" }; }
   });
-  const request = () => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "selected", expectedThemeHash: expectedHash() }) });
+  const request = () => fetch(`${baseUrl}/api/preview/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "manual", expectedThemeHash: expectedHash() }) });
   const first = await request();
   const second = await request();
   assert.equal(first.status, 200);
@@ -422,7 +470,8 @@ test("server snapshots and deeply freezes registry data without freezing the cal
   }).then((response) => response.json());
   assert.equal(resolved.components.cornerLogo.vector.primitives[0].cx, duck.primitives[0].cx);
 
-  assert.equal((await fetch(`${baseUrl}/api/generate`, { method: "POST" })).status, 200);
+  const selection = await selectCurrentManual(baseUrl);
+  assert.equal((await selectedPost(baseUrl, "/api/generate", selection)).status, 200);
   assert.equal(Object.isFrozen(observedSnapshot), true);
   assert.equal(Object.isFrozen(observedSnapshot.logos.duck.vector), true);
   assert.equal(Object.isFrozen(observedSnapshot.logos.duck.vector.primitives[0]), true);
@@ -463,7 +512,8 @@ test("POST /api/generate writes a template and passes outputRoot guard options",
     }
   });
 
-  const response = await fetch(`${baseUrl}/api/generate`, { method: "POST" });
+  const selection = await selectCurrentManual(baseUrl);
+  const response = await selectedPost(baseUrl, "/api/generate", selection);
   const body = await response.json();
 
   assert.equal(response.status, 200);
@@ -501,7 +551,8 @@ test("POST /api/compile creates a missing project, persists success, and returns
     }
   });
 
-  const response = await fetch(`${baseUrl}/api/compile`, { method: "POST" });
+  const selection = await selectCurrentManual(baseUrl);
+  const response = await selectedPost(baseUrl, "/api/compile", selection);
   const body = await response.json();
 
   assert.equal(response.status, 200);
@@ -530,7 +581,8 @@ test("POST /api/compile regenerates the project after a saved theme change", asy
     }
   });
 
-  await fetch(`${baseUrl}/api/generate`, { method: "POST" });
+  let selection = await selectCurrentManual(baseUrl);
+  await selectedPost(baseUrl, "/api/generate", selection);
   const next = cloneTheme();
   next.bullets.style = "triangle";
 
@@ -539,7 +591,8 @@ test("POST /api/compile regenerates the project after a saved theme change", asy
     headers: { "content-type": "application/json" },
     body: JSON.stringify(next)
   });
-  const response = await fetch(`${baseUrl}/api/compile`, { method: "POST" });
+  selection = await selectCurrentManual(baseUrl);
+  const response = await selectedPost(baseUrl, "/api/compile", selection);
   const body = await response.json();
 
   assert.equal(response.status, 200);
@@ -568,7 +621,8 @@ test("POST /api/compile persists failures and returns 500", async (t) => {
     }
   });
 
-  const response = await fetch(`${baseUrl}/api/compile`, { method: "POST" });
+  const selection = await selectCurrentManual(baseUrl);
+  const response = await selectedPost(baseUrl, "/api/compile", selection);
   const body = await response.json();
 
   assert.equal(response.status, 500);
@@ -599,10 +653,10 @@ test("POST /api/compile rejects malicious persisted theme before invoking compil
     }
   });
 
-  const response = await fetch(`${baseUrl}/api/compile`, { method: "POST" });
+  const response = await fetch(`${baseUrl}/api/compile`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   const body = await response.json();
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 409);
   assert.equal(body.ok, false);
   assert.equal(compilerCalled, false);
 });
@@ -753,13 +807,67 @@ test("manual baseline and AI draft APIs preserve explicit selection", async (t) 
   assert.equal(response.status, 200);
   assert.equal(comparison.changes.some((change) => change.path === "colors.primary"), true);
 
-  response = await fetch(`${baseUrl}/api/ai/accept`, { method: "POST" });
+  const review = { expectedManualThemeHash: comparison.manualThemeHash, expectedDraftThemeHash: comparison.draftThemeHash, cycleId: comparison.cycleId, reviewRevision: comparison.reviewRevision };
+  response = await fetch(`${baseUrl}/api/ai/accept`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(review) });
   assert.equal(response.status, 200);
   assert.equal((await fetch(`${baseUrl}/api/theme`).then((result) => result.json())).colors.primary, "#A14D3A");
 
-  response = await fetch(`${baseUrl}/api/ai/restore`, { method: "POST" });
+  response = await fetch(`${baseUrl}/api/ai/restore`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(review) });
   assert.equal(response.status, 200);
   assert.equal((await fetch(`${baseUrl}/api/theme`).then((result) => result.json())).colors.primary, saved.colors.primary);
+});
+
+test("chunked multipart uploads stop at the streaming request ceiling", async (t) => {
+  const stateDir = tempDir("beamerforge-upload-limit-");
+  fs.writeFileSync(path.join(stateDir, "manual-theme.json"), JSON.stringify(cloneTheme()));
+  const server = createWorkbenchServer({ rootDir: process.cwd(), stateDir, multipartMaxBytes: 512 });
+  t.after(() => close(server));
+  const port = await listen(server);
+  const boundary = "bf-stream-limit";
+  const response = await postChunks(`http://127.0.0.1:${port}/api/ai/handoff`, {
+    "content-type": `multipart/form-data; boundary=${boundary}`
+  }, [
+    `--${boundary}\r\nContent-Disposition: form-data; name="brief"\r\n\r\n`,
+    "x".repeat(1024),
+    `\r\n--${boundary}--\r\n`
+  ]);
+
+  assert.equal(response.status, 413);
+  assert.equal(JSON.parse(response.body).error, "Upload too large");
+  assert.equal(fs.existsSync(path.join(stateDir, "ai-handoff")), false);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/api/theme`)).status, 200);
+});
+
+test("multipart length and syntax failures close safely with deterministic client errors", async (t) => {
+  const stateDir = tempDir("beamerforge-upload-malformed-");
+  fs.writeFileSync(path.join(stateDir, "manual-theme.json"), JSON.stringify(cloneTheme()));
+  const server = createWorkbenchServer({ rootDir: process.cwd(), stateDir, multipartMaxBytes: 2048 });
+  t.after(() => close(server));
+  const port = await listen(server);
+  const malformed = await postChunks(`http://127.0.0.1:${port}/api/ai/handoff`, {
+    "content-type": "multipart/form-data; boundary=missing-boundary-end"
+  }, ["--missing-boundary-end\r\nContent-Disposition: form-data; name=brief\r\n\r\nbroken"]);
+  assert.equal(malformed.status, 400);
+
+  const invalidLength = await rawHttp(port,
+    "POST /api/ai/handoff HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=x\r\nContent-Length: nope\r\nConnection: close\r\n\r\n");
+  assert.match(invalidLength, /^HTTP\/1\.1 400 /);
+
+  const understatedBody = "--x\r\nContent-Disposition: form-data; name=brief\r\n\r\nhello\r\n--x--\r\n";
+  const understated = await rawHttp(port,
+    `POST /api/ai/handoff HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=x\r\nContent-Length: 8\r\nConnection: close\r\n\r\n${understatedBody}`);
+  assert.match(understated, /^HTTP\/1\.1 400 /);
+
+  const overstated = await rawHttp(port,
+    "POST /api/ai/handoff HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=x\r\nContent-Length: 3000\r\nConnection: close\r\n\r\n");
+  assert.match(overstated, /^HTTP\/1\.1 413 /);
+
+  const overCap = await postChunks(`http://127.0.0.1:${port}/api/ai/handoff`, {
+    "content-type": "multipart/form-data; boundary=x",
+    "content-length": "3000"
+  }, [Buffer.alloc(3000, "x")]);
+  assert.equal(overCap.status, 413);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/api/theme`)).status, 200);
 });
 
 test("AI phase endpoints reject missing prerequisites", async (t) => {

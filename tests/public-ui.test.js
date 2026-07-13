@@ -50,7 +50,7 @@ test("workbench index exposes cumulative wizard regions", () => {
 
 test("workbench index loads wizard state before app script", () => {
   const html = readPublicFile("index.html");
-  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
 });
 
 test("preview toolbar identifies the instant HTML preview", () => {
@@ -64,7 +64,7 @@ test("workbench exposes a separate authoritative LaTeX preview region", () => {
   for (const id of ["authoritativePreview", "authoritativeStatus", "retryPreview", "refreshPreview"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
-  assert.match(html, /<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+  assert.match(html, /<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
 });
 
 test("authoritative preview UI is route-gated and uses independent status controls", () => {
@@ -108,6 +108,26 @@ test("manual authoritative preview persists and resolves the normalized theme be
   assert.match(script, /createAuthoritativePreviewState\(\{[\s\S]*?beforeRequest:\s*prepareAuthoritativeRequest[\s\S]*?request:\s*sendAuthoritativeRequest/);
 });
 
+test("every browser theme write clears selection and stale comparison state", () => {
+  const script = readPublicFile("app.js");
+  for (const name of ["saveDraft", "prepareAuthoritativeRequest"]) {
+    const source = functionSource(script, name);
+    assert.match(source, /selectionState\.invalidateForManualMutation\(state\.workflow\)/);
+    assert.match(source, /state\.comparison = null/);
+  }
+});
+
+test("importing a new AI draft immediately clears the prior explicit selection", () => {
+  const source = functionSource(readPublicFile("app.js"), "importAiDraft");
+  assert.match(source, /const result = await api\("\/api\/ai\/import"/);
+  assert.match(source, /selectionState\.invalidateForReviewMutation\(state\.workflow, result\)/);
+  assert.match(source, /state\.comparison = null/);
+  assert.match(source, /await loadAiComparison\(\)/);
+  const preflightInvalidation = source.indexOf("selectionState.invalidateForManualMutation");
+  assert.notEqual(preflightInvalidation, -1);
+  assert.ok(preflightInvalidation < source.indexOf('await api("/api/ai/import"'), "selection must clear before an import can fail");
+});
+
 test("browser script renders wizard steps and preserves cumulative choices", () => {
   const script = readPublicFile("app.js");
   for (const name of [
@@ -134,10 +154,11 @@ test("browser script gates compile behind wizard review", () => {
   const script = readPublicFile("app.js");
   assert.match(
     script,
-    /function reviewGate\(\) \{[\s\S]*?refreshStatuses\(\);[\s\S]*?renderSummary\(\);[\s\S]*?!wizard\.canGenerate\(state\.statuses\)[\s\S]*?setBuildStatus\("Review required before generation\."\);[\s\S]*?navigateToStep\("manual-review"\);[\s\S]*?return false;[\s\S]*?!wizard\.canFinalize\(state\.workflow\)[\s\S]*?return false;[\s\S]*?return true;[\s\S]*?\}/
+    /function reviewGate\(\) \{[\s\S]*?refreshStatuses\(\);[\s\S]*?renderSummary\(\);[\s\S]*?!wizard\.canGenerate\(state\.statuses\)[\s\S]*?setBuildStatus\("Review required before generation\."\);[\s\S]*?navigateToStep\("manual-review"\);[\s\S]*?return false;[\s\S]*?!selectionState\.canBuild\(state\.workflow\)[\s\S]*?return false;[\s\S]*?return true;[\s\S]*?\}/
   );
   assert.match(script, /async function compileTheme\(\) \{[\s\S]*?if \(!reviewGate\(\)\) return;[\s\S]*?\/api\/compile/);
-  assert.match(script, /elements\.compileTheme\.disabled = state\.busy \|\| !wizard\.canFinalize\(state\.workflow\);/);
+  assert.match(script, /elements\.compileTheme\.disabled = state\.busy \|\| !selectionState\.canBuild\(state\.workflow\);/);
+  assert.doesNotMatch(functionSource(script, "compileTheme"), /saveDraft/);
   assert.doesNotMatch(script, /elements\.compileTheme\.disabled = state\.busy;/);
 });
 
@@ -145,7 +166,7 @@ test("browser generation is blocked until wizard statuses are complete", () => {
   const script = readPublicFile("app.js");
   assert.match(
     script,
-    /function reviewGate\(\) \{[\s\S]*?refreshStatuses\(\);[\s\S]*?renderSummary\(\);[\s\S]*?!wizard\.canGenerate\(state\.statuses\)[\s\S]*?setBuildStatus\("Review required before generation\."\);[\s\S]*?navigateToStep\("manual-review"\);[\s\S]*?return false;[\s\S]*?!wizard\.canFinalize\(state\.workflow\)[\s\S]*?return false;[\s\S]*?return true;[\s\S]*?\}/
+    /function reviewGate\(\) \{[\s\S]*?refreshStatuses\(\);[\s\S]*?renderSummary\(\);[\s\S]*?!wizard\.canGenerate\(state\.statuses\)[\s\S]*?setBuildStatus\("Review required before generation\."\);[\s\S]*?navigateToStep\("manual-review"\);[\s\S]*?return false;[\s\S]*?!selectionState\.canBuild\(state\.workflow\)[\s\S]*?return false;[\s\S]*?return true;[\s\S]*?\}/
   );
   assert.match(
     script,
@@ -153,8 +174,9 @@ test("browser generation is blocked until wizard statuses are complete", () => {
   );
   assert.match(
     script,
-    /elements\.reviewGenerate\.disabled = [^;\n]*!wizard\.canFinalize\(state\.workflow\)[^;\n]*;/
+    /elements\.reviewGenerate\.disabled = [^;\n]*!selectionState\.canBuild\(state\.workflow\)[^;\n]*;/
   );
+  assert.doesNotMatch(functionSource(script, "generateTheme"), /saveDraft/);
   assert.doesNotMatch(script, /elements\.reviewGenerate\.disabled = state\.busy;/);
 });
 
@@ -319,7 +341,8 @@ test("browser preview renders only server-resolved design fields", () => {
   assert.match(logo, /vectorId == null/);
   assert.match(logo, /previewUrl/);
   assert.match(logo, /position/);
-  assert.match(logo, /sizeUnits/);
+  assert.match(logo, /widthFraction/);
+  assert.doesNotMatch(logo, /6\.25|sizeUnits/);
   assert.match(logo, /scope/);
   assert.doesNotMatch(logo, /\.id\s*===\s*"none"/);
   assert.match(script, /preview-corner-logo/);

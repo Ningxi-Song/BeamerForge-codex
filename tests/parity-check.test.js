@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { EventEmitter } = require("node:events");
 
 const {
   IMAGE_DISTANCE_TOLERANCE,
@@ -76,9 +77,15 @@ function syntheticRaw(artifacts, { omit = null, shift = null } = {}) {
   return raw;
 }
 
-test("stress fixtures deterministically cover default, dark, 4:3, duck, and long content", () => {
+test("stress fixtures deterministically cover aspect, duck size, and duck position combinations", () => {
   const fixtures = createStressFixtures();
-  assert.deepEqual(fixtures.map((fixture) => fixture.id), ["default", "dark", "four-three", "duck", "long-content"]);
+  assert.deepEqual(fixtures.map((fixture) => fixture.id), [
+    "default", "dark", "four-three", "duck", "long-content",
+    "four-three-duck-small-left", "four-three-duck-small-right",
+    "four-three-duck-medium-left", "four-three-duck-medium-right",
+    "sixteen-nine-duck-small-left", "sixteen-nine-duck-small-right",
+    "sixteen-nine-duck-medium-left", "sixteen-nine-duck-medium-right"
+  ]);
   assert.equal(fixtures[1].theme.colors.paletteId, "midnight-blue");
   assert.equal(fixtures[1].theme.navigation.style, "soft-miniframes");
   assert.equal(fixtures[2].theme.foundation.aspectRatio, "4:3");
@@ -86,6 +93,17 @@ test("stress fixtures deterministically cover default, dark, 4:3, duck, and long
   assert.ok(fixtures[4].theme.contentDefaults.sampleTitle.length > 90);
   assert.match(fixtures[4].theme.contentDefaults.sampleBullets.join(" "), /renderer|layout|content/i);
   assert.match(fixtures[4].theme.contentDefaults.sampleBullets.join(" "), /\s/);
+  for (const aspect of ["four-three", "sixteen-nine"]) {
+    for (const size of ["small", "medium"]) {
+      for (const position of ["left", "right"]) {
+        const fixture = fixtures.find((item) => item.id === `${aspect}-duck-${size}-${position}`);
+        assert.ok(fixture);
+        assert.equal(fixture.theme.foundation.aspectRatio, aspect === "four-three" ? "4:3" : "16:9");
+        assert.equal(fixture.theme.decorations.cornerLogo.size, size);
+        assert.equal(fixture.theme.decorations.cornerLogo.position, `top-${position}`);
+      }
+    }
+  }
   assert.deepEqual(createStressFixtures(), fixtures);
 });
 
@@ -159,6 +177,33 @@ test("standalone capture dimensions exactly match each authoritative aspect rati
   assert.deepEqual([byId["four-three"].width, byId["four-three"].height], [1024, 768]);
   assert.equal(byId.default.width / byId.default.height, 16 / 9);
   assert.equal(byId["four-three"].width / byId["four-three"].height, 4 / 3);
+});
+
+test("duck fixtures preserve physical width at both aspects, sizes, and positions", () => {
+  const fixtures = createStressFixtures();
+  const expectedPercent = {
+    "four-three-small": 6.25,
+    "four-three-medium": 9.375,
+    "sixteen-nine-small": 5,
+    "sixteen-nine-medium": 7.5
+  };
+  const expectedCm = { small: 0.8, medium: 1.2 };
+
+  for (const aspect of ["four-three", "sixteen-nine"]) {
+    for (const size of ["small", "medium"]) {
+      for (const position of ["left", "right"]) {
+        const id = `${aspect}-duck-${size}-${position}`;
+        const artifacts = renderStandaloneHtml(fixtures.find((item) => item.id === id));
+        const percent = expectedPercent[`${aspect}-${size}`];
+
+        assert.equal(artifacts.design.components.cornerLogo.widthFraction, percent / 100, id);
+        assert.ok(artifacts.html.includes(`width:${percent}%`), id);
+        assert.ok(artifacts.html.includes(`class="logo top-${position}"`), id);
+        assert.ok(artifacts.files["theme.cls"].includes(`\\begin{textblock*}{${expectedCm[size]}cm}`), id);
+        assert.equal(verifyStructuralLandmarks(artifacts).ok, true, id);
+      }
+    }
+  }
 });
 
 test("image metric parsing is explicit and rejects malformed or non-finite output", () => {
@@ -337,6 +382,27 @@ test("runCommand bounds output and terminates an owned child process tree on tim
   }
 });
 
+test("runCommand still force-kills a POSIX process group when its leader closes during grace", async () => {
+  const child = new EventEmitter();
+  child.pid = 987654321;
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  const killSignals = [];
+  child.kill = (signal) => { killSignals.push(signal); return true; };
+
+  const result = await runCommand("fake", [], {
+    platform: "linux",
+    timeoutMs: 5,
+    graceMs: 20,
+    spawnImpl: () => child,
+    terminateImpl: async () => { setTimeout(() => child.emit("close", null, "SIGTERM"), 1); }
+  });
+
+  assert.equal(result.timedOut, true);
+  assert.equal(result.signal, "SIGKILL");
+  assert.deepEqual(killSignals, ["SIGKILL"]);
+});
+
 test("writeFiles rejects traversal outside its owned root", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "bf-write-files-"));
   try {
@@ -431,7 +497,7 @@ test("complete injected toolchain measures all fixtures and enforces tolerance",
   });
   assert.equal(pass.status, "pass");
   assert.equal(pass.exitCode, 0);
-  assert.deepEqual(pass.fixtures.map((fixture) => fixture.id), ["default", "dark", "four-three", "duck", "long-content"]);
+  assert.deepEqual(pass.fixtures.map((fixture) => fixture.id), createStressFixtures().map((fixture) => fixture.id));
   assert.equal(pass.fixtures.every((fixture) => fixture.structuralLandmarks.ok), true);
 
   const fail = await runParityCheck({

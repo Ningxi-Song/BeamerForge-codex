@@ -41,7 +41,7 @@ function createStressFixtures() {
     mutate(theme);
     return { id, theme };
   };
-  return [
+  const fixtures = [
     create("default"),
     create("dark", (theme) => {
       theme.colors = { ...getRegistry().palettes["midnight-blue"].colors, paletteId: "midnight-blue" };
@@ -61,6 +61,22 @@ function createStressFixtures() {
       ];
     })
   ];
+  for (const [aspectId, aspectRatio] of [["four-three", "4:3"], ["sixteen-nine", "16:9"]]) {
+    for (const size of ["small", "medium"]) {
+      for (const position of ["left", "right"]) {
+        fixtures.push(create(`${aspectId}-duck-${size}-${position}`, (theme) => {
+          theme.foundation.aspectRatio = aspectRatio;
+          theme.decorations.cornerLogo = {
+            id: "duck",
+            position: `top-${position}`,
+            size,
+            scope: "content-frames"
+          };
+        }));
+      }
+    }
+  }
+  return fixtures;
 }
 
 function escapeHtml(value) {
@@ -88,7 +104,7 @@ function renderPreviewDocument(design) {
     height,
     html: `<!doctype html><html><head><meta charset="utf-8"><meta name="theme-hash" content="${hash}"><style>
 *{box-sizing:border-box}html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden}body{background:${design.colors.background};color:${design.colors.text};font-family:${design.typography.body.cssFamily}}
-.slide{position:relative;width:100%;height:100%;padding:6% 7%;display:flex;flex-direction:column}.header{border-bottom:2px solid ${design.colors.primary};padding-bottom:8px;margin-bottom:18px}.title{font:700 48px/1.08 ${design.typography.title.cssFamily};color:${design.colors.primary};margin:0 0 24px}.list{font-size:26px;line-height:1.35;list-style:none;padding:0;margin:0 0 24px}.list li::before{content:${JSON.stringify(design.components.bullet.marker + " ")};color:${design.colors.accent};font-weight:700}.block{border-radius:${design.components.block.cssRadius};box-shadow:${design.components.block.cssShadow};overflow:hidden}.block-title{padding:8px 14px;background:${design.colors.primary};color:${design.colors.primaryText};font-weight:700}.block-body{padding:12px 14px;background:${design.colors.blockBody}}.footline{position:absolute;left:7%;right:7%;bottom:3%;border-top:2px solid ${design.colors.primary};padding-top:8px;text-align:right;color:${design.colors.primary}}.logo{position:absolute;top:3.5%;width:${logo.sizeUnits * 6.25}%}.logo.top-right{right:3.5%}.logo.top-left{left:3.5%}
+.slide{position:relative;width:100%;height:100%;padding:6% 7%;display:flex;flex-direction:column}.header{border-bottom:2px solid ${design.colors.primary};padding-bottom:8px;margin-bottom:18px}.title{font:700 48px/1.08 ${design.typography.title.cssFamily};color:${design.colors.primary};margin:0 0 24px}.list{font-size:26px;line-height:1.35;list-style:none;padding:0;margin:0 0 24px}.list li::before{content:${JSON.stringify(design.components.bullet.marker + " ")};color:${design.colors.accent};font-weight:700}.block{border-radius:${design.components.block.cssRadius};box-shadow:${design.components.block.cssShadow};overflow:hidden}.block-title{padding:8px 14px;background:${design.colors.primary};color:${design.colors.primaryText};font-weight:700}.block-body{padding:12px 14px;background:${design.colors.blockBody}}.footline{position:absolute;left:7%;right:7%;bottom:3%;border-top:2px solid ${design.colors.primary};padding-top:8px;text-align:right;color:${design.colors.primary}}.logo{position:absolute;top:3.5%;width:${logo.widthFraction * 100}%}.logo.top-right{right:3.5%}.logo.top-left{left:3.5%}
 </style></head><body><main class="slide" data-theme-hash="${hash}" data-aspect-ratio="${design.canvas.aspectRatio}" data-duck="${logo.vectorId === "duck" ? "present" : "absent"}">${logoHtml}${header}<h1 class="title">${escapeHtml(design.content.sampleTitle)}</h1><ul class="list">${bullets}</ul><section class="block"><div class="block-title">${escapeHtml(design.content.blockTitle)}</div><div class="block-body">${escapeHtml(design.content.blockBody)}</div></section>${footline}</main></body></html>`
   };
 }
@@ -431,10 +447,11 @@ async function terminateProcessTree(child, options = {}) {
 function runCommand(command, args, options = {}) {
   return new Promise((resolve) => {
     const spawnImpl = options.spawnImpl || spawn;
+    const platform = options.platform || process.platform;
     const child = spawnImpl(command, args, {
       cwd: options.cwd,
       windowsHide: true,
-      detached: process.platform !== "win32",
+      detached: platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "", stderr = "", settled = false, timedOut = false;
@@ -448,19 +465,19 @@ function runCommand(command, args, options = {}) {
     };
     child.stdout?.on("data", (chunk) => { stdout = boundedAppend(stdout, chunk, options.maxOutputBytes); });
     child.stderr?.on("data", (chunk) => { stderr = boundedAppend(stderr, chunk, options.maxOutputBytes); });
-    child.on("error", (error) => finish({ code: null, error }));
-    child.on("close", (code, signal) => finish({ code, signal, timedOut }));
+    child.on("error", (error) => { if (!timedOut) finish({ code: null, error }); });
+    child.on("close", (code, signal) => { if (!timedOut) finish({ code, signal, timedOut: false }); });
     timer = setTimeout(async () => {
       timedOut = true;
-      await (options.terminateImpl || terminateProcessTree)(child, { graceMs: options.graceMs });
       graceTimer = setTimeout(() => {
-        if (process.platform !== "win32" && Number.isInteger(child.pid)) {
+        if (platform !== "win32" && Number.isInteger(child.pid)) {
           try { process.kill(-child.pid, "SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch {} }
         } else {
           try { child.kill("SIGKILL"); } catch {}
         }
         finish({ code: null, signal: "SIGKILL", timedOut: true });
       }, options.graceMs || TERMINATION_GRACE_MS);
+      await (options.terminateImpl || terminateProcessTree)(child, { graceMs: options.graceMs, platform });
     }, options.timeoutMs || COMMAND_TIMEOUT_MS);
   });
 }

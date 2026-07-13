@@ -6,6 +6,8 @@ const MISSING_COMPILER_MESSAGE =
   "Install TeX Live, MiKTeX, Tectonic, or another XeLaTeX distribution with latexmk, xelatex, or tectonic available on PATH.";
 const PROBE_TIMEOUT_MS = 5000;
 const COMPILE_TIMEOUT_MS = 120000;
+const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024;
+const TERMINATION_GRACE_MS = 1000;
 
 function probeCompiler(spawnSync, command) {
   const result = spawnSync(command, ["--version"], {
@@ -44,24 +46,138 @@ function findCompiler(spawnSync = childProcess.spawnSync) {
   return { kind: "missing" };
 }
 
+function captureOutput(limit) {
+  return { chunks: [], bytes: 0, limit };
+}
+
+function appendOutput(capture, chunk) {
+  if (capture.bytes >= capture.limit) return;
+  const source = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+  const kept = source.subarray(0, capture.limit - capture.bytes);
+  capture.chunks.push(kept);
+  capture.bytes += kept.length;
+}
+
+function outputText(capture) {
+  return Buffer.concat(capture.chunks, capture.bytes).toString("utf8");
+}
+
+function waitForProcess(child, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    child.once("close", (code) => finish({ closed: true, code }));
+    child.once("error", (error) => finish({ closed: false, error }));
+    const timer = setTimeout(() => finish({ closed: false }), timeoutMs);
+  });
+}
+
+async function terminateProcessTree(child, closedPromise, isClosed, options = {}) {
+  const graceMs = options.graceMs || TERMINATION_GRACE_MS;
+  const platform = options.platform || process.platform;
+  const killProcess = options.killProcess || process.kill;
+  if (isClosed()) return;
+  if (platform === "win32" && Number.isInteger(child.pid)) {
+    let taskkillResult = { closed: false };
+    try {
+      const killer = childProcess.spawn("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore"
+      });
+      taskkillResult = await waitForProcess(killer, graceMs);
+      if (!taskkillResult.closed) {
+        try { killer.kill("SIGKILL"); } catch { /* taskkill already stopped */ }
+      }
+    } catch { /* fall through to direct forced termination */ }
+    if ((!taskkillResult.closed || taskkillResult.code !== 0) && !isClosed()) {
+      try { child.kill("SIGKILL"); } catch { /* child already stopped */ }
+    }
+    await closedPromise;
+    return;
+  }
+
+  try {
+    if (Number.isInteger(child.pid)) killProcess(-child.pid, "SIGTERM");
+    else child.kill("SIGTERM");
+  } catch {
+    try { child.kill("SIGTERM"); } catch { /* child already stopped */ }
+  }
+  await new Promise((resolve) => setTimeout(resolve, graceMs));
+  if (Number.isInteger(child.pid) || !isClosed()) {
+    try {
+      if (Number.isInteger(child.pid)) killProcess(-child.pid, "SIGKILL");
+      else child.kill("SIGKILL");
+    } catch {
+      try { child.kill("SIGKILL"); } catch { /* child already stopped */ }
+    }
+  }
+  await closedPromise;
+}
+
 function runCommandAsync(command, args, options = {}, spawn = childProcess.spawn) {
   return new Promise((resolve) => {
     let child;
-    try { child = spawn(command, args, { cwd: options.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }); }
+    try {
+      child = spawn(command, args, {
+        cwd: options.cwd,
+        windowsHide: true,
+        detached: process.platform !== "win32",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+    }
     catch (error) { resolve({ status: null, stdout: "", stderr: "", error }); return; }
-    let stdout = ""; let stderr = ""; let settled = false; let timer = null;
+    const maxOutputBytes = Number.isSafeInteger(options.maxOutputBytes) && options.maxOutputBytes >= 0
+      ? options.maxOutputBytes : MAX_COMMAND_OUTPUT_BYTES;
+    const stdout = captureOutput(maxOutputBytes);
+    const stderr = captureOutput(maxOutputBytes);
+    let settled = false;
+    let closed = false;
+    let timedOut = false;
+    let spawnError = null;
+    let timer = null;
+    let closeResolve;
+    const closedPromise = new Promise((done) => { closeResolve = done; });
     const finish = (status, error = null) => {
-      if (settled) return; settled = true; if (timer) clearTimeout(timer);
-      resolve({ status, stdout, stderr, ...(error ? { error } : {}) });
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        status,
+        stdout: outputText(stdout),
+        stderr: outputText(stderr),
+        ...(error ? { error } : {})
+      });
     };
-    child.stdout?.on("data", (chunk) => { stdout += chunk.toString(); });
-    child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
-    child.on("error", (error) => finish(null, error));
-    child.on("close", (code) => finish(code));
-    timer = setTimeout(() => {
+    child.stdout?.on("data", (chunk) => appendOutput(stdout, chunk));
+    child.stderr?.on("data", (chunk) => appendOutput(stderr, chunk));
+    child.on("error", (error) => {
+      spawnError = error;
+      if (!Number.isInteger(child.pid) && !closed) {
+        closed = true;
+        closeResolve();
+        finish(null, error);
+      }
+    });
+    child.on("close", (code) => {
+      if (!closed) {
+        closed = true;
+        closeResolve();
+      }
+      if (!timedOut) finish(code, spawnError);
+    });
+    timer = setTimeout(async () => {
+      if (settled || closed) return;
+      timedOut = true;
       const error = new Error(`Command timed out after ${options.timeout || COMPILE_TIMEOUT_MS}ms`);
+      try {
+        await terminateProcessTree(child, closedPromise, () => closed, { graceMs: options.graceMs });
+      } catch { /* timeout remains the primary error */ }
       finish(null, error);
-      try { child.kill(); } catch { /* already settled */ }
     }, options.timeout || COMPILE_TIMEOUT_MS);
   });
 }
@@ -193,6 +309,7 @@ module.exports = {
   findCompiler,
   findCompilerAsync,
   runCommandAsync,
+  terminateProcessTree,
   extractLatexExcerpt,
   compileTemplate,
   compileTemplateAsync

@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
-const { findCompiler, findCompilerAsync, runCommandAsync, extractLatexExcerpt, compileTemplate, compileTemplateAsync } = require("../workbench/build");
+const { findCompiler, findCompilerAsync, runCommandAsync, terminateProcessTree, extractLatexExcerpt, compileTemplate, compileTemplateAsync } = require("../workbench/build");
 
 test("findCompiler returns missing when no compiler command succeeds", () => {
   const fakeSpawn = () => ({ status: 1, error: new Error("missing") });
@@ -176,4 +176,73 @@ test("runCommandAsync captures output and kills timed out children", async () =>
   assert.equal(result.status, null);
   assert.match(result.error.message, /timed out/i);
   assert.equal(result.stdout, "partial");
+});
+
+test("runCommandAsync does not resolve a timeout until the child closes", async () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = () => true;
+  const resultPromise = runCommandAsync("xelatex", ["main.tex"], { timeout: 5, graceMs: 5 }, () => child);
+  const early = await Promise.race([
+    resultPromise.then(() => "resolved"),
+    new Promise((resolve) => setTimeout(() => resolve("waiting"), 25))
+  ]);
+  assert.equal(early, "waiting");
+  child.emit("close", null, "SIGKILL");
+  assert.match((await resultPromise).error.message, /timed out/i);
+});
+
+test("POSIX process-tree cleanup escalates the group after grace even when its leader closes", async () => {
+  const signals = [];
+  let closed = false;
+  let closeLeader;
+  const closedPromise = new Promise((resolve) => { closeLeader = resolve; });
+  const child = { pid: 424242, kill() {} };
+
+  await terminateProcessTree(child, closedPromise, () => closed, {
+    platform: "linux",
+    graceMs: 5,
+    killProcess(pid, signal) {
+      signals.push([pid, signal]);
+      if (signal === "SIGTERM") {
+        closed = true;
+        closeLeader();
+      }
+    }
+  });
+
+  assert.deepEqual(signals, [
+    [-child.pid, "SIGTERM"],
+    [-child.pid, "SIGKILL"]
+  ]);
+});
+
+test("runCommandAsync bounds stdout and stderr without changing successful or nonzero exits", async () => {
+  const success = await runCommandAsync(process.execPath, ["-e", "process.stdout.write('o'.repeat(200000));process.stderr.write('e'.repeat(200000))"], { maxOutputBytes: 1024 });
+  assert.equal(success.status, 0);
+  assert.equal(success.stdout.length, 1024);
+  assert.equal(success.stderr.length, 1024);
+  assert.equal(success.error, undefined);
+
+  const failure = await runCommandAsync(process.execPath, ["-e", "process.stderr.write('failed');process.exit(7)"], { maxOutputBytes: 1024 });
+  assert.equal(failure.status, 7);
+  assert.equal(failure.stderr, "failed");
+  assert.equal(failure.error, undefined);
+});
+
+test("runCommandAsync waits for timeout cleanup and terminates child process trees", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "bf-build-timeout-tree-"));
+  const marker = path.join(root, "orphan.txt");
+  const grandchild = `setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'orphan'),1200)`;
+  const parent = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(grandchild)}],{stdio:'ignore'});setInterval(()=>{},1000)`;
+  try {
+    const result = await runCommandAsync(process.execPath, ["-e", parent], { timeout: 500, graceMs: 400, maxOutputBytes: 1024 });
+    assert.equal(result.status, null);
+    assert.match(result.error.message, /timed out/i);
+    await new Promise((resolve) => setTimeout(resolve, 1400));
+    assert.equal(fs.existsSync(marker), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

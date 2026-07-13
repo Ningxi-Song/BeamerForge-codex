@@ -7,7 +7,12 @@ const { LOGO_TARGET_WIDTHS_CM } = require("./vector-renderers");
 const { hashCanonical } = require("../lib/canonical-json");
 const { clone, textColorForBg } = require("../lib/utils");
 
-const GENERATOR_VERSION = "3";
+const GENERATOR_VERSION = "4";
+
+const CANVAS_PHYSICAL_SIZE_CM = Object.freeze({
+  "16:9": Object.freeze({ widthCm: 16, heightCm: 9 }),
+  "4:3": Object.freeze({ widthCm: 12.8, heightCm: 9.6 })
+});
 
 class ThemeValidationError extends Error {
   constructor(errors) {
@@ -28,9 +33,10 @@ function formatError(error) {
 }
 
 function canvasFor(aspectRatio) {
+  const physical = CANVAS_PHYSICAL_SIZE_CM[aspectRatio];
   return aspectRatio === "16:9"
-    ? { aspectRatio, widthUnits: 16, heightUnits: 9 }
-    : { aspectRatio, widthUnits: 4, heightUnits: 3 };
+    ? { aspectRatio, widthUnits: 16, heightUnits: 9, ...physical }
+    : { aspectRatio, widthUnits: 4, heightUnits: 3, ...physical };
 }
 
 function resolvedColors(colors) {
@@ -64,8 +70,13 @@ function resolvedTypography(choices) {
   };
 }
 
-function resolvedComponents(theme, choices) {
+function normalizedFraction(numerator, denominator) {
+  return Number((numerator / denominator).toFixed(6));
+}
+
+function resolvedComponents(theme, choices, canvas) {
   const logo = theme.decorations.cornerLogo;
+  const logoWidthCm = LOGO_TARGET_WIDTHS_CM[logo.size];
   return {
     bullet: {
       id: choices.bullet.id,
@@ -102,7 +113,8 @@ function resolvedComponents(theme, choices) {
       id: choices.logo.id,
       label: choices.logo.label,
       position: logo.position,
-      sizeUnits: LOGO_TARGET_WIDTHS_CM[logo.size],
+      sizeUnits: logoWidthCm,
+      widthFraction: normalizedFraction(logoWidthCm, canvas.widthCm),
       scope: logo.scope,
       vectorId: choices.logo.vectorId,
       previewUrl: choices.logo.previewUrl,
@@ -163,16 +175,17 @@ function snapshotValue(value) {
 }
 
 function buildResolvedDesign(value, choices) {
+  const canvas = canvasFor(value.foundation.aspectRatio);
   return deepFreeze({
     source: {
       themeHash: hashCanonical(value),
       generatorVersion: GENERATOR_VERSION
     },
-    canvas: canvasFor(value.foundation.aspectRatio),
+    canvas,
     identity: clone(value.identity),
     colors: resolvedColors(value.colors),
     typography: resolvedTypography(choices),
-    components: resolvedComponents(value, choices),
+    components: resolvedComponents(value, choices, canvas),
     content: {
       sampleTitle: value.contentDefaults.sampleTitle,
       bullets: clone(value.contentDefaults.sampleBullets),
