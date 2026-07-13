@@ -50,7 +50,7 @@ test("workbench index exposes cumulative wizard regions", () => {
 
 test("workbench index loads wizard state before app script", () => {
   const html = readPublicFile("index.html");
-  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/onboarding-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/ai-refinement-state\.js"><\/script>\s*<script src="\/onboarding-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
 });
 
 test("workbench exposes a creator-focused welcome experience", () => {
@@ -126,7 +126,7 @@ test("workbench exposes a separate authoritative LaTeX preview region", () => {
   for (const id of ["authoritativePreview", "authoritativeStatus", "retryPreview", "refreshPreview"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
-  assert.match(html, /<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/onboarding-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+  assert.match(html, /<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/ai-refinement-state\.js"><\/script>\s*<script src="\/onboarding-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
 });
 
 test("authoritative preview UI is route-gated and uses independent status controls", () => {
