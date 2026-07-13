@@ -114,6 +114,7 @@ module.exports = {
   MAX_FILE_BYTES,
   MAX_TOTAL_BYTES,
   normalizeReferencePath,
+  validateReferences,
   createHandoff,
   importAiDraft
 };
