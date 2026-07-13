@@ -15,10 +15,10 @@ const STEP_DESC = Object.freeze({
   blocks: "Choose how Beamer blocks frame emphasized content.",
   navigation: "Choose whether slides use headers, footlines, and page numbers.",
   "title-page": "Choose the title slide layout.",
-  "manual-review": "Confirm the manual design, then generate it directly or freeze it as the protected AI baseline.",
-  "ai-customize": "Describe the desired refinement and attach optional image or Beamer references.",
-  "ai-handoff": "Export the local package for Codex or another external AI agent.",
-  "ai-import": "Paste the complete ai-draft-theme.json returned by the external agent.",
+  "manual-review": "Review your design, then build it now or ask AI for an optional refinement.",
+  "ai-customize": "Describe what you want changed. Your current design stays safe for comparison.",
+  "ai-handoff": "The optional technical workflow is available under Advanced.",
+  "ai-import": "Theme transfer is available under Advanced.",
   "ai-compare": "Compare the protected manual baseline with the validated AI draft.",
   "final-review": "Generate or compile the explicitly selected version."
 });
@@ -56,6 +56,7 @@ const elements = {
   startDesigning: document.getElementById("startDesigning"),
   advancedToggle: document.getElementById("advancedToggle"),
   advancedPanel: document.getElementById("advancedPanel"),
+  advancedAiTools: document.getElementById("advancedAiTools"),
   phaseProgress: document.getElementById("phaseProgress"),
   stepList: document.getElementById("stepList"),
   stepTitle: document.getElementById("stepTitle"),
@@ -579,11 +580,20 @@ function renderStart() {
   return frag;
 }
 
+function actionButton(label, handler, { secondary = false } = {}) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  if (secondary) button.className = "secondary-button";
+  button.addEventListener("click", () => { Promise.resolve(handler()).catch(() => {}); });
+  return button;
+}
+
 function renderReview() {
   const frag = document.createDocumentFragment();
   const ready = wizard.canGenerate(state.statuses);
   const msg = document.createElement("p");
-  msg.textContent = ready ? "Every step is complete. Generate the template files or compile a PDF from the accumulated theme." : "Some steps still need review before generation.";
+  msg.textContent = ready ? "Your design is ready. Build it now, or ask AI for an optional refinement first." : "Some design choices still need review.";
   frag.appendChild(msg);
   const issues = state.statuses.filter((s) => s.state !== "complete");
   if (issues.length > 0) {
@@ -593,13 +603,16 @@ function renderReview() {
   }
   if (ready) {
     const actions = document.createElement("div"); actions.className = "inline-actions";
-    const continueAi = document.createElement("button"); continueAi.type = "button"; continueAi.id = "freezeManualDesign"; continueAi.textContent = "Save Manual Design & Continue to AI";
-    continueAi.addEventListener("click", freezeManualBaseline);
-    const keepManual = document.createElement("button"); keepManual.type = "button"; keepManual.className = "secondary-button"; keepManual.textContent = "Use Manual Version";
-    keepManual.addEventListener("click", async () => { await freezeManualBaseline({ navigate: false }); await selectFinalVersion("manual"); });
-    actions.append(continueAi, keepManual); frag.appendChild(actions);
+    const refine = actionButton("Refine with AI", () => freezeManualBaseline());
+    const build = actionButton("Build this design", buildManualDesign, { secondary: true });
+    actions.append(refine, build); frag.appendChild(actions);
   }
   return frag;
+}
+
+async function buildManualDesign() {
+  await freezeManualBaseline({ navigate: false });
+  await selectFinalVersion("manual");
 }
 
 function renderPhaseProgress() {
@@ -633,18 +646,33 @@ async function freezeManualBaseline(options = {}) {
     state.comparison = null;
     state.theme = clone(result.theme);
     if (options.navigate !== false) navigateToStep("ai-customize"); else render();
-  } catch (error) { setBuildStatus(error.details || error.message); }
+    return result;
+  } catch (error) { setBuildStatus(error.details || error.message); throw error; }
   finally { setBusy(false); }
 }
 
 function renderAiCustomize() {
   const wrap = document.createElement("div"); wrap.className = "ai-form"; wrap.dataset.region = "ai-customize";
+  const help = document.createElement("p"); help.textContent = "Describe the change you want. Your current design remains the protected baseline for comparison.";
   const brief = document.createElement("textarea"); brief.id = "ai-brief"; brief.rows = 7; brief.placeholder = "Example: Make this warmer, more editorial, and slightly more spacious."; brief.value = state.aiBrief;
+  brief.addEventListener("input", () => { state.aiBrief = brief.value; });
+  const note = document.createElement("p"); note.className = "step-description"; note.textContent = "Direct refinement will use this brief and keep the comparison inside BeamerForge.";
+  wrap.append(help, fieldLabel("What should change?"), brief, note);
+  return wrap;
+}
+
+function renderAdvancedAiTools() {
+  const wrap = document.createElement("div"); wrap.className = "advanced-ai-form";
+  const status = document.createElement("p"); status.id = "handoff-status";
+  status.textContent = state.workflow.hasValidAiDraft ? "A validated draft is ready to compare." : state.workflow.hasHandoff ? "A handoff folder has been exported. You can import the completed theme below." : "Use this fallback when you want another agent to edit the theme outside BeamerForge.";
+  const brief = document.createElement("textarea"); brief.id = "handoff-brief"; brief.rows = 5; brief.placeholder = "Describe the requested design change"; brief.value = state.aiBrief;
   brief.addEventListener("input", () => { state.aiBrief = brief.value; });
   const images = document.createElement("input"); images.id = "image-references"; images.type = "file"; images.accept = "image/*,.pdf,.svg"; images.multiple = true;
   const beamer = document.createElement("input"); beamer.id = "beamer-references"; beamer.type = "file"; beamer.multiple = true; beamer.setAttribute("webkitdirectory", "");
-  const submit = document.createElement("button"); submit.type = "button"; submit.textContent = "Export AI Handoff"; submit.addEventListener("click", exportAiHandoff);
-  wrap.append(fieldLabel("Customization brief"), brief, fieldLabel("Images or slide references"), images, fieldLabel("Beamer project folder"), beamer, submit);
+  const exportButton = document.createElement("button"); exportButton.type = "button"; exportButton.textContent = "Export handoff folder"; exportButton.addEventListener("click", exportAiHandoff);
+  const draft = document.createElement("textarea"); draft.id = "aiDraftJson"; draft.rows = 9; draft.placeholder = "Paste the complete theme JSON returned by the other agent";
+  const importButton = document.createElement("button"); importButton.type = "button"; importButton.className = "secondary-button"; importButton.textContent = "Import theme JSON"; importButton.addEventListener("click", importAiDraft);
+  wrap.append(status, fieldLabel("Handoff brief"), brief, fieldLabel("Images or slide references"), images, fieldLabel("Beamer project folder"), beamer, exportButton, fieldLabel("Completed theme"), draft, importButton);
   return wrap;
 }
 
@@ -664,23 +692,16 @@ async function exportAiHandoff() {
 
 function renderAiHandoff() {
   const wrap = document.createElement("div"); wrap.dataset.region = "ai-handoff";
-  const hasDraft = state.workflow.hasValidAiDraft && state.comparison;
-  const text = document.createElement("p"); text.id = "handoff-status";
-  text.textContent = hasDraft
-    ? "The validated AI draft is ready. The live preview now shows the AI version."
-    : "The handoff is ready. Ask the external agent to create ai-draft-theme.json, then continue to import.";
-  const next = document.createElement("button"); next.type = "button";
-  next.textContent = hasDraft ? "View AI Comparison" : "Import AI Draft";
-  if (hasDraft) next.addEventListener("click", () => navigateToStep("ai-compare"));
-  else next.addEventListener("click", () => navigateToStep("ai-import"));
+  const text = document.createElement("p"); text.textContent = state.workflow.hasValidAiDraft ? "The validated draft is ready for comparison." : "The optional technical workflow is available in Advanced tools.";
+  const next = actionButton(state.workflow.hasValidAiDraft ? "View comparison" : "Open Advanced", () => state.workflow.hasValidAiDraft ? navigateToStep("ai-compare") : toggleAdvancedPanel(), { secondary: true });
   wrap.append(text, next); return wrap;
 }
 
 function renderAiImport() {
   const wrap = document.createElement("div"); wrap.dataset.region = "ai-import";
-  const input = document.createElement("textarea"); input.id = "aiDraftJson"; input.rows = 14; input.placeholder = "Paste the complete ai-draft-theme.json here";
-  const submit = document.createElement("button"); submit.type = "button"; submit.textContent = "Validate and Compare"; submit.addEventListener("click", importAiDraft);
-  wrap.append(fieldLabel("AI draft JSON"), input, submit); return wrap;
+  const text = document.createElement("p"); text.textContent = "Theme transfer is now grouped with the other technical controls.";
+  const open = actionButton("Open Advanced", toggleAdvancedPanel, { secondary: true });
+  wrap.append(text, open); return wrap;
 }
 
 async function importAiDraft() {
@@ -1233,7 +1254,7 @@ async function compileTheme() {
   finally { setBusy(false); render(); }
 }
 
-function render({ schedulePreview = true } = {}) { if (renderAppSurface()) return; if (schedulePreview !== false) schedulePreviewResolution(); refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); renderAuthoritativePreviews(); updateActions(); maybeRequestAuthoritativePreviews(); }
+function render({ schedulePreview = true } = {}) { if (renderAppSurface()) return; if (schedulePreview !== false) schedulePreviewResolution(); refreshStatuses(); renderPhaseProgress(); renderStepList(); replaceChildren(elements.advancedAiTools, [renderAdvancedAiTools()]); renderStepContent(); renderSummary(); renderPreview(); renderAuthoritativePreviews(); updateActions(); maybeRequestAuthoritativePreviews(); }
 
 function bindControls() {
   elements.startDesigning.addEventListener("click", beginDesigning);

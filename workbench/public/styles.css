@@ -317,6 +317,10 @@ h2 { color: var(--text); font-size: 19px; line-height: 1.2; }
 .design-summary .summary-list { margin-top: 12px; }
 .advanced-panel { display: grid; grid-template-columns: minmax(240px, 0.7fr) minmax(320px, 1.3fr); gap: 16px; margin-top: 18px; padding: 20px; border: 1px solid var(--border); border-radius: 18px; background: #fff; box-shadow: var(--shadow); }
 .advanced-panel[hidden] { display: none; }
+.advanced-ai-tools { grid-column: 1 / -1; }
+.advanced-ai-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-muted); }
+.advanced-ai-form #handoff-status, .advanced-ai-form textarea, .advanced-ai-form .field-label { grid-column: 1 / -1; }
+.advanced-ai-form textarea { width: 100%; resize: vertical; border: 1px solid var(--border-strong); border-radius: 6px; padding: 10px; font: inherit; }
 .advanced-actions { display: flex; gap: 8px; }
 .advanced-actions button { flex: 1; }
 .advanced-panel #buildStatus { grid-column: 1 / -1; }
@@ -329,6 +333,8 @@ h2 { color: var(--text); font-size: 19px; line-height: 1.2; }
   .creator-workspace { grid-template-columns: 1fr; }
   .creator-workspace .preview-panel { position: static; }
   .advanced-panel { grid-template-columns: 1fr; }
+  .advanced-ai-tools, .advanced-ai-form #handoff-status, .advanced-ai-form textarea, .advanced-ai-form .field-label { grid-column: auto; }
+  .advanced-ai-form { grid-template-columns: 1fr; }
   .advanced-panel #buildStatus { grid-column: auto; }
 }
 

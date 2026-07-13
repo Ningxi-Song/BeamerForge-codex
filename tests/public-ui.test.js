@@ -219,6 +219,32 @@ test("browser script gates compile behind wizard review", () => {
   assert.doesNotMatch(script, /elements\.compileTheme\.disabled = state\.busy;/);
 });
 
+test("manual review has two clear continuations and isolates external AI tools", () => {
+  const script = readPublicFile("app.js");
+  const review = functionSource(script, "renderReview");
+  assert.equal([...review.matchAll(/actionButton\(/g)].length, 2);
+  assert.match(review, /Refine with AI/);
+  assert.match(review, /Build this design/);
+  assert.match(review, /buildManualDesign/);
+  assert.doesNotMatch(review, /Save Manual Design|Use Manual Version|Handoff|JSON/);
+
+  const build = functionSource(script, "buildManualDesign");
+  assert.match(build, /freezeManualBaseline\(\{ navigate: false \}\)/);
+  assert.match(build, /selectFinalVersion\("manual"\)/);
+
+  const customize = functionSource(script, "renderAiCustomize");
+  assert.doesNotMatch(customize, /Export|Import|Handoff|JSON|external agent/i);
+  assert.doesNotMatch(script, /"manual-review": "[^"]*(freeze|baseline)/i);
+  assert.doesNotMatch(script, /"ai-customize": "[^"]*(attach|Beamer references)/i);
+  const advanced = functionSource(script, "renderAdvancedAiTools");
+  assert.match(advanced, /Export handoff folder/);
+  assert.match(advanced, /Import theme JSON/);
+  assert.match(advanced, /handoff-status/);
+  assert.doesNotMatch(functionSource(script, "renderAiHandoff"), /Import AI Draft|external agent|ai-draft-theme\.json/i);
+  assert.doesNotMatch(functionSource(script, "renderAiImport"), /AI draft JSON|Validate and Compare/i);
+  assert.match(functionSource(script, "render"), /renderAdvancedAiTools\(\)/);
+});
+
 test("browser generation is blocked until wizard statuses are complete", () => {
   const script = readPublicFile("app.js");
   assert.match(
@@ -426,9 +452,11 @@ test("AI comparisons resolve and render paired designs", () => {
   assert.match(functionSource(script, "boot"), /if \(initialDesign && !comparisonError\) setBuildStatus\("No build yet\."\)/);
 });
 
-test("handoff page reveals an already imported AI draft", () => {
+test("handoff route keeps a validated draft accessible without exposing import controls", () => {
   const script = readPublicFile("app.js");
-  assert.match(script, /function renderAiHandoff\(\)[\s\S]*?state\.workflow\.hasValidAiDraft[\s\S]*?View AI Comparison[\s\S]*?navigateToStep\("ai-compare"\)/);
+  const handoff = functionSource(script, "renderAiHandoff");
+  assert.match(handoff, /state\.workflow\.hasValidAiDraft[\s\S]*?View comparison[\s\S]*?navigateToStep\("ai-compare"\)/);
+  assert.doesNotMatch(handoff, /Import AI Draft|ai-draft-theme\.json|external agent/i);
   const chooser = functionSource(script, "previewDesignForStep");
   assert.match(chooser, /ai-handoff[\s\S]*?state\.comparison\.draftDesign/);
   assert.match(chooser, /return state\.resolvedDesign/);
