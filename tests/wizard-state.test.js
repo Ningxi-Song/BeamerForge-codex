@@ -8,7 +8,7 @@ test("defines the cumulative wizard route order", () => {
   assert.deepEqual(
     wizard.STEPS.map((step) => step.path),
     [
-      "/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page",
+      "/welcome", "/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page",
       "/manual-review", "/ai-customize", "/ai-handoff", "/ai-import", "/ai-compare", "/final-review"
     ]
   );
@@ -57,6 +57,24 @@ test("blocks generation when statuses are empty", () => {
 test("blocks generation when statuses are partial", () => {
   const statuses = wizard.deriveStepStatuses(DEFAULT_THEME, getRegistry()).filter((status) => status.id !== "title-page");
   assert.equal(wizard.canGenerate(statuses), false);
+});
+
+test("groups internal decisions into the beginner-facing journey", () => {
+  assert.deepEqual(wizard.VISIBLE_STAGES.map(({ id, label }) => ({ id, label })), [
+    { id: "welcome", label: "Welcome" },
+    { id: "direction", label: "Direction" },
+    { id: "style", label: "Style" },
+    { id: "details", label: "Details" },
+    { id: "review", label: "Review" },
+    { id: "ai", label: "AI refinement" },
+    { id: "build", label: "Build" }
+  ]);
+  assert.equal(wizard.stepForPath("/welcome").id, "welcome");
+  assert.equal(wizard.visibleStageForStep("font").id, "style");
+  assert.equal(wizard.visibleStageForStep("blocks").id, "details");
+  assert.equal(wizard.visibleStageForStep("manual-review").id, "review");
+  assert.equal(wizard.visibleStageForStep("ai-customize").id, "ai");
+  assert.equal(wizard.visibleStageForStep("final-review").id, "build");
 });
 
 test("maps root validation error paths to their wizard steps", () => {

@@ -4,20 +4,31 @@
 })(typeof globalThis !== "undefined" ? globalThis : window, function wizardFactory() {
   "use strict";
 
+  const VISIBLE_STAGES = Object.freeze([
+    { id: "welcome", label: "Welcome" },
+    { id: "direction", label: "Direction" },
+    { id: "style", label: "Style" },
+    { id: "details", label: "Details" },
+    { id: "review", label: "Review" },
+    { id: "ai", label: "AI refinement" },
+    { id: "build", label: "Build" }
+  ]);
+
   const STEPS = Object.freeze([
-    { id: "start", path: "/start", label: "Default Template", section: null, phase: "manual" },
-    { id: "color", path: "/color", label: "Color", section: "colors", phase: "manual" },
-    { id: "font", path: "/font", label: "Font", section: "fonts", phase: "manual" },
-    { id: "bullets", path: "/bullets", label: "Bullets", section: "bullets", phase: "manual" },
-    { id: "blocks", path: "/blocks", label: "Blocks", section: "blocks", phase: "manual" },
-    { id: "navigation", path: "/navigation", label: "Navigation", section: "navigation", phase: "manual" },
-    { id: "title-page", path: "/title-page", label: "Title Page", section: "titlePage", phase: "manual" },
-    { id: "manual-review", path: "/manual-review", label: "Manual Review", section: null, phase: "manual" },
-    { id: "ai-customize", path: "/ai-customize", label: "AI Brief", section: null, phase: "ai" },
-    { id: "ai-handoff", path: "/ai-handoff", label: "AI Handoff", section: null, phase: "ai" },
-    { id: "ai-import", path: "/ai-import", label: "Import Draft", section: null, phase: "ai" },
-    { id: "ai-compare", path: "/ai-compare", label: "Compare", section: null, phase: "ai" },
-    { id: "final-review", path: "/final-review", label: "Final Review", section: null, phase: "final" }
+    { id: "welcome", path: "/welcome", label: "Welcome", section: null, phase: "manual", visibleStage: "welcome" },
+    { id: "start", path: "/start", label: "Direction", section: null, phase: "manual", visibleStage: "direction" },
+    { id: "color", path: "/color", label: "Color", section: "colors", phase: "manual", visibleStage: "style" },
+    { id: "font", path: "/font", label: "Type", section: "fonts", phase: "manual", visibleStage: "style" },
+    { id: "bullets", path: "/bullets", label: "Bullets", section: "bullets", phase: "manual", visibleStage: "details" },
+    { id: "blocks", path: "/blocks", label: "Blocks", section: "blocks", phase: "manual", visibleStage: "details" },
+    { id: "navigation", path: "/navigation", label: "Navigation", section: "navigation", phase: "manual", visibleStage: "details" },
+    { id: "title-page", path: "/title-page", label: "Title page", section: "titlePage", phase: "manual", visibleStage: "details" },
+    { id: "manual-review", path: "/manual-review", label: "Review", section: null, phase: "manual", visibleStage: "review" },
+    { id: "ai-customize", path: "/ai-customize", label: "AI refinement", section: null, phase: "ai", visibleStage: "ai" },
+    { id: "ai-handoff", path: "/ai-handoff", label: "Advanced handoff", section: null, phase: "ai", visibleStage: "ai" },
+    { id: "ai-import", path: "/ai-import", label: "Advanced import", section: null, phase: "ai", visibleStage: "ai" },
+    { id: "ai-compare", path: "/ai-compare", label: "Compare", section: null, phase: "ai", visibleStage: "ai" },
+    { id: "final-review", path: "/final-review", label: "Build", section: null, phase: "final", visibleStage: "build" }
   ]);
 
   const BY_ID = Object.freeze(Object.fromEntries(STEPS.map((s) => [s.id, s])));
@@ -45,6 +56,10 @@
   function nextStepId(id) { return STEPS[Math.min(indexOf(id) + 1, STEPS.length - 1)].id; }
   function previousStepId(id) { return STEPS[Math.max(indexOf(id) - 1, 0)].id; }
   function sectionForStep(id) { return BY_ID[id] ? BY_ID[id].section : null; }
+  function visibleStageForStep(stepId) {
+    const stageId = BY_ID[stepId]?.visibleStage || "welcome";
+    return VISIBLE_STAGES.find((stage) => stage.id === stageId) || VISIBLE_STAGES[0];
+  }
 
   function stepForError(errorPath) {
     const p = String(errorPath || "");
@@ -58,6 +73,7 @@
   }
 
   function labelForStep(stepId, theme, registry) {
+    if (stepId === "welcome") return "How it works";
     if (stepId === "start") return theme.identity?.name || "Default template";
     if (stepId === "manual-review") return "Ready check";
     const req = REQUIRED[stepId];
@@ -95,7 +111,7 @@
   function canGenerate(statuses) {
     if (!Array.isArray(statuses)) return false;
     const map = new Map(statuses.map((s) => [s && s.id, s]));
-    return STEPS.filter((step) => step.phase === "manual").every((step) => map.get(step.id)?.state === "complete");
+    return STEPS.filter((step) => step.phase === "manual" && step.id !== "welcome").every((step) => map.get(step.id)?.state === "complete");
   }
 
   function canEnterStep(stepId, workflow = {}) {
@@ -110,5 +126,5 @@
     return ["manual", "ai"].includes(workflow.selectedVersion);
   }
 
-  return { STEPS, stepForPath, nextStepId, previousStepId, sectionForStep, deriveStepStatuses, canGenerate, canEnterStep, canFinalize };
+  return { STEPS, VISIBLE_STAGES, stepForPath, nextStepId, previousStepId, sectionForStep, visibleStageForStep, deriveStepStatuses, canGenerate, canEnterStep, canFinalize };
 });
