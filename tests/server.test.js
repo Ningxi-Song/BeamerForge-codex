@@ -765,6 +765,7 @@ test("serves the wizard shell for client-side wizard routes", async (t) => {
   const baseUrl = await withServer(t, { stateDir, publicDir: staticRoot });
 
   for (const route of [
+    "/welcome",
     "/start",
     "/color",
     "/font",

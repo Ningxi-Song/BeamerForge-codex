@@ -4,8 +4,10 @@ const wizard = window.BeamerForgeWizard;
 const previewState = window.BeamerForgePreviewState;
 const authoritativeState = window.BeamerForgeAuthoritativePreviewState;
 const selectionState = window.BeamerForgeSelectionState;
+const onboarding = window.BeamerForgeOnboarding;
 
 const STEP_DESC = Object.freeze({
+  welcome: "See how BeamerForge turns simple visual choices into a complete Beamer project.",
   start: "Start from the default BeamerForge template, then make one cumulative design decision per step.",
   color: "Choose the color palette that sets the slide surface, structure, accent, text, and alert colors.",
   font: "Choose the type family used for body text and titles.",
@@ -49,6 +51,8 @@ let cubeResizeBound = false;
 
 const elements = {
   app: document.getElementById("wizardApp"),
+  welcomeScreen: document.getElementById("welcomeScreen"),
+  startDesigning: document.getElementById("startDesigning"),
   phaseProgress: document.getElementById("phaseProgress"),
   stepList: document.getElementById("stepList"),
   stepTitle: document.getElementById("stepTitle"),
@@ -131,6 +135,24 @@ function clone(v) { return JSON.parse(JSON.stringify(v)); }
 function replaceChildren(p, c) { p.replaceChildren(...c); }
 function currentStep() { return wizard.stepForPath(window.location.pathname); }
 function stepById(id) { return wizard.STEPS.find((s) => s.id === id) || wizard.STEPS[0]; }
+
+function onboardingStarted() {
+  return window.sessionStorage.getItem("beamerforge:onboarding-started") === "1";
+}
+
+function renderAppSurface() {
+  const showWelcome = onboarding.shouldShow({ pathname: window.location.pathname, started: onboardingStarted() });
+  elements.welcomeScreen.hidden = !showWelcome;
+  elements.app.hidden = showWelcome;
+  return showWelcome;
+}
+
+function beginDesigning() {
+  const decision = onboarding.begin();
+  window.sessionStorage.setItem("beamerforge:onboarding-started", decision.started ? "1" : "0");
+  window.history.pushState({ stepId: "start" }, "", decision.nextPath);
+  render();
+}
 
 function navigateToStep(id, opts = {}) {
   const s = stepById(id);
@@ -1120,9 +1142,10 @@ async function compileTheme() {
   finally { setBusy(false); render(); }
 }
 
-function render({ schedulePreview = true } = {}) { if (schedulePreview !== false) schedulePreviewResolution(); refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); renderAuthoritativePreviews(); updateActions(); maybeRequestAuthoritativePreviews(); }
+function render({ schedulePreview = true } = {}) { if (renderAppSurface()) return; if (schedulePreview !== false) schedulePreviewResolution(); refreshStatuses(); renderPhaseProgress(); renderStepList(); renderStepContent(); renderSummary(); renderPreview(); renderAuthoritativePreviews(); updateActions(); maybeRequestAuthoritativePreviews(); }
 
 function bindControls() {
+  elements.startDesigning.addEventListener("click", beginDesigning);
   elements.back.addEventListener("click", () => navigateToStep(wizard.previousStepId(currentStep().id)));
   elements.next.addEventListener("click", () => navigateToStep(wizard.nextStepId(currentStep().id)));
   elements.reviewGenerate.addEventListener("click", generateTheme);
@@ -1170,7 +1193,7 @@ async function boot() {
   const initialInputKey = JSON.stringify(state.theme);
   const initialDesign = await resolvePreviewDesign(clone(state.theme), { render: false, inputKey: initialInputKey });
   syncBase(); registerFontFaces(reg); bindControls();
-  if (window.location.pathname === "/") navigateToStep("start", { replace: true, schedulePreview: false });
+  if (window.location.pathname === "/") navigateToStep(onboardingStarted() ? "start" : "welcome", { replace: true, schedulePreview: false });
   else if (window.location.pathname === "/final-review" && !selectionState.canBuild(state.workflow)) navigateToStep("manual-review", { replace: true, schedulePreview: false });
   else render({ schedulePreview: false });
   if (initialDesign) setStatus("Idle");

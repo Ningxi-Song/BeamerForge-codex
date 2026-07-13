@@ -27,7 +27,7 @@ const { listDirections } = require("./design-directions");
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_MULTIPART_BYTES = 101 * 1024 * 1024;
 const WIZARD_ROUTES = new Set([
-  "/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page", "/review",
+  "/welcome", "/start", "/color", "/font", "/bullets", "/blocks", "/navigation", "/title-page", "/review",
   "/manual-review", "/ai-customize", "/ai-handoff", "/ai-import", "/ai-compare", "/final-review"
 ]);
 

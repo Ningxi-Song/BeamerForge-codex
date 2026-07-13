@@ -50,7 +50,24 @@ test("workbench index exposes cumulative wizard regions", () => {
 
 test("workbench index loads wizard state before app script", () => {
   const html = readPublicFile("index.html");
-  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+  assert.match(html, /<script src="\/wizard-state\.js"><\/script>\s*<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/onboarding-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+});
+
+test("workbench exposes a creator-focused welcome experience", () => {
+  const html = readPublicFile("index.html");
+  for (const id of ["welcomeScreen", "welcomeTitle", "startDesigning", "wizardApp"]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(html, /Design a polished Beamer theme without wrestling with LaTeX/);
+  assert.match(html, /Choose your foundation/);
+  assert.match(html, /Refine it with AI/);
+  assert.match(html, /Fast while designing\. Reliable when finished\./);
+  assert.match(html, /<script src="\/onboarding-state\.js"><\/script>[\s\S]*?<script src="\/app\.js"><\/script>/);
+
+  const script = readPublicFile("app.js");
+  for (const token of ["BeamerForgeOnboarding", "renderAppSurface", "beginDesigning", "beamerforge:onboarding-started"]) {
+    assert.match(script, new RegExp(escapeRegExp(token)));
+  }
 });
 
 test("preview toolbar identifies the instant HTML preview", () => {
@@ -64,7 +81,7 @@ test("workbench exposes a separate authoritative LaTeX preview region", () => {
   for (const id of ["authoritativePreview", "authoritativeStatus", "retryPreview", "refreshPreview"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
-  assert.match(html, /<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+  assert.match(html, /<script src="\/preview-state\.js"><\/script>\s*<script src="\/authoritative-preview-state\.js"><\/script>\s*<script src="\/selection-state\.js"><\/script>\s*<script src="\/onboarding-state\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
 });
 
 test("authoritative preview UI is route-gated and uses independent status controls", () => {

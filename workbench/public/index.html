@@ -7,7 +7,28 @@
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <main id="wizardApp" class="wizard-app">
+    <section id="welcomeScreen" class="welcome-screen" aria-labelledby="welcomeTitle" hidden>
+      <header class="welcome-header">
+        <div class="welcome-brand"><span class="brand-mark" aria-hidden="true">B</span><strong>BeamerForge</strong></div>
+        <span class="welcome-context">New presentation theme</span>
+      </header>
+      <div class="welcome-content">
+        <p class="eyebrow">Welcome to BeamerForge</p>
+        <h1 id="welcomeTitle">Design a polished Beamer theme without wrestling with LaTeX.</h1>
+        <p class="welcome-lede">Start with simple visual choices, then optionally ask AI to refine the result. You remain in control.</p>
+        <div class="welcome-stages">
+          <article><span class="stage-number">1</span><h2>Choose your foundation</h2><p>Describe the feeling, compare directions, and fine-tune one detail at a time.</p></article>
+          <article><span class="stage-number">2</span><h2>Refine it with AI</h2><p>Write the change, compare before and after, then accept, keep, or revise.</p></article>
+        </div>
+        <aside class="workflow-principle">
+          <div><strong>Fast while designing. Reliable when finished.</strong><p>The live preview responds immediately; the final check uses the real Beamer compiler.</p></div>
+          <span>Choose → Preview → Refine → Build</span>
+        </aside>
+        <button id="startDesigning" type="button">Start designing →</button>
+      </div>
+    </section>
+
+    <main id="wizardApp" class="wizard-app" hidden>
       <aside class="wizard-rail" aria-label="Template steps">
         <header class="brand-block">
           <p class="eyebrow">BeamerForge</p>
@@ -67,6 +88,7 @@
     <script src="/preview-state.js"></script>
     <script src="/authoritative-preview-state.js"></script>
     <script src="/selection-state.js"></script>
+    <script src="/onboarding-state.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>
