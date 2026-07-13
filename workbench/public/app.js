@@ -54,6 +54,7 @@ const elements = {
   app: document.getElementById("wizardApp"),
   welcomeScreen: document.getElementById("welcomeScreen"),
   startDesigning: document.getElementById("startDesigning"),
+  helpButton: document.getElementById("helpButton"),
   advancedToggle: document.getElementById("advancedToggle"),
   advancedPanel: document.getElementById("advancedPanel"),
   advancedAiTools: document.getElementById("advancedAiTools"),
@@ -63,6 +64,7 @@ const elements = {
   stepDesc: document.getElementById("stepDescription"),
   stepContent: document.getElementById("stepContent"),
   summaryList: document.getElementById("summaryList"),
+  workflowStatus: document.getElementById("workflowStatus"),
   deliveryActions: document.getElementById("deliveryActions"),
   downloadProject: document.getElementById("downloadProject"),
   downloadPdf: document.getElementById("downloadPdf"),
@@ -159,6 +161,7 @@ function beginDesigning() {
   window.sessionStorage.setItem("beamerforge:onboarding-started", decision.started ? "1" : "0");
   window.history.pushState({ stepId: "start" }, "", decision.nextPath);
   render();
+  elements.stepTitle.focus();
 }
 
 function toggleAdvancedPanel() {
@@ -174,6 +177,7 @@ function navigateToStep(id, opts = {}) {
   if (opts.replace) window.history.replaceState({ stepId: s.id }, "", s.path);
   else window.history.pushState({ stepId: s.id }, "", s.path);
   render({ schedulePreview: opts.schedulePreview });
+  if (s.id !== "welcome") elements.stepTitle.focus();
 }
 
 function selectedId(stepId) {
@@ -290,6 +294,7 @@ function schedulePreviewResolution() {
 function setStatus(text, cls = "") {
   elements.saveStatus.className = cls ? `status ${cls}` : "status";
   elements.saveStatus.textContent = text;
+  elements.workflowStatus.textContent = text;
 }
 
 function buildStatusText(v) { return typeof v === "string" ? v : JSON.stringify(v, null, 2); }
@@ -1274,6 +1279,7 @@ function render({ schedulePreview = true } = {}) { if (renderAppSurface()) retur
 
 function bindControls() {
   elements.startDesigning.addEventListener("click", beginDesigning);
+  elements.helpButton.addEventListener("click", () => navigateToStep("welcome"));
   elements.advancedToggle.addEventListener("click", toggleAdvancedPanel);
   elements.back.addEventListener("click", () => navigateToStep(wizard.previousStepId(currentStep().id)));
   elements.next.addEventListener("click", () => navigateToStep(wizard.nextStepId(currentStep().id)));

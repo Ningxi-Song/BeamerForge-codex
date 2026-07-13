@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
+    <a class="skip-link" href="#stepContent">Skip to current design choice</a>
     <section id="welcomeScreen" class="welcome-screen" aria-labelledby="welcomeTitle" hidden>
       <header class="welcome-header">
         <div class="welcome-brand"><span class="brand-mark" aria-hidden="true">B</span><strong>BeamerForge</strong></div>
@@ -36,8 +37,12 @@
           <h1>Shape a presentation theme that feels like yours.</h1>
           <p>Choose a direction, adjust the details, then Refine with AI or Build this design.</p>
         </div>
-        <button id="advancedToggle" class="secondary-button advanced-toggle" type="button" aria-expanded="false" aria-controls="advancedPanel">Advanced</button>
+        <div class="header-actions">
+          <button id="helpButton" class="secondary-button" type="button">Help</button>
+          <button id="advancedToggle" class="secondary-button advanced-toggle" type="button" aria-expanded="false" aria-controls="advancedPanel">Advanced</button>
+        </div>
       </header>
+      <p id="workflowStatus" class="visually-hidden" aria-live="polite"></p>
 
       <nav id="visibleProgress" class="visible-progress" aria-label="Design progress">
         <div id="phaseProgress" class="phase-progress" data-region="phase-progress" aria-live="polite"></div>
@@ -47,7 +52,7 @@
         <section id="workspaceMain" class="decision-panel" aria-labelledby="stepTitle">
           <div class="step-heading">
             <p class="eyebrow">Make one choice at a time</p>
-            <h2 id="stepTitle"></h2>
+            <h2 id="stepTitle" tabindex="-1"></h2>
             <p id="stepDescription" class="step-description"></p>
           </div>
           <div id="stepContent" class="step-content"></div>

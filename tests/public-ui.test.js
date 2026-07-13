@@ -95,6 +95,26 @@ test("creator workspace uses visible stages and keeps technical tools under Adva
   assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.creator-workspace/);
 });
 
+test("creator journey exposes keyboard, focus, and live-status accessibility contracts", () => {
+  const html = readPublicFile("index.html");
+  assert.match(html, /class="skip-link"[^>]*href="#stepContent"/);
+  assert.match(html, /id="workflowStatus"[^>]*aria-live="polite"/);
+  assert.match(html, /id="stepTitle"[^>]*tabindex="-1"/);
+  assert.match(html, /id="helpButton"/);
+
+  const script = readPublicFile("app.js");
+  assert.match(functionSource(script, "renderOptionCards"), /aria-pressed/);
+  assert.match(functionSource(script, "navigateToStep"), /elements\.stepTitle\.focus\(\)/);
+  assert.match(functionSource(script, "setStatus"), /elements\.workflowStatus/);
+  assert.match(functionSource(script, "bindControls"), /helpButton[\s\S]*?navigateToStep\("welcome"\)/);
+
+  const css = readPublicFile("styles.css");
+  assert.match(css, /\.skip-link:focus/);
+  assert.match(css, /:focus-visible/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.creator-workspace \.preview-panel\s*\{[^}]*position:\s*static/);
+});
+
 test("preview toolbar identifies the instant HTML preview", () => {
   const html = readPublicFile("index.html");
   assert.match(html, />Instant HTML preview</);

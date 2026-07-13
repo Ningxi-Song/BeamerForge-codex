@@ -12,24 +12,25 @@ Vibe → Direction → Palette → Details → Template
 "I want something modern"  →  3 directions  →  3 palettes  →  fine-tune  →  .tex file
 ```
 
-## Cumulative HTML Wizard
+## Use BeamerForge
 
-The local HTML wizard designs a Beamer template one decision at a time while keeping `theme.json` as the source of truth.
+BeamerForge guides presentation creators from a visual direction to a complete Beamer project. The browser preview responds immediately while you make choices; the final PDF check uses the real LaTeX compiler.
 
 ```bash
-npm test
 npm start
 ```
 
-Open `http://localhost:5177/start`.
+Open `http://localhost:5177/welcome` and select **Start designing**.
 
-The wizard flow is:
+The creator journey is:
 
 ```text
-Default Template -> Color -> Font -> Bullets -> Blocks -> Navigation -> Title Page -> Review & Generate
+Direction -> Style -> Details -> Review -> Optional AI refinement -> Build
 ```
 
-Each step previews the accumulated choices. Users can go back to an earlier step and keep later compatible choices. Generation is blocked until every step is valid.
+Describe the feeling you want, choose one of three visual directions, and adjust one detail at a time. The preview preserves compatible later choices when you go back. At review, either build the manual design immediately or ask AI for an optional refinement and compare the two versions. A successful build provides the complete project, and a successful compilation also provides the PDF.
+
+Technical handoff and JSON tools are available under **Advanced** for experienced users, but they are not part of the normal workflow.
 
 ## Workflow
 
