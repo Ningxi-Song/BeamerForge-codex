@@ -70,6 +70,31 @@ test("workbench exposes a creator-focused welcome experience", () => {
   }
 });
 
+test("creator workspace uses visible stages and keeps technical tools under Advanced", () => {
+  const html = readPublicFile("index.html");
+  for (const id of ["appHeader", "visibleProgress", "workspaceMain", "workspacePreview", "advancedPanel"]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  for (const copy of ["Your design", "Refine with AI", "Build this design"]) {
+    assert.match(html, new RegExp(escapeRegExp(copy)));
+  }
+  const advanced = html.match(/<aside id="advancedPanel"[\s\S]*?<\/aside>/)?.[0] || "";
+  const normalWorkspace = html.replace(advanced, "");
+  assert.doesNotMatch(normalWorkspace, /Cumulative setup|AI Handoff|Import Draft/);
+
+  const script = readPublicFile("app.js");
+  const progress = functionSource(script, "renderPhaseProgress");
+  assert.match(progress, /wizard\.VISIBLE_STAGES/);
+  assert.match(progress, /wizard\.visibleStageForStep/);
+  assert.match(progress, /navigateToStep/);
+
+  const css = readPublicFile("styles.css");
+  for (const selector of [".creator-app", ".creator-workspace", ".visible-progress", ".advanced-panel"]) {
+    assert.match(css, new RegExp(escapeRegExp(selector)));
+  }
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.creator-workspace/);
+});
+
 test("preview toolbar identifies the instant HTML preview", () => {
   const html = readPublicFile("index.html");
   assert.match(html, />Instant HTML preview</);

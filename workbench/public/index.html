@@ -28,59 +28,75 @@
       </div>
     </section>
 
-    <main id="wizardApp" class="wizard-app" hidden>
-      <aside class="wizard-rail" aria-label="Template steps">
-        <header class="brand-block">
-          <p class="eyebrow">BeamerForge</p>
-          <h1>Template Wizard</h1>
-        </header>
+    <main id="wizardApp" class="creator-app wizard-app" hidden>
+      <header id="appHeader" class="app-header">
+        <div class="app-brand"><span class="brand-mark" aria-hidden="true">B</span><strong>BeamerForge</strong></div>
+        <div class="app-heading">
+          <p class="eyebrow">Your design</p>
+          <h1>Shape a presentation theme that feels like yours.</h1>
+          <p>Choose a direction, adjust the details, then Refine with AI or Build this design.</p>
+        </div>
+        <button id="advancedToggle" class="secondary-button advanced-toggle" type="button" aria-expanded="false" aria-controls="advancedPanel">Advanced</button>
+      </header>
+
+      <nav id="visibleProgress" class="visible-progress" aria-label="Design progress">
         <div id="phaseProgress" class="phase-progress" data-region="phase-progress" aria-live="polite"></div>
-        <nav id="stepList" class="step-list"></nav>
-      </aside>
+      </nav>
 
-      <section class="decision-panel" aria-labelledby="stepTitle">
-        <div class="step-heading">
-          <p class="eyebrow">Cumulative setup</p>
-          <h2 id="stepTitle"></h2>
-          <p id="stepDescription" class="step-description"></p>
-        </div>
-        <div id="stepContent" class="step-content"></div>
-        <div class="wizard-actions">
-          <button id="backStep" class="secondary-button" type="button">Back</button>
-          <button id="nextStep" type="button">Next</button>
-        </div>
-      </section>
-
-      <section class="preview-panel" aria-label="Live preview">
-        <div class="preview-toolbar">
-          <div>
-            <p class="eyebrow">Instant HTML preview</p>
-            <h2>Accumulated theme</h2>
+      <div class="creator-workspace">
+        <section id="workspaceMain" class="decision-panel" aria-labelledby="stepTitle">
+          <div class="step-heading">
+            <p class="eyebrow">Make one choice at a time</p>
+            <h2 id="stepTitle"></h2>
+            <p id="stepDescription" class="step-description"></p>
           </div>
-          <span id="saveStatus" class="status">Loading</span>
-        </div>
-        <article id="slidePreview" class="slide-preview"></article>
-        <section id="authoritativePreview" class="authoritative-preview" aria-labelledby="authoritativeHeading" hidden>
-          <div class="authoritative-heading">
-            <div>
-              <p class="eyebrow">Compiled output</p>
-              <h2 id="authoritativeHeading">Authoritative LaTeX preview</h2>
-            </div>
-            <span id="authoritativeStatus" class="preview-state" aria-live="polite">Waiting</span>
+          <div id="stepContent" class="step-content"></div>
+          <div class="wizard-actions">
+            <button id="backStep" class="secondary-button" type="button">Back</button>
+            <button id="nextStep" type="button">Continue</button>
           </div>
-          <div class="preview-actions">
-            <button id="retryPreview" class="secondary-button" type="button">Retry</button>
-            <button id="refreshPreview" class="secondary-button" type="button">Refresh</button>
-          </div>
-          <div class="authoritative-media"></div>
+          <details class="design-summary">
+            <summary>Design summary</summary>
+            <div id="summaryList" class="summary-list"></div>
+          </details>
         </section>
-      </section>
 
-      <aside class="summary-panel" aria-label="Selected choices">
-        <h2>Choices</h2>
-        <div id="summaryList" class="summary-list"></div>
-        <button id="reviewGenerate" type="button">Generate Template</button>
-        <button id="compileTheme" class="secondary-button" type="button">Compile PDF</button>
+        <section id="workspacePreview" class="preview-panel" aria-label="Live preview">
+          <div class="preview-toolbar">
+            <div>
+              <p class="eyebrow">Instant HTML preview</p>
+              <h2>Your design</h2>
+            </div>
+            <span id="saveStatus" class="status">Loading</span>
+          </div>
+          <article id="slidePreview" class="slide-preview"></article>
+          <section id="authoritativePreview" class="authoritative-preview" aria-labelledby="authoritativeHeading" hidden>
+            <div class="authoritative-heading">
+              <div>
+                <p class="eyebrow">Compiled output</p>
+                <h2 id="authoritativeHeading">Authoritative LaTeX preview</h2>
+              </div>
+              <span id="authoritativeStatus" class="preview-state" aria-live="polite">Waiting</span>
+            </div>
+            <div class="preview-actions">
+              <button id="retryPreview" class="secondary-button" type="button">Retry</button>
+              <button id="refreshPreview" class="secondary-button" type="button">Refresh</button>
+            </div>
+            <div class="authoritative-media"></div>
+          </section>
+        </section>
+      </div>
+
+      <aside id="advancedPanel" class="advanced-panel" aria-label="Advanced tools" hidden>
+        <div>
+          <p class="eyebrow">Advanced</p>
+          <h2>Technical tools</h2>
+        </div>
+        <nav id="stepList" class="step-list" aria-label="All design steps"></nav>
+        <div class="advanced-actions">
+          <button id="reviewGenerate" type="button">Generate Template</button>
+          <button id="compileTheme" class="secondary-button" type="button">Compile PDF</button>
+        </div>
         <pre id="buildStatus">No build yet.</pre>
       </aside>
     </main>

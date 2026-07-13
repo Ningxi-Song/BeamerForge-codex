@@ -54,6 +54,8 @@ const elements = {
   app: document.getElementById("wizardApp"),
   welcomeScreen: document.getElementById("welcomeScreen"),
   startDesigning: document.getElementById("startDesigning"),
+  advancedToggle: document.getElementById("advancedToggle"),
+  advancedPanel: document.getElementById("advancedPanel"),
   phaseProgress: document.getElementById("phaseProgress"),
   stepList: document.getElementById("stepList"),
   stepTitle: document.getElementById("stepTitle"),
@@ -153,6 +155,13 @@ function beginDesigning() {
   window.sessionStorage.setItem("beamerforge:onboarding-started", decision.started ? "1" : "0");
   window.history.pushState({ stepId: "start" }, "", decision.nextPath);
   render();
+}
+
+function toggleAdvancedPanel() {
+  const opening = elements.advancedPanel.hidden;
+  elements.advancedPanel.hidden = !opening;
+  elements.advancedToggle.setAttribute("aria-expanded", opening ? "true" : "false");
+  elements.advancedToggle.textContent = opening ? "Close advanced" : "Advanced";
 }
 
 function navigateToStep(id, opts = {}) {
@@ -594,8 +603,24 @@ function renderReview() {
 }
 
 function renderPhaseProgress() {
-  const phase = currentStep().phase;
-  elements.phaseProgress.textContent = phase === "manual" ? "Phase 1 of 2 · Manual design" : phase === "ai" ? "Phase 2 of 2 · AI customization" : "Final selection";
+  const stageFirstStep = {
+    welcome: "welcome", direction: "start", style: "color", details: "bullets",
+    review: "manual-review", ai: "ai-customize", build: "final-review"
+  };
+  const activeStage = wizard.visibleStageForStep(currentStep().id);
+  const activeIndex = wizard.VISIBLE_STAGES.findIndex((stage) => stage.id === activeStage.id);
+  const buttons = wizard.VISIBLE_STAGES.map((stage, index) => {
+    const targetId = stageFirstStep[stage.id];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = index === activeIndex ? "stage-button is-active" : index < activeIndex ? "stage-button is-complete" : "stage-button";
+    button.textContent = `${index + 1}. ${stage.label}`;
+    button.setAttribute("aria-current", index === activeIndex ? "step" : "false");
+    button.disabled = state.busy || !wizard.canEnterStep(targetId, state.workflow);
+    button.addEventListener("click", () => navigateToStep(targetId));
+    return button;
+  });
+  replaceChildren(elements.phaseProgress, buttons);
 }
 
 async function freezeManualBaseline(options = {}) {
@@ -1212,6 +1237,7 @@ function render({ schedulePreview = true } = {}) { if (renderAppSurface()) retur
 
 function bindControls() {
   elements.startDesigning.addEventListener("click", beginDesigning);
+  elements.advancedToggle.addEventListener("click", toggleAdvancedPanel);
   elements.back.addEventListener("click", () => navigateToStep(wizard.previousStepId(currentStep().id)));
   elements.next.addEventListener("click", () => navigateToStep(wizard.nextStepId(currentStep().id)));
   elements.reviewGenerate.addEventListener("click", generateTheme);
