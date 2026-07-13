@@ -23,6 +23,7 @@ const { diffThemes } = require("./theme-diff");
 const { renderSvg } = require("../design/vector-renderers");
 const { canonicalJson } = require("../lib/canonical-json");
 const { listDirections } = require("./design-directions");
+const { createProjectArchive } = require("./project-archive");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_MULTIPART_BYTES = 101 * 1024 * 1024;
@@ -83,6 +84,22 @@ function sendText(res, status, body, contentType = "text/plain; charset=utf-8") 
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
   res.writeHead(status, { "content-type": contentType, "content-length": buf.length });
   res.end(buf);
+}
+
+function safeDownloadName(value, extension) {
+  const stem = String(value || "beamer-project").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[.-]+|[.-]+$/g, "") || "beamer-project";
+  return `${stem}${extension}`;
+}
+
+function sendDownload(res, body, contentType, filename) {
+  const buffer = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  res.writeHead(200, {
+    "content-type": contentType,
+    "content-length": buffer.length,
+    "content-disposition": `attachment; filename="${filename}"`,
+    "cache-control": "no-store"
+  });
+  res.end(buffer);
 }
 
 async function readMultipart(req, maxBytes = MAX_MULTIPART_BYTES) {
@@ -354,6 +371,22 @@ function readBuildStatus(stateDir) {
   const f = buildStatusPath(stateDir);
   if (!fs.existsSync(f)) return { status: "idle" };
   return JSON.parse(fs.readFileSync(f, "utf8"));
+}
+
+function buildMatchesSelection(build, selection, templateDir) {
+  return build && build.ok === true
+    && build.selectedVersion === selection.version
+    && build.themeHash === selection.themeHash
+    && build.cycleId === selection.cycleId
+    && build.reviewRevision === selection.reviewRevision
+    && path.resolve(build.templateDir || "") === path.resolve(templateDir);
+}
+
+function isRegularFile(filePath) {
+  try {
+    const stat = fs.lstatSync(filePath);
+    return stat.isFile() && !stat.isSymbolicLink();
+  } catch { return false; }
 }
 
 function validatedResponse(stateDir, registry) {
@@ -704,7 +737,7 @@ function createWorkbenchServer(options = {}) {
         const theme = readValidatedTheme(stateDir, registry);
         const templateDir = resolveTemplateDir(outputRoot, theme.identity.name);
         const manifest = projectWriter(theme, templateDir, { registry, rootDir, outputRoot });
-        const status = { ok: true, status: "generated", templateDir, written: manifest.written || [], copiedAssets: manifest.copiedAssets || [] };
+        const status = { ok: true, status: "generated", templateDir, selectedVersion: selection.version, themeHash: selection.themeHash, cycleId: selection.cycleId, reviewRevision: selection.reviewRevision, written: manifest.written || [], copiedAssets: manifest.copiedAssets || [] };
         writeBuildStatus(stateDir, status);
         sendJson(res, 200, status);
         return;
@@ -718,9 +751,30 @@ function createWorkbenchServer(options = {}) {
         const templateDir = resolveTemplateDir(outputRoot, theme.identity.name);
         projectWriter(theme, templateDir, { registry, rootDir, outputRoot });
         const result = templateCompiler(templateDir);
-        const status = { templateDir, ...result };
+        const status = { templateDir, selectedVersion: selection.version, themeHash: selection.themeHash, cycleId: selection.cycleId, reviewRevision: selection.reviewRevision, ...result };
         writeBuildStatus(stateDir, status);
         sendJson(res, result.ok ? 200 : 500, status);
+        return;
+      }
+      if (req.method === "GET" && ["/api/build/main.pdf", "/api/build/project.tar.gz"].includes(url.pathname)) {
+        const selection = readCurrentSelection(stateDir, registry);
+        if (!selection) throw new HttpError(409, "Select a reviewed version again before downloading");
+        const theme = readValidatedTheme(stateDir, registry);
+        const templateDir = resolveTemplateDir(outputRoot, theme.identity.name);
+        const build = readBuildStatus(stateDir);
+        if (!buildMatchesSelection(build, selection, templateDir)) throw new HttpError(404, "Build the reviewed design before downloading");
+        const mainTex = path.join(templateDir, "main.tex");
+        if (!isRegularFile(mainTex)) throw new HttpError(404, "Generated project was not found");
+
+        if (url.pathname === "/api/build/main.pdf") {
+          const pdfPath = path.join(templateDir, "main.pdf");
+          if (build.status !== "compiled" || !isRegularFile(pdfPath)) throw new HttpError(404, "Compiled PDF was not found");
+          sendDownload(res, fs.readFileSync(pdfPath), "application/pdf", safeDownloadName(theme.identity.name, ".pdf"));
+          return;
+        }
+
+        const archive = createProjectArchive({ outputRoot, projectDir: templateDir });
+        sendDownload(res, archive, "application/gzip", safeDownloadName(theme.identity.name, ".tar.gz"));
         return;
       }
       if (req.method === "GET" && url.pathname === "/api/build-status") {

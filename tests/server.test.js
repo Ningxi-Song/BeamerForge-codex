@@ -541,6 +541,61 @@ test("POST /api/generate writes a template and passes outputRoot guard options",
   assert.equal(status.templateDir, body.templateDir);
 });
 
+test("GET /api/build/project.tar.gz serves only the current reviewed project", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const outputRoot = tempDir("beamerforge-output-");
+  const baseUrl = await withServer(t, { stateDir, outputRoot, writeTemplateProject: realWriteTemplateProject });
+
+  assert.equal((await fetch(`${baseUrl}/api/build/project.tar.gz`)).status, 409);
+  const selection = await selectCurrentManual(baseUrl);
+  assert.equal((await fetch(`${baseUrl}/api/build/project.tar.gz`)).status, 404);
+  assert.equal((await selectedPost(baseUrl, "/api/generate", selection)).status, 200);
+
+  const response = await fetch(`${baseUrl}/api/build/project.tar.gz`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/gzip");
+  assert.match(response.headers.get("content-disposition"), /attachment; filename="blue-academic\.tar\.gz"/);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual([...bytes.subarray(0, 2)], [0x1f, 0x8b]);
+
+  const changed = cloneTheme(); changed.identity.title = "Changed after build";
+  await fetch(`${baseUrl}/api/theme`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(changed) });
+  assert.equal((await fetch(`${baseUrl}/api/build/project.tar.gz`)).status, 409);
+});
+
+test("GET /api/build/main.pdf serves a compiled reviewed PDF as an attachment", async (t) => {
+  const stateDir = tempDir("beamerforge-server-");
+  const outputRoot = tempDir("beamerforge-output-");
+  const pdfBytes = Buffer.from("%PDF-1.7\nreviewed\n", "utf8");
+  const baseUrl = await withServer(t, {
+    stateDir,
+    outputRoot,
+    writeTemplateProject(theme, templateDir) {
+      fs.mkdirSync(templateDir, { recursive: true });
+      fs.writeFileSync(path.join(templateDir, "main.tex"), `% ${theme.identity.name}\n`, "utf8");
+      return { templateDir, written: [path.join(templateDir, "main.tex")], copiedAssets: [] };
+    },
+    compileTemplate(templateDir) {
+      const pdfPath = path.join(templateDir, "main.pdf");
+      fs.writeFileSync(pdfPath, pdfBytes);
+      return { ok: true, status: "compiled", message: "fake compile ok", pdfPath };
+    }
+  });
+
+  assert.equal((await fetch(`${baseUrl}/api/build/main.pdf`)).status, 409);
+  const selection = await selectCurrentManual(baseUrl);
+  assert.equal((await fetch(`${baseUrl}/api/build/main.pdf`)).status, 404);
+  assert.equal((await selectedPost(baseUrl, "/api/compile", selection)).status, 200);
+
+  const response = await fetch(`${baseUrl}/api/build/main.pdf`);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/pdf");
+  assert.match(response.headers.get("content-disposition"), /attachment; filename="blue-academic\.pdf"/);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), pdfBytes);
+});
+
 test("POST /api/compile creates a missing project, persists success, and returns 200", async (t) => {
   const stateDir = tempDir("beamerforge-server-");
   const outputRoot = tempDir("beamerforge-output-");

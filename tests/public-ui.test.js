@@ -245,6 +245,21 @@ test("manual review has two clear continuations and isolates external AI tools",
   assert.match(functionSource(script, "render"), /renderAdvancedAiTools\(\)/);
 });
 
+test("successful reviewed builds reveal project and PDF downloads", () => {
+  const html = readPublicFile("index.html");
+  for (const id of ["deliveryActions", "downloadProject", "downloadPdf"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /id="deliveryActions"[^>]*hidden/);
+  assert.match(html, /id="downloadProject"[^>]*href="\/api\/build\/project\.tar\.gz"[^>]*download/);
+  assert.match(html, /id="downloadPdf"[^>]*href="\/api\/build\/main\.pdf"[^>]*download/);
+
+  const status = functionSource(readPublicFile("app.js"), "setBuildStatus");
+  assert.match(status, /status === "generated"/);
+  assert.match(status, /status === "compiled"/);
+  assert.match(status, /elements\.deliveryActions\.hidden/);
+  assert.match(status, /elements\.downloadProject\.hidden/);
+  assert.match(status, /elements\.downloadPdf\.hidden/);
+});
+
 test("browser generation is blocked until wizard statuses are complete", () => {
   const script = readPublicFile("app.js");
   assert.match(

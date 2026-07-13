@@ -63,6 +63,9 @@ const elements = {
   stepDesc: document.getElementById("stepDescription"),
   stepContent: document.getElementById("stepContent"),
   summaryList: document.getElementById("summaryList"),
+  deliveryActions: document.getElementById("deliveryActions"),
+  downloadProject: document.getElementById("downloadProject"),
+  downloadPdf: document.getElementById("downloadPdf"),
   slidePreview: document.getElementById("slidePreview"),
   saveStatus: document.getElementById("saveStatus"),
   back: document.getElementById("backStep"),
@@ -290,7 +293,20 @@ function setStatus(text, cls = "") {
 }
 
 function buildStatusText(v) { return typeof v === "string" ? v : JSON.stringify(v, null, 2); }
-function setBuildStatus(v) { elements.buildStatus.textContent = buildStatusText(v); }
+function setBuildStatus(v) {
+  elements.buildStatus.textContent = buildStatusText(v);
+  const status = v && typeof v === "object" ? v.status : null;
+  const current = v && typeof v === "object"
+    && v.selectedVersion === state.workflow.selectedVersion
+    && v.themeHash === state.workflow.selectedThemeHash
+    && v.cycleId === state.workflow.cycleId
+    && v.reviewRevision === state.workflow.reviewRevision;
+  const projectReady = current && v.ok === true && (status === "generated" || status === "compiled");
+  const pdfReady = current && v.ok === true && status === "compiled";
+  elements.deliveryActions.hidden = !projectReady;
+  elements.downloadProject.hidden = !projectReady;
+  elements.downloadPdf.hidden = !pdfReady;
+}
 function setBusy(b) { state.busy = b; updateActions(); }
 
 function updateActions() {
