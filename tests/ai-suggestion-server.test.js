@@ -7,6 +7,9 @@ const os = require("node:os");
 const path = require("node:path");
 const { createWorkbenchServer } = require("../workbench/server");
 const { DEFAULT_THEME } = require("../schema/theme-schema");
+const { getRegistry } = require("../registry/options");
+const { resolveDesign } = require("../design/resolve-design");
+const { generateFiles } = require("../generators/latex");
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -96,6 +99,29 @@ test("AI connection routes expose only the injected provider's public state", as
   assert.equal(calls[0].apiKey, "secret");
   response = await fetch(`${baseUrl}/api/ai/disconnect`, { method: "POST" });
   assert.deepEqual(await response.json(), { ok: true, disconnected: true });
+});
+
+test("provider failures never return API keys or provider response bodies", async (t) => {
+  const secret = "secret-that-must-not-escape";
+  const baseUrl = await withServer(t, {
+    stateDir: tempDir("beamerforge-ai-secret-"),
+    providerFetch: async () => new Response(JSON.stringify({
+      providerDebug: `rejected ${secret}`
+    }), {
+      status: 401,
+      headers: { "content-type": "application/json" }
+    })
+  });
+  const response = await fetch(`${baseUrl}/api/ai/connect`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ provider: "openai", apiKey: secret, model: "model-a" })
+  });
+  const text = await response.text();
+  assert.equal(response.status, 502);
+  assert.equal(text.includes(secret), false);
+  assert.equal(text.includes("providerDebug"), false);
+  assert.equal((await fetch(`${baseUrl}/api/ai/connection`).then((result) => result.text())).includes(secret), false);
 });
 
 test("snapshot-bound suggestions create a draft and comparison without selecting it", async (t) => {
@@ -239,4 +265,53 @@ test("cancelling aborts provider work without altering any theme state", async (
   assert.deepEqual(await fetch(`${baseUrl}/api/theme`).then((result) => result.json()), DEFAULT_THEME);
   assert.equal(fs.existsSync(path.join(stateDir, "ai-draft-theme.json")), false);
   assert.equal((await fetch(`${baseUrl}/api/selection`).then((result) => result.json())).selection, null);
+});
+
+test("an AI suggestion can remove a duck from HTML and LaTeX while preserving manual restore", async (t) => {
+  const stateDir = tempDir("beamerforge-ai-remove-duck-");
+  const manual = cloneTheme();
+  manual.decorations.cornerLogo.id = "duck";
+  const candidate = cloneTheme();
+  candidate.decorations.cornerLogo.id = "none";
+  const providerService = {
+    status: fakeStatus,
+    connect: async () => fakeStatus(),
+    disconnect: () => true,
+    complete: async () => JSON.stringify(candidate)
+  };
+  const baseUrl = await withServer(t, { stateDir, providerService });
+  const baseline = await prepareBaseline(baseUrl, manual);
+  const response = await fetch(`${baseUrl}/api/ai/suggest`, {
+    method: "POST",
+    body: suggestionForm(baseline, "Remove the duck logo")
+  });
+  const comparison = await response.json();
+  assert.equal(response.status, 200);
+
+  const resolved = resolveDesign(comparison.draft, getRegistry());
+  assert.equal(resolved.components.cornerLogo.vectorId, null);
+  assert.equal(resolved.components.cornerLogo.previewUrl, "");
+  assert.doesNotMatch(generateFiles(comparison.draft, getRegistry())["theme.cls"], /tikzpicture|Duck corner logo/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(stateDir, "manual-theme.json"), "utf8")).decorations.cornerLogo.id, "duck");
+
+  const review = {
+    expectedManualThemeHash: comparison.manualThemeHash,
+    expectedDraftThemeHash: comparison.draftThemeHash,
+    cycleId: comparison.cycleId,
+    reviewRevision: comparison.reviewRevision
+  };
+  let selection = await fetch(`${baseUrl}/api/ai/accept`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(review)
+  });
+  assert.equal(selection.status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/theme`).then((result) => result.json())).decorations.cornerLogo.id, "none");
+  selection = await fetch(`${baseUrl}/api/ai/restore`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(review)
+  });
+  assert.equal(selection.status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/theme`).then((result) => result.json())).decorations.cornerLogo.id, "duck");
 });

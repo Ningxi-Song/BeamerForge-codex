@@ -80,6 +80,29 @@ test("network failures are stable and do not retain the failed connection", asyn
   assert.deepEqual(service.status(), { connected: false });
 });
 
+test("switching providers clears the prior connection before the new test finishes", async () => {
+  let failDeepSeek = false;
+  const service = createProviderService({
+    fetchImpl: async (url) => {
+      if (url.startsWith("https://api.deepseek.com") && failDeepSeek) {
+        throw new TypeError("offline");
+      }
+      return new Response(JSON.stringify({ data: [{ id: "model-a" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+  });
+  await service.connect({ provider: "openai", apiKey: "openai-secret", model: "model-a" });
+  assert.equal(service.status().provider, "openai");
+  failDeepSeek = true;
+  await assert.rejects(
+    () => service.connect({ provider: "deepseek", apiKey: "deepseek-secret", model: "model-a" }),
+    (error) => error.code === "provider_unreachable"
+  );
+  assert.deepEqual(service.status(), { connected: false });
+});
+
 test("disconnect clears status and completion requires a connection", async () => {
   const service = createProviderService({
     fetchImpl: async () => new Response(JSON.stringify({ data: [{ id: "m" }] }), {

@@ -32,6 +32,32 @@ Describe the feeling you want, choose one of three visual directions, and adjust
 
 Technical handoff and JSON tools are available under **Advanced** for experienced users, but they are not part of the normal workflow.
 
+### Optional AI refinement
+
+Manual design, preview, compilation, and downloads do not require an AI provider. At Review, choose **Refine with AI** only when you want an optional suggestion.
+
+1. Describe the change in ordinary language.
+2. Optionally attach PNG, JPEG, WebP, `.tex`, `.sty`, `.cls`, or `.bib` references.
+3. Select **Create AI suggestion**.
+4. If needed, connect OpenAI, DeepSeek, or a compatible provider.
+5. Compare **Your design** with the **AI suggestion**, then use the suggestion, keep your design, or revise the request.
+
+API keys entered in the connection dialog live only in the running local server process. They are not written to theme files, browser storage, handoff folders, logs, or connection-status responses. You can instead set a key before starting BeamerForge:
+
+```powershell
+$env:OPENAI_API_KEY="your-key"
+npm start
+```
+
+or:
+
+```powershell
+$env:DEEPSEEK_API_KEY="your-key"
+npm start
+```
+
+For a compatible OpenAI-style provider, choose **Compatible endpoint**, open **Advanced connection options**, and enter its base URL. Custom remote endpoints must use HTTPS; loopback HTTP endpoints such as `http://127.0.0.1:11434/v1` are allowed for models running on your own computer.
+
 ## Workflow
 
 ### Step 1: Tell Us the Vibe
