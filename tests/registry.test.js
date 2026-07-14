@@ -29,6 +29,13 @@ test("registry exposes broader local font and bullet catalogs", () => {
   assert.match(registry.bullets["tikz-octagon"].packageLine, /tikz/);
 });
 
+test("heart bullet uses the same heart glyph in HTML and LaTeX", () => {
+  const heart = getRegistry().bullets["pifont-ding168"];
+
+  assert.equal(heart.cssMarker.codePointAt(0), 0x2665);
+  assert.equal(heart.latexItem, "\\ding{170}");
+});
+
 test("default theme IDs resolve against registry", () => {
   const registry = getRegistry();
   const validation = validateTheme(DEFAULT_THEME, { registry });

@@ -210,6 +210,8 @@ ${footline}
 \setbeamercolor{institute}{fg=bfText,bg=bfBackground}
 \setbeamercolor{date}{fg=bfText,bg=bfBackground}
 \setbeamercolor{structure}{fg=bfPrimary}
+\setbeamercolor{itemize item}{fg=bfAccent}
+\setbeamercolor{itemize subitem}{fg=bfAccent}
 \setbeamercolor{alerted text}{fg=bfAlert}
 \setbeamercolor{block title}{fg=white,bg=bfPrimary}
 \setbeamercolor{block body}{fg=bfText,bg=bfBlockBody}

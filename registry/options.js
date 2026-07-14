@@ -307,7 +307,7 @@ const BULLETS = defineRegistryCollection({
   "pifont-ding70": bullet("pifont-ding70", "Pifont Circle", PIFONT, "\\ding{70}", "\\ding{108}", "●"),
   "pifont-ding109": bullet("pifont-ding109", "Pifont Check", PIFONT, "\\ding{109}", "\\ding{113}", "✓"),
   "pifont-ding110": bullet("pifont-ding110", "Pifont Cross", PIFONT, "\\ding{110}", "\\ding{114}", "✕"),
-  "pifont-ding168": bullet("pifont-ding168", "Pifont Heart", PIFONT, "\\ding{168}", "\\ding{170}", "♥"),
+  "pifont-ding168": bullet("pifont-ding168", "Pifont Heart", PIFONT, "\\ding{170}", "\\ding{168}", "♥"),
   "math-bullet": bullet("math-bullet", "Math Bullet", AMSSYMB, "$\\bullet$", "$\\circ$", "•"),
   "math-star": bullet("math-star", "Math Star", AMSSYMB, "$\\star$", "$\\ast$", "☆"),
   "math-asterisk": bullet("math-asterisk", "Math Asterisk", AMSSYMB, "$\\ast$", "$\\cdot$", "*"),

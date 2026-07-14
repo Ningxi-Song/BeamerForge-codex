@@ -7,7 +7,7 @@ const { LOGO_TARGET_WIDTHS_CM } = require("./vector-renderers");
 const { hashCanonical } = require("../lib/canonical-json");
 const { clone, textColorForBg } = require("../lib/utils");
 
-const GENERATOR_VERSION = "4";
+const GENERATOR_VERSION = "5";
 
 const CANVAS_PHYSICAL_SIZE_CM = Object.freeze({
   "16:9": Object.freeze({ widthCm: 16, heightCm: 9 }),

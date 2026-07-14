@@ -43,7 +43,7 @@ test("resolved design contains full identity, exact canvas, colors, and componen
   assert.equal(design.components.bullet.id, "pifont-outline");
   assert.equal(design.components.navigation.id, "page-number");
   assert.equal(design.source.generatorVersion, GENERATOR_VERSION);
-  assert.equal(GENERATOR_VERSION, "4");
+  assert.equal(GENERATOR_VERSION, "5");
   assert.match(design.source.themeHash, /^[a-f0-9]{64}$/);
 });
 
