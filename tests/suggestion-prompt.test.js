@@ -14,6 +14,7 @@ test("messages constrain output and include the complete protected context", () 
   const messages = createMessages({
     baseline,
     brief: "Make the palette warmer but keep the typography.",
+    registry: getRegistry(),
     referenceContext: {
       text: "--- sample.tex ---\n\\begin{frame}Example\\end{frame}",
       images: []
@@ -34,6 +35,11 @@ test("messages constrain output and include the complete protected context", () 
   assert.match(messages[1].content, /Make the palette warmer/);
   assert.match(messages[1].content, /Protected baseline JSON/);
   assert.match(messages[1].content, /sample\.tex/);
+  assert.match(messages[1].content, /Allowed catalog choices/);
+  assert.match(messages[1].content, /warm-neutral/);
+  assert.match(messages[1].content, /Warm Neutral/);
+  assert.match(messages[1].content, /fira-sans/);
+  assert.match(messages[1].content, /Triangle/);
   assert.ok(messages[1].content.includes(JSON.stringify(baseline)));
 });
 

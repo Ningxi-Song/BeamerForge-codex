@@ -6,7 +6,28 @@ function requestError(message, code, statusCode, errors) {
   return error;
 }
 
-function createMessages({ baseline, brief, referenceContext = {} }) {
+function catalogChoices(registry) {
+  if (!registry) return null;
+  const options = (collection) => Object.values(collection || {})
+    .map(({ id, label }) => ({ id, label }));
+  return {
+    "foundation.aspectRatio": ["16:9", "4:3"],
+    "foundation.baseLayout": ["single"],
+    "colors.paletteId": options(registry.palettes),
+    "fonts.body": options(registry.fonts),
+    "fonts.title": options(registry.fonts),
+    "bullets.style": options(registry.bullets),
+    "blocks.style": options(registry.blocks),
+    "navigation.style": options(registry.navigation),
+    "titlePage.layout": options(registry.titlePages),
+    "decorations.cornerLogo.id": options(registry.logos),
+    "decorations.cornerLogo.position": ["top-left", "top-right"],
+    "decorations.cornerLogo.size": ["small", "medium"],
+    "decorations.cornerLogo.scope": ["content-frames"]
+  };
+}
+
+function createMessages({ baseline, brief, referenceContext = {}, registry }) {
   const cleanBrief = String(brief || "").trim();
   if (!cleanBrief) {
     throw Object.assign(
@@ -19,11 +40,16 @@ function createMessages({ baseline, brief, referenceContext = {} }) {
     "You customize BeamerForge themes.",
     "Return one complete JSON object with exactly the same supported theme shape as the baseline.",
     "Do not return Markdown, raw LaTeX, TikZ, packages, commands, executable code, or arbitrary asset paths.",
+    "Use only catalog IDs listed in the allowed choices.",
     "Keep fields unchanged unless the user request requires a change."
   ].join(" ");
+  const choices = catalogChoices(registry);
   const request = [
     `User request:\n${cleanBrief}`,
     `Protected baseline JSON:\n${JSON.stringify(baseline)}`,
+    choices
+      ? `Allowed catalog choices (ID and human label):\n${JSON.stringify(choices)}`
+      : "",
     referenceContext.text
       ? `Read-only Beamer source references:\n${referenceContext.text}`
       : ""
@@ -80,6 +106,7 @@ function parseCandidate(content, { registry, validateTheme }) {
 }
 
 module.exports = {
+  catalogChoices,
   createMessages,
   parseCandidate
 };

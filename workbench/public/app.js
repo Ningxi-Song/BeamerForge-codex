@@ -687,18 +687,33 @@ async function freezeManualBaseline(options = {}) {
   finally { setBusy(false); }
 }
 
+function aiProviderLabel(provider) {
+  return {
+    openai: "OpenAI",
+    deepseek: "DeepSeek",
+    custom: "your compatible provider"
+  }[provider] || "your AI provider";
+}
+
+function aiConnectionMessage(connection) {
+  return connection?.connected
+    ? `Connected to ${aiProviderLabel(connection.provider)}.`
+    : "No AI provider connected yet.";
+}
+
 function renderAiCustomize() {
   const wrap = document.createElement("div"); wrap.className = "ai-form"; wrap.dataset.region = "ai-customize";
   const help = document.createElement("p"); help.textContent = "Describe the change you want. Your current design remains the protected baseline for comparison.";
   const brief = document.createElement("textarea"); brief.id = "ai-brief"; brief.rows = 7; brief.placeholder = "Example: Make this warmer, more editorial, and slightly more spacious."; brief.value = state.aiBrief;
   brief.addEventListener("input", () => { state.aiBrief = brief.value; });
-  const references = document.createElement("input"); references.id = "ai-reference-files"; references.type = "file"; references.multiple = true; references.accept = ".png,.jpg,.jpeg,.webp,.tex,.sty,.cls,.bib";
-  const referenceNote = document.createElement("p"); referenceNote.className = "field-help"; referenceNote.textContent = "Optional: add a slide image or Beamer source file as read-only inspiration.";
+  const acceptsImages = !state.aiConnection.connected || state.aiConnection.capabilities?.imageInput;
+  const references = document.createElement("input"); references.id = "ai-reference-files"; references.type = "file"; references.multiple = true; references.accept = acceptsImages ? ".png,.jpg,.jpeg,.webp,.tex,.sty,.cls,.bib" : ".tex,.sty,.cls,.bib";
+  const referenceNote = document.createElement("p"); referenceNote.className = "field-help"; referenceNote.textContent = acceptsImages
+    ? "Optional: add a slide image or Beamer source file as read-only inspiration."
+    : "Optional: this connection accepts Beamer source references, but not images.";
   const connection = document.createElement("div"); connection.className = "ai-connection-summary";
   const connectionText = document.createElement("p");
-  connectionText.textContent = state.aiConnection.connected
-    ? `Connected to ${state.aiConnection.provider} · ${state.aiConnection.model}`
-    : "No AI provider connected yet.";
+  connectionText.textContent = aiConnectionMessage(state.aiConnection);
   const changeConnection = actionButton(state.aiConnection.connected ? "Change connection" : "Connect provider", openProviderDialog, { secondary: true });
   connection.append(connectionText, changeConnection);
   const create = document.createElement("button"); create.id = "createAiSuggestion"; create.type = "button"; create.textContent = "Create AI suggestion"; create.addEventListener("click", createAiSuggestion);
@@ -712,7 +727,7 @@ function openProviderDialog() {
   state.queuedAiSuggestion = state.queuedAiSuggestion || false;
   elements.providerApiKey.value = "";
   elements.providerStatus.textContent = state.aiConnection.connected
-    ? `Connected to ${state.aiConnection.provider} · ${state.aiConnection.model}`
+    ? aiConnectionMessage(state.aiConnection)
     : "Enter a key or use a configured server environment variable.";
   if (typeof elements.providerDialog.showModal === "function") elements.providerDialog.showModal();
   else elements.providerDialog.setAttribute("open", "");
@@ -773,7 +788,7 @@ async function testProviderConnection(event) {
     state.aiConnection = result;
     state.ai = aiRefinementState.transition(state.ai, { type: "connect_success" });
     elements.providerApiKey.value = "";
-    elements.providerStatus.textContent = `Connected to ${result.provider} · ${result.model}`;
+    elements.providerStatus.textContent = aiConnectionMessage(result);
     closeProviderDialog();
     const continueSuggestion = state.queuedAiSuggestion;
     state.queuedAiSuggestion = false;

@@ -728,6 +728,7 @@ function createWorkbenchServer(options = {}) {
         const referenceContext = buildReferenceContext(references, connection.capabilities);
         const messages = createMessages({
           baseline: manual,
+          registry,
           brief: String(form.get("brief") || ""),
           referenceContext
         });

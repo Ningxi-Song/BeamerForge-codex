@@ -31,12 +31,14 @@ test("connect lists models, chooses an available model, and redacts the key", as
   assert.equal(JSON.stringify(service.status()).includes("secret"), false);
 });
 
-test("connect can use an environment key and falls back to the first model", async () => {
+test("connect can use an environment key and skips unsuitable automatic models", async () => {
   const service = createProviderService({
     env: { OPENAI_API_KEY: "environment-secret" },
     fetchImpl: async (_url, init) => {
       assert.equal(init.headers.authorization, "Bearer environment-secret");
-      return new Response(JSON.stringify({ data: [{ id: "first-model" }] }), {
+      return new Response(JSON.stringify({
+        data: [{ id: "text-embedding-3-small" }, { id: "gpt-4o-mini" }]
+      }), {
         status: 200,
         headers: { "content-type": "application/json" }
       });
@@ -44,8 +46,39 @@ test("connect can use an environment key and falls back to the first model", asy
   });
 
   const status = await service.connect({ provider: "openai" });
-  assert.equal(status.model, "first-model");
+  assert.equal(status.model, "gpt-4o-mini");
+  assert.deepEqual(status.capabilities, {
+    modelList: true,
+    jsonOutput: true,
+    imageInput: true
+  });
   assert.equal(JSON.stringify(status).includes("environment-secret"), false);
+});
+
+test("automatic model choice is provider-safe and custom endpoints require an explicit model", async () => {
+  const deepseek = createProviderService({
+    fetchImpl: async () => new Response(JSON.stringify({
+      data: [{ id: "deepseek-reasoner" }, { id: "deepseek-chat" }]
+    }), { status: 200, headers: { "content-type": "application/json" } })
+  });
+  const status = await deepseek.connect({ provider: "deepseek", apiKey: "secret" });
+  assert.equal(status.model, "deepseek-chat");
+  assert.equal(status.capabilities.imageInput, false);
+
+  const custom = createProviderService({
+    fetchImpl: async () => new Response(JSON.stringify({ data: [{ id: "first-model" }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    })
+  });
+  await assert.rejects(
+    () => custom.connect({
+      provider: "custom",
+      apiKey: "secret",
+      baseUrl: "http://127.0.0.1:11434/v1"
+    }),
+    (error) => error.code === "provider_model_unavailable" && /Advanced/.test(error.message)
+  );
 });
 
 test("provider failures become stable error codes", async () => {
@@ -126,7 +159,7 @@ test("complete sends a non-streaming JSON request and returns text content", asy
     fetchImpl: async (url, init) => {
       calls.push({ url, init });
       if (url.endsWith("/models")) {
-        return new Response(JSON.stringify({ data: [{ id: "m" }] }), {
+        return new Response(JSON.stringify({ data: [{ id: "gpt-4o-mini" }] }), {
           status: 200,
           headers: { "content-type": "application/json" }
         });
@@ -139,13 +172,13 @@ test("complete sends a non-streaming JSON request and returns text content", asy
       });
     }
   });
-  await service.connect({ provider: "openai", apiKey: "secret", model: "m" });
+  await service.connect({ provider: "openai", apiKey: "secret", model: "gpt-4o-mini" });
   const content = await service.complete({ messages: [{ role: "user", content: "hi" }] });
   assert.equal(content, "{\"version\":1}");
   assert.equal(calls[1].url, "https://api.openai.com/v1/chat/completions");
   assert.equal(calls[1].init.headers.authorization, "Bearer secret");
   assert.deepEqual(JSON.parse(calls[1].init.body), {
-    model: "m",
+    model: "gpt-4o-mini",
     messages: [{ role: "user", content: "hi" }],
     stream: false,
     response_format: { type: "json_object" }

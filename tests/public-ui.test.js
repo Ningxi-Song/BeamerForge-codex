@@ -516,6 +516,9 @@ test("normal AI refinement is direct, connected, and cancellable", () => {
   assert.match(customize, /ai-reference-files/);
   assert.match(customize, /Create AI suggestion/);
   assert.match(customize, /createAiSuggestion/);
+  assert.doesNotMatch(customize, /aiConnection\.model/);
+  assert.doesNotMatch(functionSource(script, "openProviderDialog"), /aiConnection\.model/);
+  assert.doesNotMatch(functionSource(script, "testProviderConnection"), /result\.model/);
   assert.doesNotMatch(customize, /Export handoff|Import theme JSON|aiDraftJson/);
 
   const connect = functionSource(script, "testProviderConnection");

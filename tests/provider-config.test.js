@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  capabilitiesForModel,
   normalizeConnection,
   publicConnection
 } = require("../workbench/ai/provider-config");
@@ -18,17 +19,36 @@ test("normalizes supported providers without exposing secrets", () => {
   const deepseek = normalizeConnection({
     provider: "deepseek",
     apiKey: "ds-test",
-    model: "model-b"
+    model: "deepseek-chat"
   });
   assert.equal(deepseek.baseUrl, "https://api.deepseek.com");
   assert.deepEqual(publicConnection(deepseek), {
     connected: true,
     provider: "deepseek",
     baseUrl: "https://api.deepseek.com",
-    model: "model-b",
+    model: "deepseek-chat",
     capabilities: { modelList: true, jsonOutput: true, imageInput: false }
   });
   assert.equal(JSON.stringify(publicConnection(openai)).includes("sk-test"), false);
+});
+
+test("derives conservative capabilities for the selected model", () => {
+  assert.deepEqual(capabilitiesForModel("openai", "gpt-4o-mini"), {
+    jsonOutput: true,
+    imageInput: true
+  });
+  assert.deepEqual(capabilitiesForModel("openai", "text-embedding-3-small"), {
+    jsonOutput: false,
+    imageInput: false
+  });
+  assert.deepEqual(capabilitiesForModel("deepseek", "deepseek-chat"), {
+    jsonOutput: true,
+    imageInput: false
+  });
+  assert.deepEqual(capabilitiesForModel("custom", "local-model"), {
+    jsonOutput: false,
+    imageInput: false
+  });
 });
 
 test("custom endpoints require HTTPS except loopback local models", () => {

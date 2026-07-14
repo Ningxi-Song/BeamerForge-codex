@@ -1,6 +1,8 @@
 "use strict";
 
 const {
+  automaticModel,
+  capabilitiesForModel,
   normalizeConnection,
   publicConnection
 } = require("./provider-config");
@@ -92,15 +94,24 @@ function createProviderService({ fetchImpl = fetch, env = process.env } = {}) {
     };
     const candidate = normalizeConnection(requested);
     const models = await listModels(candidate);
-    const selected = candidate.model || models[0]?.id;
+    const selected = candidate.model || automaticModel(candidate.provider, models);
     if (!selected || !models.some(({ id }) => id === selected)) {
       throw codedError(
-        "Choose an available model",
+        candidate.model
+          ? "Choose an available model"
+          : "Open Advanced connection options and enter an available model",
         "provider_model_unavailable",
         400
       );
     }
-    connection = { ...candidate, model: selected };
+    connection = {
+      ...candidate,
+      model: selected,
+      capabilities: {
+        modelList: true,
+        ...capabilitiesForModel(candidate.provider, selected)
+      }
+    };
     return { ...publicConnection(connection), models };
   }
 

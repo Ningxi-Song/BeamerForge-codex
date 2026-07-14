@@ -3,17 +3,46 @@
 const PROVIDERS = Object.freeze({
   openai: Object.freeze({
     baseUrl: "https://api.openai.com/v1",
-    capabilities: Object.freeze({ modelList: true, jsonOutput: true, imageInput: true })
+    capabilities: Object.freeze({ modelList: true })
   }),
   deepseek: Object.freeze({
     baseUrl: "https://api.deepseek.com",
-    capabilities: Object.freeze({ modelList: true, jsonOutput: true, imageInput: false })
+    capabilities: Object.freeze({ modelList: true })
   }),
   custom: Object.freeze({
     baseUrl: null,
-    capabilities: Object.freeze({ modelList: true, jsonOutput: true, imageInput: false })
+    capabilities: Object.freeze({ modelList: true })
   })
 });
+
+function capabilitiesForModel(provider, model) {
+  const id = String(model || "").trim().toLowerCase();
+  if (provider === "deepseek") {
+    return { jsonOutput: id === "deepseek-chat", imageInput: false };
+  }
+  if (provider === "openai") {
+    const jsonOutput = /^gpt-(?!image(?:-|$)|audio(?:-|$)|realtime(?:-|$))/.test(id)
+      || /^o[134](?:-|$)/.test(id);
+    const imageInput = /^gpt-(?:4o|4\.1|5(?:\.\d+)?)(?:-|$)/.test(id);
+    return { jsonOutput, imageInput };
+  }
+  return { jsonOutput: false, imageInput: false };
+}
+
+function automaticModel(provider, models = []) {
+  const ids = new Set(models.map(({ id }) => id));
+  if (provider === "deepseek") {
+    return ids.has("deepseek-chat") ? "deepseek-chat" : null;
+  }
+  if (provider !== "openai") return null;
+  const preferred = [
+    "gpt-4.1-mini", "gpt-4o-mini", "gpt-4.1",
+    "gpt-4o", "gpt-5-mini", "gpt-5"
+  ];
+  return preferred.find((id) => ids.has(id))
+    || models.find(({ id }) => capabilitiesForModel(provider, id).jsonOutput)?.id
+    || null;
+}
 
 function clientError(message) {
   return Object.assign(new Error(message), { statusCode: 400 });
@@ -56,7 +85,10 @@ function normalizeConnection(input) {
     apiKey,
     baseUrl,
     model,
-    capabilities: { ...definition.capabilities }
+    capabilities: {
+      ...definition.capabilities,
+      ...capabilitiesForModel(provider, model)
+    }
   };
 }
 
@@ -73,6 +105,8 @@ function publicConnection(connection) {
 
 module.exports = {
   PROVIDERS,
+  automaticModel,
+  capabilitiesForModel,
   cleanBaseUrl,
   normalizeConnection,
   publicConnection

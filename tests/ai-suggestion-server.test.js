@@ -152,6 +152,7 @@ test("snapshot-bound suggestions create a draft and comparison without selecting
   assert.equal((await fetch(`${baseUrl}/api/theme`).then((result) => result.json())).colors.primary, DEFAULT_THEME.colors.primary);
   assert.equal(completeCalls.length, 1);
   assert.equal(completeCalls[0].messages[1].content.includes("Make this warmer"), true);
+  assert.equal(completeCalls[0].messages[1].content.includes("warm-neutral"), true);
 });
 
 test("mismatched baseline metadata rejects before provider invocation", async (t) => {
