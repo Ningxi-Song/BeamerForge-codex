@@ -498,3 +498,55 @@ test("handoff route keeps a validated draft accessible without exposing import c
   assert.doesNotMatch(chooser, /selectedVersion|manualDesign/);
   assert.match(script, /renderThemeInto\(elements\.slidePreview, previewDesignForStep\(\)\)/);
 });
+
+test("normal AI refinement is direct, connected, and cancellable", () => {
+  const html = readPublicFile("index.html");
+  for (const id of [
+    "providerDialog", "providerForm", "providerSelect", "providerApiKey",
+    "providerBaseUrl", "providerModel", "providerStatus", "testProviderConnection"
+  ]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /id="providerApiKey"[^>]*type="password"/);
+  assert.doesNotMatch(html, /id="providerApiKey"[^>]*value=/);
+  assert.match(html, />OpenAI</);
+  assert.match(html, />DeepSeek</);
+  assert.match(html, />Compatible endpoint</);
+
+  const script = readPublicFile("app.js");
+  const customize = functionSource(script, "renderAiCustomize");
+  assert.match(customize, /ai-reference-files/);
+  assert.match(customize, /Create AI suggestion/);
+  assert.match(customize, /createAiSuggestion/);
+  assert.doesNotMatch(customize, /Export handoff|Import theme JSON|aiDraftJson/);
+
+  const connect = functionSource(script, "testProviderConnection");
+  assert.match(connect, /\/api\/ai\/connect/);
+  assert.match(connect, /providerApiKey/);
+  assert.match(connect, /queuedAiSuggestion/);
+
+  const create = functionSource(script, "createAiSuggestion");
+  assert.match(create, /\/api\/ai\/suggest/);
+  assert.match(create, /expectedManualThemeHash/);
+  assert.match(create, /AbortController/);
+  assert.match(create, /loadAiComparison\(result\)/);
+  assert.match(create, /navigateToStep\("ai-compare"\)/);
+
+  const cancel = functionSource(script, "cancelAiSuggestion");
+  assert.match(cancel, /\/api\/ai\/cancel/);
+  assert.match(cancel, /abort\(\)/);
+});
+
+test("comparison uses creator language and supports revision in place", () => {
+  const script = readPublicFile("app.js");
+  const comparison = functionSource(script, "renderAiCompare");
+  for (const label of ["Your design", "AI suggestion", "Use AI suggestion", "Keep my design", "Revise request"]) {
+    assert.match(comparison, new RegExp(escapeRegExp(label)));
+  }
+  assert.match(comparison, /navigateToStep\("ai-customize"\)/);
+  assert.match(comparison, /comparison-toggle/);
+  assert.match(comparison, /aria-pressed/);
+
+  const css = readPublicFile("styles.css");
+  assert.match(css, /\.provider-dialog/);
+  assert.match(css, /\.ai-progress/);
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.comparison-toggle/);
+});

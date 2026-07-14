@@ -4,6 +4,7 @@ const wizard = window.BeamerForgeWizard;
 const previewState = window.BeamerForgePreviewState;
 const authoritativeState = window.BeamerForgeAuthoritativePreviewState;
 const selectionState = window.BeamerForgeSelectionState;
+const aiRefinementState = window.BeamerForgeAiRefinementState;
 const onboarding = window.BeamerForgeOnboarding;
 
 const STEP_DESC = Object.freeze({
@@ -43,6 +44,7 @@ const state = {
   savedPalettes: [], paletteCounter: 0,
   workflow: { hasManualBaseline: false, hasHandoff: false, hasValidAiDraft: false, selectedVersion: null, selectedThemeHash: null, cycleId: null, reviewRevision: null },
   aiBrief: "", manualReview: null, comparison: null, authoritativePreviews: { manual: null, ai: null, selected: null },
+  ai: aiRefinementState.initialState(), aiConnection: { connected: false }, queuedAiSuggestion: false, aiRequestController: null,
   manualPreviewSave: { savedInputKey: null, themeHash: null, pendingInputKey: null, promise: null },
   cube: { yaw: -0.72, pitch: -0.42, dragging: false, dragMoved: false, lx: 0, ly: 0 }
 };
@@ -78,7 +80,16 @@ const elements = {
   authoritativePreview: document.getElementById("authoritativePreview"),
   authoritativeStatus: document.getElementById("authoritativeStatus"),
   retryPreview: document.getElementById("retryPreview"),
-  refreshPreview: document.getElementById("refreshPreview")
+  refreshPreview: document.getElementById("refreshPreview"),
+  providerDialog: document.getElementById("providerDialog"),
+  providerForm: document.getElementById("providerForm"),
+  providerSelect: document.getElementById("providerSelect"),
+  providerApiKey: document.getElementById("providerApiKey"),
+  providerBaseUrl: document.getElementById("providerBaseUrl"),
+  providerModel: document.getElementById("providerModel"),
+  providerStatus: document.getElementById("providerStatus"),
+  testProviderConnection: document.getElementById("testProviderConnection"),
+  cancelProviderConnection: document.getElementById("cancelProviderConnection")
 };
 
 async function sendAuthoritativeRequest(source, force, { themeHash }) {
@@ -240,6 +251,7 @@ async function api(path, opts = {}) {
   if (!res.ok || body.ok === false) {
     const err = new Error(body.error || body.message || `Request failed: ${res.status}`);
     err.details = body; err.errors = Array.isArray(body.errors) ? body.errors : [];
+    if (typeof body.code === "string") err.code = body.code;
     throw err;
   }
   return body;
@@ -312,11 +324,14 @@ function setBuildStatus(v) {
   elements.downloadProject.hidden = !projectReady;
   elements.downloadPdf.hidden = !pdfReady;
 }
-function setBusy(b) { state.busy = b; updateActions(); }
+function setBusy(b) { state.busy = b; updateActions(); if (state.registry) renderPhaseProgress(); renderAiProgress(); }
 
 function updateActions() {
-  elements.back.disabled = state.busy || currentStep().id === "start";
   const step = currentStep();
+  const usesInlineActions = ["manual-review", "ai-customize", "ai-compare", "final-review"].includes(step.id);
+  elements.next.hidden = usesInlineActions;
+  elements.next.parentElement.classList.toggle("has-single-action", usesInlineActions);
+  elements.back.disabled = state.busy || step.id === "start";
   const nextId = wizard.nextStepId(step.id);
   elements.next.disabled = state.busy || (step.id === "start" && !state.directionId) || step.id === "final-review" || !wizard.canEnterStep(nextId, state.workflow);
   elements.reviewGenerate.disabled = state.busy || !selectionState.canBuild(state.workflow);
@@ -677,9 +692,169 @@ function renderAiCustomize() {
   const help = document.createElement("p"); help.textContent = "Describe the change you want. Your current design remains the protected baseline for comparison.";
   const brief = document.createElement("textarea"); brief.id = "ai-brief"; brief.rows = 7; brief.placeholder = "Example: Make this warmer, more editorial, and slightly more spacious."; brief.value = state.aiBrief;
   brief.addEventListener("input", () => { state.aiBrief = brief.value; });
-  const note = document.createElement("p"); note.className = "step-description"; note.textContent = "Direct refinement will use this brief and keep the comparison inside BeamerForge.";
-  wrap.append(help, fieldLabel("What should change?"), brief, note);
+  const references = document.createElement("input"); references.id = "ai-reference-files"; references.type = "file"; references.multiple = true; references.accept = ".png,.jpg,.jpeg,.webp,.tex,.sty,.cls,.bib";
+  const referenceNote = document.createElement("p"); referenceNote.className = "field-help"; referenceNote.textContent = "Optional: add a slide image or Beamer source file as read-only inspiration.";
+  const connection = document.createElement("div"); connection.className = "ai-connection-summary";
+  const connectionText = document.createElement("p");
+  connectionText.textContent = state.aiConnection.connected
+    ? `Connected to ${state.aiConnection.provider} · ${state.aiConnection.model}`
+    : "No AI provider connected yet.";
+  const changeConnection = actionButton(state.aiConnection.connected ? "Change connection" : "Connect provider", openProviderDialog, { secondary: true });
+  connection.append(connectionText, changeConnection);
+  const create = document.createElement("button"); create.id = "createAiSuggestion"; create.type = "button"; create.textContent = "Create AI suggestion"; create.addEventListener("click", createAiSuggestion);
+  const progress = document.createElement("section"); progress.id = "aiProgress"; progress.className = "ai-progress"; progress.setAttribute("aria-live", "polite"); progress.hidden = true;
+  wrap.append(help, fieldLabel("What should change?"), brief, fieldLabel("Optional references"), references, referenceNote, connection, create, progress);
+  queueMicrotask(renderAiProgress);
   return wrap;
+}
+
+function openProviderDialog() {
+  state.queuedAiSuggestion = state.queuedAiSuggestion || false;
+  elements.providerApiKey.value = "";
+  elements.providerStatus.textContent = state.aiConnection.connected
+    ? `Connected to ${state.aiConnection.provider} · ${state.aiConnection.model}`
+    : "Enter a key or use a configured server environment variable.";
+  if (typeof elements.providerDialog.showModal === "function") elements.providerDialog.showModal();
+  else elements.providerDialog.setAttribute("open", "");
+}
+
+function closeProviderDialog() {
+  if (typeof elements.providerDialog.close === "function") elements.providerDialog.close();
+  else elements.providerDialog.removeAttribute("open");
+}
+
+function renderAiProgress() {
+  const panel = document.getElementById("aiProgress");
+  const create = document.getElementById("createAiSuggestion");
+  if (!panel) return;
+  if (create) create.disabled = aiRefinementState.isBusy(state.ai);
+  const phaseCopy = {
+    preparing: "Preparing your protected design and references…",
+    generating: "Creating an AI suggestion…",
+    checking: "Checking that the suggestion is safe and valid…",
+    cancelled: "Suggestion cancelled. Your design is unchanged."
+  };
+  const children = [];
+  if (phaseCopy[state.ai.phase]) {
+    const status = document.createElement("p"); status.className = "ai-progress-status"; status.textContent = phaseCopy[state.ai.phase]; children.push(status);
+  }
+  if (["preparing", "generating", "checking"].includes(state.ai.phase)) {
+    children.push(actionButton("Cancel", cancelAiSuggestion, { secondary: true }));
+  }
+  if (state.ai.phase === "failed") {
+    const message = document.createElement("p"); message.className = "ai-error"; message.textContent = aiRefinementState.messageForError(state.ai.error); children.push(message);
+    children.push(actionButton("Try again", createAiSuggestion));
+    const diagnostics = state.ai.error?.errors;
+    if (Array.isArray(diagnostics) && diagnostics.length > 0) {
+      const details = document.createElement("details"); const summary = document.createElement("summary"); summary.textContent = "Details";
+      const pre = document.createElement("pre"); pre.textContent = JSON.stringify(diagnostics, null, 2); details.append(summary, pre); children.push(details);
+    }
+  }
+  panel.hidden = children.length === 0;
+  replaceChildren(panel, children);
+}
+
+async function testProviderConnection(event) {
+  event.preventDefault();
+  state.ai = aiRefinementState.transition(state.ai, { type: "connect_start" });
+  elements.testProviderConnection.disabled = true;
+  elements.providerStatus.textContent = "Testing connection…";
+  try {
+    const result = await api("/api/ai/connect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: elements.providerSelect.value,
+        apiKey: elements.providerApiKey.value,
+        baseUrl: elements.providerBaseUrl.value,
+        model: elements.providerModel.value
+      })
+    });
+    state.aiConnection = result;
+    state.ai = aiRefinementState.transition(state.ai, { type: "connect_success" });
+    elements.providerApiKey.value = "";
+    elements.providerStatus.textContent = `Connected to ${result.provider} · ${result.model}`;
+    closeProviderDialog();
+    const continueSuggestion = state.queuedAiSuggestion;
+    state.queuedAiSuggestion = false;
+    if (continueSuggestion) await createAiSuggestion();
+    else render();
+  } catch (error) {
+    state.ai = aiRefinementState.transition(state.ai, { type: "connect_failure", error: { code: error.code, message: error.message, errors: error.errors } });
+    elements.providerStatus.textContent = aiRefinementState.messageForError(state.ai.error);
+  } finally {
+    elements.testProviderConnection.disabled = false;
+  }
+}
+
+function activeAiBinding() {
+  return state.comparison || state.manualReview;
+}
+
+async function createAiSuggestion() {
+  const brief = document.getElementById("ai-brief");
+  if (brief) state.aiBrief = brief.value;
+  if (!state.aiConnection.connected) {
+    state.queuedAiSuggestion = true;
+    openProviderDialog();
+    return;
+  }
+  const binding = activeAiBinding();
+  state.ai = aiRefinementState.transition(state.ai, { type: "suggest_start" });
+  const token = state.ai.activeToken;
+  renderAiProgress();
+  if (!binding) {
+    state.ai = aiRefinementState.transition(state.ai, { type: "failure", token, error: { message: "Review your manual design before asking AI to refine it." } });
+    renderAiProgress();
+    return;
+  }
+
+  const controller = new AbortController();
+  state.aiRequestController = controller;
+  try {
+    setBusy(true);
+    const form = new FormData();
+    form.set("brief", state.aiBrief);
+    form.set("cycleId", binding.cycleId);
+    form.set("reviewRevision", binding.reviewRevision);
+    form.set("expectedManualThemeHash", binding.manualThemeHash);
+    const files = [...(document.getElementById("ai-reference-files")?.files || [])];
+    const relativePaths = [];
+    for (const file of files) {
+      form.append("references", file, file.name);
+      relativePaths.push(file.webkitRelativePath || file.name);
+    }
+    form.set("relativePaths", JSON.stringify(relativePaths));
+    state.ai = aiRefinementState.transition(state.ai, { type: "stage", token, phase: "generating" });
+    renderAiProgress();
+    const result = await api("/api/ai/suggest", { method: "POST", body: form, signal: controller.signal });
+    state.ai = aiRefinementState.transition(state.ai, { type: "stage", token, phase: "checking" });
+    renderAiProgress();
+    state.workflow = selectionState.invalidateForReviewMutation(state.workflow, result);
+    state.comparison = null;
+    await loadAiComparison(result);
+    state.ai = aiRefinementState.transition(state.ai, { type: "success", token, result });
+    navigateToStep("ai-compare");
+  } catch (error) {
+    if (!controller.signal.aborted && state.ai.activeToken === token) {
+      state.ai = aiRefinementState.transition(state.ai, { type: "failure", token, error: { code: error.code, message: error.message, errors: error.errors } });
+      setBuildStatus(aiRefinementState.messageForError(state.ai.error));
+      renderAiProgress();
+    }
+  } finally {
+    if (state.aiRequestController === controller) state.aiRequestController = null;
+    setBusy(false);
+  }
+}
+
+async function cancelAiSuggestion() {
+  const token = state.ai.activeToken;
+  if (state.aiRequestController) state.aiRequestController.abort();
+  state.ai = aiRefinementState.transition(state.ai, { type: "cancel", token });
+  renderAiProgress();
+  setBusy(false);
+  try { await api("/api/ai/cancel", { method: "POST" }); }
+  catch { /* The local abort already protects this browser request. */ }
 }
 
 function renderAdvancedAiTools() {
@@ -861,15 +1036,21 @@ function renderAiCompare() {
   const wrap = document.createElement("div"); wrap.dataset.region = "ai-compare";
   if (!state.comparison) { const p = document.createElement("p"); p.textContent = "Loading comparison…"; wrap.appendChild(p); loadAiComparison().then(render).catch((error) => setBuildStatus(error.message)); return wrap; }
   if (!state.comparison.manualDesign || !state.comparison.draftDesign) { const p = document.createElement("p"); p.textContent = "Comparison previews could not be resolved."; wrap.appendChild(p); return wrap; }
+  const toggle = document.createElement("div"); toggle.className = "comparison-toggle"; toggle.setAttribute("aria-label", "Choose comparison preview");
+  const showManual = document.createElement("button"); showManual.type = "button"; showManual.textContent = "Your design"; showManual.setAttribute("aria-pressed", "true");
+  const showAi = document.createElement("button"); showAi.type = "button"; showAi.textContent = "AI suggestion"; showAi.setAttribute("aria-pressed", "false");
+  toggle.append(showManual, showAi);
   const grid = document.createElement("div"); grid.className = "comparison-grid";
-  const manualCard = document.createElement("section"); const manualTitle = document.createElement("h3"); manualTitle.textContent = "Manual baseline"; const manualPreview = document.createElement("article"); manualPreview.id = "manual-comparison-preview"; manualPreview.className = "slide-preview compact-preview"; renderThemeInto(manualPreview, state.comparison.manualDesign); const manualLatexPreview = createComparisonLatexPreview("manual", "manualLatexPreview"); manualCard.append(manualTitle, manualPreview, manualLatexPreview);
-  const aiCard = document.createElement("section"); const aiTitle = document.createElement("h3"); aiTitle.textContent = "AI customized draft"; const aiPreview = document.createElement("article"); aiPreview.id = "ai-comparison-preview"; aiPreview.className = "slide-preview compact-preview"; renderThemeInto(aiPreview, state.comparison.draftDesign); const aiLatexPreview = createComparisonLatexPreview("ai", "aiLatexPreview"); aiCard.append(aiTitle, aiPreview, aiLatexPreview);
+  const manualCard = document.createElement("section"); manualCard.className = "comparison-card is-mobile-active"; manualCard.setAttribute("aria-label", "Your design"); const manualTitle = document.createElement("h3"); manualTitle.textContent = "Your design"; const manualPreview = document.createElement("article"); manualPreview.id = "manual-comparison-preview"; manualPreview.className = "slide-preview compact-preview"; renderThemeInto(manualPreview, state.comparison.manualDesign); const manualLatexPreview = createComparisonLatexPreview("manual", "manualLatexPreview"); manualCard.append(manualTitle, manualPreview, manualLatexPreview);
+  const aiCard = document.createElement("section"); aiCard.className = "comparison-card"; aiCard.setAttribute("aria-label", "AI suggestion"); const aiTitle = document.createElement("h3"); aiTitle.textContent = "AI suggestion"; const aiPreview = document.createElement("article"); aiPreview.id = "ai-comparison-preview"; aiPreview.className = "slide-preview compact-preview"; renderThemeInto(aiPreview, state.comparison.draftDesign); const aiLatexPreview = createComparisonLatexPreview("ai", "aiLatexPreview"); aiCard.append(aiTitle, aiPreview, aiLatexPreview);
+  const activate = (version) => { const manualActive = version === "manual"; manualCard.classList.toggle("is-mobile-active", manualActive); aiCard.classList.toggle("is-mobile-active", !manualActive); showManual.setAttribute("aria-pressed", String(manualActive)); showAi.setAttribute("aria-pressed", String(!manualActive)); };
+  showManual.addEventListener("click", () => activate("manual")); showAi.addEventListener("click", () => activate("ai"));
   grid.append(manualCard, aiCard);
   const actions = document.createElement("div"); actions.className = "inline-actions";
-  const accept = document.createElement("button"); accept.type = "button"; accept.textContent = "Accept AI Version"; accept.addEventListener("click", () => selectFinalVersion("ai"));
-  const revise = document.createElement("button"); revise.type = "button"; revise.className = "secondary-button"; revise.textContent = "Continue Revising"; revise.addEventListener("click", () => navigateToStep("ai-handoff"));
-  const manual = document.createElement("button"); manual.type = "button"; manual.className = "secondary-button"; manual.textContent = "Keep Manual Version"; manual.addEventListener("click", () => selectFinalVersion("manual"));
-  actions.append(accept, revise, manual); wrap.append(grid, renderThemeChanges(state.comparison.changes), actions); return wrap;
+  const accept = document.createElement("button"); accept.type = "button"; accept.textContent = "Use AI suggestion"; accept.addEventListener("click", () => selectFinalVersion("ai"));
+  const manual = document.createElement("button"); manual.type = "button"; manual.className = "secondary-button"; manual.textContent = "Keep my design"; manual.addEventListener("click", () => selectFinalVersion("manual"));
+  const revise = document.createElement("button"); revise.type = "button"; revise.className = "secondary-button"; revise.textContent = "Revise request"; revise.addEventListener("click", () => navigateToStep("ai-customize"));
+  actions.append(accept, manual, revise); wrap.append(toggle, grid, renderThemeChanges(state.comparison.changes), actions); return wrap;
 }
 
 async function selectFinalVersion(version) {
@@ -1287,6 +1468,10 @@ function bindControls() {
   elements.compileTheme.addEventListener("click", compileTheme);
   elements.retryPreview.addEventListener("click", () => { const source = authoritativeSourceForStep(); if (source) requestAuthoritative(source); });
   elements.refreshPreview.addEventListener("click", () => { const source = authoritativeSourceForStep(); if (source) requestAuthoritative(source, { force: true }); });
+  elements.providerForm.addEventListener("submit", testProviderConnection);
+  elements.cancelProviderConnection.addEventListener("click", () => { state.queuedAiSuggestion = false; closeProviderDialog(); });
+  elements.providerDialog.addEventListener("cancel", () => { state.queuedAiSuggestion = false; });
+  elements.providerSelect.addEventListener("change", () => { if (elements.providerSelect.value === "custom") document.getElementById("providerAdvanced").open = true; });
   window.addEventListener("popstate", render);
 }
 
@@ -1307,15 +1492,18 @@ function registerFontFaces(reg) {
 async function boot() {
   setBuildStatus("Loading options and theme...");
   let comparisonError = null;
-  const [reg, themeResult, directionsResult] = await Promise.all([
+  const [reg, themeResult, directionsResult, connectionResult] = await Promise.all([
     api("/api/options"),
     api("/api/theme?validated=1"),
-    api("/api/directions")
+    api("/api/directions"),
+    api("/api/ai/connection")
   ]);
   state.registry = reg; state.theme = clone(themeResult.theme);
   state.directions = directionsResult.directions;
   state.vibe = window.sessionStorage.getItem("beamerforge:vibe") || "";
   state.directionId = window.sessionStorage.getItem("beamerforge:direction") || null;
+  state.aiConnection = connectionResult;
+  state.ai = aiRefinementState.transition(state.ai, { type: "reset", connected: connectionResult.connected });
   state.workflow = selectionState.applyPersistedSelection(state.workflow, themeResult.selection);
   state.validationErrors = Array.isArray(themeResult.errors) ? themeResult.errors : [];
   initializePreviewResolution();

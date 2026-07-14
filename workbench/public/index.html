@@ -111,6 +111,35 @@
         <pre id="buildStatus">No build yet.</pre>
       </aside>
     </main>
+    <dialog id="providerDialog" class="provider-dialog" aria-labelledby="providerDialogTitle">
+      <form id="providerForm" method="dialog">
+        <div class="dialog-heading">
+          <p class="eyebrow">AI connection</p>
+          <h2 id="providerDialogTitle">Connect your AI provider</h2>
+          <p>Your key stays in this local server process and is never saved in your design.</p>
+        </div>
+        <label for="providerSelect">Provider</label>
+        <select id="providerSelect" name="provider">
+          <option value="openai">OpenAI</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="custom">Compatible endpoint</option>
+        </select>
+        <label for="providerApiKey">API key</label>
+        <input id="providerApiKey" name="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Enter a key or use a server environment variable">
+        <details id="providerAdvanced">
+          <summary>Advanced connection options</summary>
+          <label for="providerBaseUrl">Compatible base URL</label>
+          <input id="providerBaseUrl" name="baseUrl" type="url" placeholder="https://provider.example/v1">
+          <label for="providerModel">Model</label>
+          <input id="providerModel" name="model" type="text" placeholder="Choose automatically">
+        </details>
+        <p id="providerStatus" class="dialog-status" aria-live="polite">Not connected.</p>
+        <div class="dialog-actions">
+          <button id="cancelProviderConnection" class="secondary-button" type="button">Cancel</button>
+          <button id="testProviderConnection" type="submit">Test connection</button>
+        </div>
+      </form>
+    </dialog>
     <script src="/wizard-state.js"></script>
     <script src="/preview-state.js"></script>
     <script src="/authoritative-preview-state.js"></script>

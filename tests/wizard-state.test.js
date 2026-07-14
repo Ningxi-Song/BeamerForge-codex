@@ -17,6 +17,14 @@ test("defines the cumulative wizard route order", () => {
   assert.equal(wizard.previousStepId("font"), "color");
 });
 
+test("normal navigation skips Advanced handoff and import routes", () => {
+  assert.equal(wizard.nextStepId("manual-review"), "ai-customize");
+  assert.equal(wizard.nextStepId("ai-customize"), "ai-compare");
+  assert.equal(wizard.nextStepId("ai-compare"), "final-review");
+  assert.equal(wizard.previousStepId("ai-compare"), "ai-customize");
+  assert.equal(wizard.previousStepId("ai-customize"), "manual-review");
+});
+
 test("maps each decision step to one theme section", () => {
   assert.equal(wizard.sectionForStep("color"), "colors");
   assert.equal(wizard.sectionForStep("font"), "fonts");

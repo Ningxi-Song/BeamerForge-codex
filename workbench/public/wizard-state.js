@@ -33,6 +33,7 @@
 
   const BY_ID = Object.freeze(Object.fromEntries(STEPS.map((s) => [s.id, s])));
   const BY_PATH = Object.freeze(Object.fromEntries(STEPS.map((s) => [s.path, s])));
+  const NORMAL_STEPS = Object.freeze(STEPS.filter((step) => !["ai-handoff", "ai-import"].includes(step.id)));
 
   const REQUIRED = Object.freeze({
     color: [["palettes", "colors.paletteId"]],
@@ -52,9 +53,10 @@
   function get(obj, p) { return p.split(".").reduce((v, k) => (v ? v[k] : undefined), obj); }
 
   function stepForPath(path) { return BY_PATH[path] || STEPS[0]; }
-  function indexOf(id) { return Math.max(0, STEPS.findIndex((s) => s.id === id)); }
-  function nextStepId(id) { return STEPS[Math.min(indexOf(id) + 1, STEPS.length - 1)].id; }
-  function previousStepId(id) { return STEPS[Math.max(indexOf(id) - 1, 0)].id; }
+  function indexOf(id, steps = STEPS) { return Math.max(0, steps.findIndex((s) => s.id === id)); }
+  function navigationSteps(id) { return ["ai-handoff", "ai-import"].includes(id) ? STEPS : NORMAL_STEPS; }
+  function nextStepId(id) { const steps = navigationSteps(id); return steps[Math.min(indexOf(id, steps) + 1, steps.length - 1)].id; }
+  function previousStepId(id) { const steps = navigationSteps(id); return steps[Math.max(indexOf(id, steps) - 1, 0)].id; }
   function sectionForStep(id) { return BY_ID[id] ? BY_ID[id].section : null; }
   function visibleStageForStep(stepId) {
     const stageId = BY_ID[stepId]?.visibleStage || "welcome";
