@@ -37,6 +37,30 @@ The implementation will provide:
 
 Production assets should live in a dedicated repository branding or assets directory rather than in the temporary `.superpowers/brainstorm/` preview area. The README may reference the primary SVG once the assets are complete.
 
+## README Cover Treatment
+
+Replace the current README heading and opening sentence with a centered cover treatment:
+
+```html
+<p align="center">
+  <img src="assets/branding/beamerforge-logo.svg" width="144"
+       alt="BeamerForge logo">
+</p>
+
+<h1 align="center">BeamerForge</h1>
+
+<p align="center">
+  Craft distinctive, reproducible Beamer presentations with a visual
+  design catalog and an AI-guided workflow.
+</p>
+```
+
+Follow the cover with this introduction before the existing “How It Works” section:
+
+> BeamerForge turns presentation design into a structured, inspectable workflow. In the AI era, LaTeX’s foundation in the Turing-complete TeX language is a genuine advantage: models can generate and transform plain-text source, humans can review every change, and mature compilers produce reproducible PDFs. Unlike opaque slide binaries, Beamer projects are versionable, composable, and portable. BeamerForge adds curated visual language and a guided path—from vibe to direction, palette, details, and complete template—so AI can design deliberately instead of improvising from scratch.
+
+The remainder of the README begins with the existing “How It Works” section and remains unchanged except where a relative logo path or surrounding spacing must be adjusted for correct rendering.
+
 ## Acceptance Criteria
 
 - The master SVG has a transparent background and no font dependency.
@@ -44,6 +68,7 @@ Production assets should live in a dedicated repository branding or assets direc
 - Light and dark variants retain sufficient contrast on typical GitHub backgrounds.
 - SVG files parse successfully and use a consistent view box.
 - The README usage example renders the asset without requiring external resources.
+- The README begins with the approved centered logo, project name, tagline, and introduction.
 
 ## Out of Scope
 
