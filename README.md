@@ -1,6 +1,14 @@
-# Beamer Design System
+<p align="center">
+  <img src="assets/branding/beamerforge-logo.svg" width="144" alt="BeamerForge logo">
+</p>
 
-A catalog of Beamer design elements with AI-assisted template generation. Browse elements, pick what you like, and AI assembles them into a complete, compilable template.
+<h1 align="center">BeamerForge</h1>
+
+<p align="center">
+  Craft distinctive, reproducible Beamer presentations with a visual design catalog and an AI-guided workflow.
+</p>
+
+BeamerForge turns presentation design into a structured, inspectable workflow. In the AI era, LaTeX's foundation in the Turing-complete TeX language is a genuine advantage: models can generate and transform plain-text source, humans can review every change, and mature compilers produce reproducible PDFs. Unlike opaque slide binaries, Beamer projects are versionable, composable, and portable. BeamerForge adds curated visual language and a guided path—from vibe to direction, palette, details, and complete template—so AI can design deliberately instead of improvising from scratch.
 
 ## How It Works
 

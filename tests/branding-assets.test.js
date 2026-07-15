@@ -39,3 +39,12 @@ for (const variant of variants) {
     }
   });
 }
+
+test('README uses the approved BeamerForge cover treatment', () => {
+  const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+  assert.match(readme, /<img src="assets\/branding\/beamerforge-logo\.svg" width="144"/);
+  assert.match(readme, /<h1 align="center">BeamerForge<\/h1>/);
+  assert.match(readme, /Craft distinctive, reproducible Beamer presentations/);
+  assert.match(readme, /Turing-complete TeX language/);
+  assert.match(readme, /versionable, composable, and portable/);
+});
