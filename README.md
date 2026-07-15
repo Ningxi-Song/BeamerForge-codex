@@ -8,122 +8,63 @@
   Craft distinctive, reproducible Beamer presentations with a visual design catalog and an AI-guided workflow.
 </p>
 
-BeamerForge turns presentation design into a structured, inspectable workflow. In the AI era, LaTeX's foundation in the Turing-complete TeX language is a genuine advantage: models can generate and transform plain-text source, humans can review every change, and mature compilers produce reproducible PDFs. Unlike opaque slide binaries, Beamer projects are versionable, composable, and portable. BeamerForge adds curated visual language and a guided path—from vibe to direction, palette, details, and complete template—so AI can design deliberately instead of improvising from scratch.
+BeamerForge turns presentation design into a structured, inspectable workflow. In the AI era, LaTeX's foundation in the Turing-complete TeX language is a genuine advantage: models can generate and transform plain-text source, humans can review every change, and mature compilers produce reproducible PDFs. Unlike opaque slide binaries, Beamer projects are versionable, composable, and portable. BeamerForge adds curated visual language and a guided path—from vibe to direction, style, details, and a complete project—so AI can design deliberately instead of improvising from scratch.
 
-## How It Works
+## Why BeamerForge
 
-Design flows from **vague to specific**. See [WORKFLOW.md](WORKFLOW.md) for the full process.
+- **AI-readable source:** LaTeX projects are plain text, structured, reviewable, and easy for models to transform.
+- **Reproducible output:** the same validated source can be compiled into the same presentation instead of being trapped in an opaque slide binary.
+- **Deliberate visual design:** curated palettes, typography, bullets, blocks, navigation, and title-page patterns give AI a design vocabulary rather than a blank canvas.
+- **Human control:** every choice remains inspectable, editable, and reversible; AI refinement is optional.
 
-```
-Vibe → Direction → Palette → Details → Template
-
-"I want something modern"  →  3 directions  →  3 palettes  →  fine-tune  →  .tex file
-```
-
-## Use BeamerForge
-
-BeamerForge guides presentation creators from a visual direction to a complete Beamer project. The browser preview responds immediately while you make choices; the final PDF check uses the real LaTeX compiler.
+## Quick Start
 
 ```bash
 npm start
 ```
 
-Open `http://localhost:5177/welcome` and select **Start designing**.
-
-The creator journey is:
-
-```text
-Direction -> Style -> Details -> Review -> Optional AI refinement -> Build
-```
-
-Describe the feeling you want, choose one of three visual directions, and adjust one detail at a time. The preview preserves compatible later choices when you go back. At review, either build the manual design immediately or ask AI for an optional refinement and compare the two versions. A successful build provides the complete project, and a successful compilation also provides the PDF.
-
-Technical handoff and JSON tools are available under **Advanced** for experienced users, but they are not part of the normal workflow.
-
-### Optional AI refinement
-
-Manual design, preview, compilation, and downloads do not require an AI provider. At Review, choose **Refine with AI** only when you want an optional suggestion.
-
-1. Describe the change in ordinary language.
-2. Optionally attach PNG, JPEG, WebP, `.tex`, `.sty`, `.cls`, or `.bib` references.
-3. Select **Create AI suggestion**.
-4. If needed, connect OpenAI, DeepSeek, or a compatible provider.
-5. Compare **Your design** with the **AI suggestion**, then use the suggestion, keep your design, or revise the request.
-
-API keys entered in the connection dialog live only in the running local server process. They are not written to theme files, browser storage, handoff folders, logs, or connection-status responses. You can instead set a key before starting BeamerForge:
-
-```powershell
-$env:OPENAI_API_KEY="your-key"
-npm start
-```
-
-or:
-
-```powershell
-$env:DEEPSEEK_API_KEY="your-key"
-npm start
-```
-
-For a compatible OpenAI-style provider, choose **Compatible endpoint**, open **Advanced connection options**, and enter its base URL. Custom remote endpoints must use HTTPS; loopback HTTP endpoints such as `http://127.0.0.1:11434/v1` are allowed for models running on your own computer.
+Open `http://localhost:5177/welcome` and select **Start designing**. Manual design, preview, project generation, and downloads do not require an AI provider. A local LaTeX compiler is required only for the final PDF.
 
 ## Workflow
 
-### Step 1: Tell Us the Vibe
-
-Describe the overall feeling in natural language. No technical terms needed.
-
-```
-"I want something modern and techy"
-"Make it look like a serious academic talk"
-"Something clean and minimal"
+```text
+Welcome -> Direction -> Style -> Details -> Review -> Optional AI refinement -> Build
 ```
 
-### Step 2: Pick a Direction
+1. **Welcome:** see what BeamerForge produces and begin a design session.
+2. **Direction:** describe the desired feeling and compare curated visual directions.
+3. **Style:** choose compatible color and type combinations.
+4. **Details:** tune bullets, blocks, navigation, and title-page layout.
+5. **Review:** validate the cumulative manual design and freeze a protected baseline.
+6. **Optional AI refinement:** request a change in ordinary language, compare it with the protected manual version, and explicitly choose one.
+7. **Build:** generate the complete editable Beamer project and compile a PDF when a supported LaTeX compiler is available.
 
-We show 2-3 visual directions based on your vibe. Each is a mood board — a single slide showing color palette, font feel, and overall tone.
+See the detailed [Workflow](WORKFLOW.md) for navigation, validation, manual-only use, AI comparison, and advanced handoff/import behavior.
 
-### Step 3: Pick a Palette
+## Optional AI Refinement
 
-We suggest 2-3 specific color + font combinations within your chosen direction.
+At Review, choose **Refine with AI** only when you want a suggestion. Your reviewed manual design remains protected while BeamerForge creates a separate schema-validated candidate. You can compare both versions, revise the request, keep the manual design, or accept the suggestion.
 
-### Step 4: Fine-tune Details
+API keys entered in the connection dialog live only in the running local server process. They are not written to theme files, browser storage, handoff folders, logs, or connection-status responses. You may instead set `OPENAI_API_KEY` or `DEEPSEEK_API_KEY` before running `npm start`. Compatible remote endpoints must use HTTPS; loopback HTTP endpoints are allowed for local models.
 
-We ask about bullets, blocks, navigation, and title page — one at a time, with visual previews.
+## Current Theme Example
 
-### Step 5: Get Your Template
-
-We generate a complete `.tex` file with:
-- All selected elements combined
-- Compilation instructions
-- Customization guide
-
-## Catalog Structure
-
+```json
+{
+  "colors": { "paletteId": "academic-blue" },
+  "fonts": { "body": "fira-sans", "title": "playfair-display" },
+  "bullets": { "style": "triangle" },
+  "blocks": { "style": "rounded" },
+  "navigation": { "style": "soft-miniframes" },
+  "titlePage": { "layout": "left-curtain" }
+}
 ```
-beamer-design-system/
-├── README.md                 # This file
-├── ARCHITECTURE.md           # Layer × Element relationship
-├── GUIDE.md                  # Design review checklist
-│
-├── elements/                 # Design element catalog
-│   ├── colors/               # Color themes, palettes, gradients
-│   ├── fonts/              # Font families, sizes, spacing
-│   ├── layout/               # Page geometry, columns, grids
-│   ├── frames/               # Title page, section page, summary page
-│   ├── navigation/           # Headers, footers, page numbers
-│   ├── decorations/          # TikZ shapes, backgrounds, dividers
-│   ├── emphasis/             # Block styles, highlights, code blocks
-│   ├── animation/            # Transitions, overlays, reveals
-│   └── content/              # Reusable content block patterns
-│
-├── recipes/                  # Pre-composed element combinations
-├── templates/                # Ready-to-compile .tex files
-└── anti-patterns/            # Common mistakes and fixes
-```
+
+The complete theme schema contains additional presentation identity, content defaults, decoration, and transition fields. The workbench writes a validated complete theme before generation.
 
 ## Template Catalog
 
-Each template is a complete, compilable Beamer theme with its own personality and best-fit scenario.
+Each recipe is a complete, compilable Beamer theme with its own personality and best-fit scenario.
 
 ### [D Rose](recipes/d-rose/) - Bloom in Darkness
 
@@ -157,38 +98,13 @@ Each template is a complete, compilable Beamer theme with its own personality an
 | **Title page** | Optional right-side image with a white curtain for title text |
 | **Preview** | [page01](recipes/bamboo/page01.png) / [page04](recipes/bamboo/page04.png) / [page07](recipes/bamboo/page07.png) |
 
-## For AI Users
+## Documentation
 
-This repository is designed to be read by AI as context. When you ask AI to create a Beamer template, point it to this repo:
-
-```
-Read the Beamer design catalog at [repo-url], then create a template
-using: colors/dark-blue, typography/sans-serif-modern, layout/16-9-single
-```
-
-AI will:
-1. Read the relevant element files
-2. Understand the design constraints
-3. Generate a complete, compilable template
-4. Review it against the guidelines
-
-## Element Naming Convention
-
-Each element uses a consistent ID format:
-
-```
-{category}/{name}
-```
-
-Examples:
-- `colors/dark-blue` — dark blue color theme
-- `colors/light-green-minimal` — light green minimal theme
-- `typography/serif-classic` — classic serif font combination
-- `frames/title-center` — centered title page layout
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding new elements.
+- [Workflow](WORKFLOW.md) — the complete normal, manual-only, optional AI, and advanced compatibility journeys.
+- [Architecture](ARCHITECTURE.md) — modules, state boundaries, rendering, AI orchestration, generation, and compilation.
+- [Design review guide](GUIDE.md) — human checks for hierarchy, typography, color, spacing, and slide composition.
+- [`elements/`](elements/) — source assets and visual references.
+- [`recipes/`](recipes/) — complete compilable examples.
 
 ## License
 
