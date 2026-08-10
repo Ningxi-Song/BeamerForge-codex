@@ -1,6 +1,0 @@
-Navigation preview manifest
-Source: elements/navigation
-Styles:
-  - miniframes -> miniframes.png
-  - soft-miniframes -> soft-miniframes.png
-Gallery: navigation-gallery.png

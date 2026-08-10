@@ -3,149 +3,38 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>BeamerForge Wizard</title>
+    <title>Beamer Template Catalog</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <a class="skip-link" href="#stepContent">Skip to current design choice</a>
-    <section id="welcomeScreen" class="welcome-screen" aria-labelledby="welcomeTitle" hidden>
-      <header class="welcome-header">
-        <div class="welcome-brand"><span class="brand-mark" aria-hidden="true">B</span><strong>BeamerForge</strong></div>
-        <span class="welcome-context">New presentation theme</span>
-      </header>
-      <div class="welcome-content">
-        <p class="eyebrow">Welcome to BeamerForge</p>
-        <h1 id="welcomeTitle">Design a polished Beamer theme without wrestling with LaTeX.</h1>
-        <p class="welcome-lede">Start with simple visual choices, then optionally ask AI to refine the result. You remain in control.</p>
-        <div class="welcome-stages">
-          <article><span class="stage-number">1</span><h2>Choose your foundation</h2><p>Describe the feeling, compare directions, and fine-tune one detail at a time.</p></article>
-          <article><span class="stage-number">2</span><h2>Refine it with AI</h2><p>Write the change, compare before and after, then accept, keep, or revise.</p></article>
+    <header class="site-header">
+      <p class="kicker">Beamer template library</p>
+      <h1>Presentation recipes worth reusing.</h1>
+      <p class="lede">Browse complete Beamer templates, read their introductions, and inspect the slides before choosing a starting point.</p>
+    </header>
+    <main class="site-main">
+      <section id="catalogView" aria-labelledby="catalogHeading">
+        <div class="section-heading">
+          <div><p class="kicker">The collection</p><h2 id="catalogHeading">Templates</h2></div>
+          <p id="catalogStatus" class="status" role="status">Loading recipes…</p>
         </div>
-        <aside class="workflow-principle">
-          <div><strong>Fast while designing. Reliable when finished.</strong><p>The live preview responds immediately; the final check uses the real Beamer compiler.</p></div>
-          <span>Choose → Preview → Refine → Build</span>
-        </aside>
-        <button id="startDesigning" type="button">Start designing →</button>
-      </div>
-    </section>
-
-    <main id="wizardApp" class="creator-app wizard-app" hidden>
-      <header id="appHeader" class="app-header">
-        <div class="app-brand"><span class="brand-mark" aria-hidden="true">B</span><strong>BeamerForge</strong></div>
-        <div class="app-heading">
-          <p class="eyebrow">Your design</p>
-          <h1>Shape a presentation theme that feels like yours.</h1>
-          <p>Choose a direction, adjust the details, then Refine with AI or Build this design.</p>
-        </div>
-        <div class="header-actions">
-          <button id="helpButton" class="secondary-button" type="button">Help</button>
-          <button id="advancedToggle" class="secondary-button advanced-toggle" type="button" aria-expanded="false" aria-controls="advancedPanel">Advanced</button>
-        </div>
-      </header>
-      <p id="workflowStatus" class="visually-hidden" aria-live="polite"></p>
-
-      <nav id="visibleProgress" class="visible-progress" aria-label="Design progress">
-        <div id="phaseProgress" class="phase-progress" data-region="phase-progress" aria-live="polite"></div>
-      </nav>
-
-      <div class="creator-workspace">
-        <section id="workspaceMain" class="decision-panel" aria-labelledby="stepTitle">
-          <div class="step-heading">
-            <p class="eyebrow">Make one choice at a time</p>
-            <h2 id="stepTitle" tabindex="-1"></h2>
-            <p id="stepDescription" class="step-description"></p>
-          </div>
-          <div id="stepContent" class="step-content"></div>
-          <div class="wizard-actions">
-            <button id="backStep" class="secondary-button" type="button">Back</button>
-            <button id="nextStep" type="button">Continue</button>
-          </div>
-          <details class="design-summary">
-            <summary>Design summary</summary>
-            <div id="summaryList" class="summary-list"></div>
-          </details>
-          <section id="deliveryActions" class="delivery-actions" aria-labelledby="deliveryHeading" hidden>
-            <div><p class="eyebrow">Ready to use</p><h3 id="deliveryHeading">Download your Beamer files</h3></div>
-            <a id="downloadProject" href="/api/build/project.tar.gz" download hidden>Download complete project</a>
-            <a id="downloadPdf" href="/api/build/main.pdf" download hidden>Download PDF</a>
-          </section>
+        <div id="catalogGrid" class="catalog-grid"></div>
+      </section>
+      <section id="recipeDetail" class="recipe-detail" aria-live="polite" hidden>
+        <button id="backToCatalog" class="back-button" type="button">← All templates</button>
+        <div id="recipeIntroduction" class="recipe-introduction"></div>
+        <section id="recipePdf" class="preview-section" aria-labelledby="pdfHeading" hidden>
+          <div class="section-heading"><h2 id="pdfHeading">Full preview</h2></div>
+          <object id="pdfViewer" type="application/pdf" aria-label="PDF template preview"></object>
         </section>
-
-        <section id="workspacePreview" class="preview-panel" aria-label="Live preview">
-          <div class="preview-toolbar">
-            <div>
-              <p class="eyebrow">Instant HTML preview</p>
-              <h2>Your design</h2>
-            </div>
-            <span id="saveStatus" class="status">Loading</span>
-          </div>
-          <article id="slidePreview" class="slide-preview"></article>
-          <section id="authoritativePreview" class="authoritative-preview" aria-labelledby="authoritativeHeading" hidden>
-            <div class="authoritative-heading">
-              <div>
-                <p class="eyebrow">Compiled output</p>
-                <h2 id="authoritativeHeading">Authoritative LaTeX preview</h2>
-              </div>
-              <span id="authoritativeStatus" class="preview-state" aria-live="polite">Waiting</span>
-            </div>
-            <div class="preview-actions">
-              <button id="retryPreview" class="secondary-button" type="button">Retry</button>
-              <button id="refreshPreview" class="secondary-button" type="button">Refresh</button>
-            </div>
-            <div class="authoritative-media"></div>
-          </section>
+        <section id="recipeImages" class="preview-section" aria-labelledby="imagesHeading" hidden>
+          <div class="section-heading"><h2 id="imagesHeading">Slide previews</h2></div>
+          <div id="imageGallery" class="image-gallery"></div>
         </section>
-      </div>
-
-      <aside id="advancedPanel" class="advanced-panel" aria-label="Advanced tools" hidden>
-        <div>
-          <p class="eyebrow">Advanced</p>
-          <h2>Technical tools</h2>
-        </div>
-        <section id="advancedAiTools" class="advanced-ai-tools" aria-label="External AI handoff tools"></section>
-        <nav id="stepList" class="step-list" aria-label="All design steps"></nav>
-        <div class="advanced-actions">
-          <button id="reviewGenerate" type="button">Generate Template</button>
-          <button id="compileTheme" class="secondary-button" type="button">Compile PDF</button>
-        </div>
-        <pre id="buildStatus">No build yet.</pre>
-      </aside>
+        <p id="noPreview" class="empty-state" hidden>This recipe does not include a PDF or image preview yet.</p>
+      </section>
     </main>
-    <dialog id="providerDialog" class="provider-dialog" aria-labelledby="providerDialogTitle">
-      <form id="providerForm" method="dialog">
-        <div class="dialog-heading">
-          <p class="eyebrow">AI connection</p>
-          <h2 id="providerDialogTitle">Connect your AI provider</h2>
-          <p>Your key stays in this local server process and is never saved in your design.</p>
-        </div>
-        <label for="providerSelect">Provider</label>
-        <select id="providerSelect" name="provider">
-          <option value="openai">OpenAI</option>
-          <option value="deepseek">DeepSeek</option>
-          <option value="custom">Compatible endpoint</option>
-        </select>
-        <label for="providerApiKey">API key</label>
-        <input id="providerApiKey" name="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Enter a key or use a server environment variable">
-        <details id="providerAdvanced">
-          <summary>Advanced connection options</summary>
-          <label for="providerBaseUrl">Compatible base URL</label>
-          <input id="providerBaseUrl" name="baseUrl" type="url" placeholder="https://provider.example/v1">
-          <label for="providerModel">Model</label>
-          <input id="providerModel" name="model" type="text" placeholder="Choose automatically">
-        </details>
-        <p id="providerStatus" class="dialog-status" aria-live="polite">Not connected.</p>
-        <div class="dialog-actions">
-          <button id="cancelProviderConnection" class="secondary-button" type="button">Cancel</button>
-          <button id="testProviderConnection" type="submit">Test connection</button>
-        </div>
-      </form>
-    </dialog>
-    <script src="/wizard-state.js"></script>
-    <script src="/preview-state.js"></script>
-    <script src="/authoritative-preview-state.js"></script>
-    <script src="/selection-state.js"></script>
-    <script src="/ai-refinement-state.js"></script>
-    <script src="/onboarding-state.js"></script>
+    <footer class="site-footer">Add a new folder under <code>recipes/</code> to expand the catalog.</footer>
     <script src="/app.js"></script>
   </body>
 </html>

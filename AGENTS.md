@@ -1,92 +1,24 @@
-# BeamerForge - AI Agent Instructions
+# Beamer Template Catalog - AI Agent Instructions
 
-## What This Is
+## Purpose
 
-BeamerForge is a catalog of Beamer (LaTeX presentation) design elements. It helps AI generate Beamer templates by providing structured design context.
+This repository is a read-only catalog for user-created Beamer template recipes.
 
-## How to Use This Repo
+## Recipe contract
 
-When a user wants to create a Beamer template:
+When adding or reviewing a template, work inside `recipes/<template-name>/`. Keep the user's source files intact. A recipe should include a descriptive `README.md`, and may include `main.pdf`, root-level PNG/JPEG/WebP previews, LaTeX source, fonts, figures, and supporting files.
 
-1. **Read the vibe** — User describes the overall feeling (e.g., "modern tech", "academic formal")
-2. **Read WORKFLOW.md** — Follow the vague-to-specific design process
-3. **Read elements/** — Browse available colors, fonts, bullets, blocks
-4. **Generate template** — Combine selected elements into a complete .tex file
+## Application boundary
 
-## Key Files
+The application only discovers and displays recipes. Do not reintroduce template generation, design selection, AI refinement, compilation, project archiving, upload handling, or write APIs unless the user explicitly changes the project goal.
 
-| File | Purpose |
-|------|---------|
-| `WORKFLOW.md` | Design process: Vibe → Direction → Palette → Details → Template |
-| `ARCHITECTURE.md` | Layer × Element relationship |
-| `GUIDE.md` | Design review checklist |
-| `elements/` | Visual catalog of design elements |
-| `recipes/` | Complete template examples |
+## Verification
 
-## Element Categories
-
-```
-elements/
-├── colors/        # Color themes (blackred, dark-blue, green-minimal, etc.)
-├── typography/    # Font families (serif-neuton, sans-fira, etc.)
-├── bullets/       # Bullet point styles (standard, star, triangle, etc.)
-├── blocks/        # Block styles (classic, rounded, minimal)
-├── navigation/    # Header/footer styles (miniframes, footline, none)
-├── frames/        # Title page layouts (centered, left-aligned)
-└── content/       # Content patterns (bullets, figures, tables)
-```
-
-## Design Process
-
-```
-User: "I want something modern and techy"
-  ↓
-AI: Acknowledges vibe. Shows 2-3 directions:
-  [Dark mode]  [Light tech]  [Gradient]
-  ↓
-User: "Dark mode"
-  ↓
-AI: Shows 2-3 palettes:
-  [Teal+Fira]  [Purple+Source]  [Blue+Inter]
-  ↓
-User: "Teal+Fira"
-  ↓
-AI: Asks about details one at a time:
-  "What bullet style? Here are 4 options..."
-  ↓
-User: "Triangle bullets"
-  ↓
-AI: Generates complete .tex file
-```
-
-## Rules
-
-1. **Never ask users to pick individual elements upfront** — Start with vibe
-2. **Show visual previews** — Compile and show PDF/PNG when possible
-3. **One decision at a time** — Don't overwhelm with choices
-4. **Use natural language** — Technical terms only after direction is set
-5. **Generate complete files** — Always provide compilable .tex
-
-## Compiling Templates
-
-Use XeLaTeX (required for fontspec):
+Run:
 
 ```bash
-xelatex main.tex
-biber main
-xelatex main.tex
-xelatex main.tex
+npm run check
+npm test
 ```
 
-Or with latexmk:
-
-```bash
-latexmk -xelatex -interaction=nonstopmode main.tex
-```
-
-## Adding New Elements
-
-1. Create directory: `elements/{category}/{name}/`
-2. Write `README.md` with description, use cases, trade-offs
-3. Write `example.tex` with minimal compilable code
-4. Compile to generate preview PDF/PNG
+The server is started with `npm start` and serves the catalog at `http://localhost:5177/`.

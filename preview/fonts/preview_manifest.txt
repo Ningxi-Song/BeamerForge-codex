@@ -1,8 +1,0 @@
-Font preview manifest
-Layout: style grouped compact
-Preview pages: 27
-Families rendered: 209
-Page size: 1400x1800
-Generated files: style-XX-<category>-pageYY.png
-Visible fields: category title, family name, primary sample only
-Classification file: style_manifest.txt
