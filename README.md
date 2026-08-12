@@ -12,6 +12,13 @@ npm start
 
 Open <http://localhost:5177/>.
 
+## Template index
+
+| Template | Best for | Preview | Source |
+| --- | --- | --- | --- |
+| [Bamboo](recipes/bamboo/README.md) | Research talks, policy briefings, concept pitches, and analytical presentations | [View slides](recipes/bamboo/preview-contact-sheet.png) | [Browse files](recipes/bamboo/) |
+| [D Rose](recipes/d-rose/README.md) | Narratives about tension, contrast, inequality, crisis, and resilience | [View slides](recipes/d-rose/preview-contact-sheet.png) | [Browse files](recipes/d-rose/) |
+
 ## Add a template
 
 Create a folder under `recipes/`:
