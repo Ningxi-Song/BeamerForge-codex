@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="page01.png" width="520" alt="Air Pollution atmospheric cover">
+  <img src="fig/air-pollution-sketch.png" width="520" alt="Line drawing of industrial smokestacks, drifting air pollution, and a tree">
   <h1>Air Pollution</h1>
   <p><strong>A restrained Beamer recipe for environmental economics, exposure, and policy research.</strong></p>
   <p><em>Make the invisible visible. Let the evidence breathe.</em></p>
@@ -60,6 +60,7 @@ air-pollution/
 |-- main.pdf                 # Current compiled ten-slide deck
 |-- page01.png ... page10.png # Current catalog previews
 |-- previews/overview.png    # Contact sheet for documentation
+|-- fig/air-pollution-sketch.png # README introduction illustration
 |-- VALIDATION.md            # Build and visual inspection notes
 `-- original/                # Preserved Sharp Academic source and assets
 ```
