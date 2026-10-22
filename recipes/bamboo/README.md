@@ -22,12 +22,12 @@ Research talks, policy briefings, concept pitches, and analytical presentations 
 
 | Layer | Element |
 |-------|---------|
-| Colors | Original blue-white palette with alert accents |
+| Colors | Deep teal titles and block headers, pale teal block bodies, and medium teal list markers |
 | Fonts | Palatino serif body text |
 | Navigation | Miniframes header, page-number footer |
 | Blocks | Rounded Beamer blocks in normal, example, and alert styles |
-| Bullets | Original pifont markers |
-| Title page | Optional right-side image with a white curtain for title text |
+| Bullets | Full willow-leaf markers pointing down-right, with matching numbered lists |
+| Title page | Centered typography with restrained horizontal rules |
 
 ## Quick Start
 
@@ -59,10 +59,8 @@ bamboo/
 
 Edit the metadata in `main.tex`, then replace the files in `content/` with your own slides.
 
-To use the title-page curtain layout with your own image, place an image in `fig/` and uncomment:
+The title page uses a centered title, subtitle, presenter, institution, and date, with fine horizontal rules rather than literal botanical decoration.
 
-```latex
-\titleimage{fig/title-image.png}
-```
+The color hierarchy uses deep teal (`#0C5B7A`) for titles and block headers, pale teal (`#B2D5DB`) for block bodies, and medium teal (`#397C90`) for leaf and numbered list markers. Block headers use white text; body text remains black.
 
-The included `fig/bamboo-white.png` is for this README introduction page, not a required slide asset.
+The included `fig/bamboo-white.png` is the inspiration image for this README, not a required slide background.

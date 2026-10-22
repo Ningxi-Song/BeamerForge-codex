@@ -6,8 +6,8 @@
 \begin{tikzpicture}[
   >=Latex,
   node distance=1.1cm and 1.4cm,
-  box/.style={draw=myblue!65, rounded corners=2pt, fill=exampleBlockColor!45, minimum width=3.0cm, minimum height=0.9cm, align=center},
-  key/.style={draw=normalTitleBlockColor!80, rounded corners=2pt, fill=normalBlockColor!55, minimum width=3.0cm, minimum height=0.9cm, align=center},
+  box/.style={draw=myblue!65,  fill=exampleBlockColor!45, minimum width=3.0cm, minimum height=0.9cm, align=center},
+  key/.style={draw=normalTitleBlockColor!80,  fill=normalBlockColor!55, minimum width=3.0cm, minimum height=0.9cm, align=center},
   arr/.style={-{Latex[length=2.2mm]}, line width=0.8pt, draw=titleTextColor!72}
 ]
 \node[key] (question) {Question};
@@ -29,9 +29,9 @@
   \draw[->,normalTextColor!55] (0,0) -- (8.2,0) node[right]{Time};
   \draw[->,normalTextColor!55] (0,0) -- (0,4.2) node[above]{Index};
   \draw[myblue,line width=1.2pt] plot[smooth] coordinates{(0.2,0.8) (1.2,1.15) (2.4,1.42) (3.6,1.95) (4.8,2.34) (6.0,2.92) (7.4,3.35)};
-  \draw[alertTitleBlockColor,line width=1pt,dashed] plot[smooth] coordinates{(0.2,0.65) (1.2,0.9) (2.4,1.05) (3.6,1.22) (4.8,1.55) (6.0,1.75) (7.4,2.0)};
+  \draw[normalBlockColor,line width=1pt,dashed] plot[smooth] coordinates{(0.2,0.65) (1.2,0.9) (2.4,1.05) (3.6,1.22) (4.8,1.55) (6.0,1.75) (7.4,2.0)};
   \node[anchor=west,text=myblue] at (7.45,3.35) {Main series};
-  \node[anchor=west,text=alertTitleBlockColor] at (7.45,2.0) {Comparison};
+  \node[anchor=west,text=myblue] at (7.45,2.0) {Comparison};
 \end{tikzpicture}
 \caption{Replace this illustrative figure with your own result.}
 \end{figure}

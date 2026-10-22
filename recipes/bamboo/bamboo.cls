@@ -39,7 +39,7 @@
 \usepackage{colortbl}
 
 %%%%%%%%%%%% colors: original template palette
-\definecolor{myblue}{RGB}{69,105,144}
+\definecolor{myblue}{RGB}{12,91,122}
 \definecolor{titleColor}{RGB}{255,255,255}
 \definecolor{titleTextColor}{RGB}{1,49,78}
 \definecolor{bodyColor}{RGB}{255,255,255}
@@ -174,3 +174,91 @@
 \setlength{\bibitemsep}{0.3em}
 \setlength{\bibhang}{1.2em}
 \renewcommand*{\bibfont}{\footnotesize}
+% Bamboo typography, list markers, and centered title-page styling.
+\definecolor{stoneGray}{HTML}{708487}
+\setbeamercolor{section in head/foot}{bg=bodyColor,fg=stoneGray}
+\setbeamercolor{subsection in head/foot}{bg=bodyColor,fg=stoneGray}
+\setbeamercolor{section in head/foot shaded}{fg=stoneGray!65!bodyColor}
+\setbeamercolor{author in head/foot}{fg=stoneGray,bg=bodyColor}
+\setbeamercolor{caption name}{fg=myblue}
+\setbeamercolor{itemize subitem}{fg=stoneGray}
+\setbeamercolor{enumerate item}{fg=myblue}
+\setbeamerfont{frametitle}{shape=\upshape}
+\setbeamerfont{title like}{shape=\upshape}
+\newcommand{\inkleaf}{%
+  \tikz[baseline=-0.48ex,x=1em,y=1em]{%
+    \fill[bulletColor] (0,0.39) .. controls (0.35,0.43) and (0.65,0.16) .. (0.87,-0.05)
+      .. controls (0.53,-0.11) and (0.15,0.03) .. (0,0.39) -- cycle;
+  }%
+}
+\setbeamertemplate{itemize item}{\inkleaf}
+\setbeamertemplate{itemize subitem}{\textendash}
+\setbeamertemplate{enumerate item}{\arabic{enumi}.}
+\setbeamertemplate{enumerate subitem}{\alph{enumii}.}
+\newcommand{\inkblockbegin}[1]{%
+ \par\vskip0.7ex
+ \begin{tcolorbox}[colback=normalBlockColor,colframe=#1,boxrule=0pt,
+   leftrule=0.65pt,arc=0pt,outer arc=0pt,left=8pt,right=8pt,top=5pt,bottom=5pt]
+ {\color{#1}\insertblocktitle\par}\vspace{2pt}
+ \raggedright\usebeamerfont{normal text}\color{normalTextColor}
+}
+\setbeamertemplate{block begin}{\inkblockbegin{myblue}}
+\setbeamertemplate{block end}{\end{tcolorbox}}
+\setbeamertemplate{block example begin}{\inkblockbegin{myblue}}
+\setbeamertemplate{block example end}{\end{tcolorbox}}
+\setbeamertemplate{block alerted begin}{\inkblockbegin{alertTextColor}}
+\setbeamertemplate{block alerted end}{\end{tcolorbox}}
+
+
+% Abstract typographic cover; no literal botanical illustration.
+\setbeamerfont{title}{size=\fontsize{23pt}{29pt}\selectfont,shape=\upshape}
+\setbeamertemplate{title page}{%
+ \begin{tikzpicture}[remember picture,overlay]
+  \fill[bodyColor] (current page.south west) rectangle (current page.north east);
+  \draw[myblue!55,line width=0.55pt]
+    ([xshift=0.12\paperwidth,yshift=-0.115\paperheight]current page.north west) --
+    ([xshift=-0.12\paperwidth,yshift=-0.115\paperheight]current page.north east);
+  \draw[myblue!20,line width=0.35pt]
+    ([xshift=0.12\paperwidth,yshift=0.115\paperheight]current page.south west) --
+    ([xshift=-0.12\paperwidth,yshift=0.115\paperheight]current page.south east);
+  \node[anchor=center,inner sep=0pt,text width=0.78\paperwidth,align=center] at (current page.center) {%
+    {\usebeamerfont{title}\color{myblue}\inserttitle\par}
+    \vspace{0.3cm}
+    {\usebeamerfont{subtitle}\color{myblue}\insertsubtitle\par}
+    \vspace{0.4cm}
+    {\color{myblue!55}\rule{0.085\paperwidth}{1.0pt}\par}
+    \vspace{0.45cm}
+    {\usebeamerfont{author}\color{normalTextColor}\insertauthor\par}
+    \vspace{0.08cm}
+    {\usebeamerfont{institute}\color{normalTextColor}\insertinstitute\par}
+    \vspace{0.35cm}
+    {\usebeamerfont{date}\color{normalTextColor}\insertdate\par}
+  };
+ \end{tikzpicture}%
+}
+% Navigation uses the primary theme color.
+\setbeamercolor{section in head/foot}{bg=white,fg=myblue}
+\setbeamercolor{subsection in head/foot}{bg=white,fg=myblue}
+
+% Two-tone hierarchy from the original reference block.
+\setbeamercolor{itemize item}{fg=normalBlockColor}
+\setbeamercolor{itemize subitem}{fg=normalBlockColor}
+\setbeamercolor{enumerate item}{fg=normalBlockColor}
+\setbeamercolor{enumerate subitem}{fg=normalBlockColor}
+\setbeamercolor{block title}{fg=white,bg=normalTitleBlockColor}
+\setbeamercolor{block body}{fg=black,bg=normalBlockColor}
+\setbeamercolor{block title example}{fg=white,bg=normalTitleBlockColor}
+\setbeamercolor{block body example}{fg=black,bg=normalBlockColor}
+\setbeamercolor{block title alerted}{fg=white,bg=normalTitleBlockColor}
+\setbeamercolor{block body alerted}{fg=black,bg=normalBlockColor}
+\setbeamertemplate{blocks}[rounded][shadow=false]
+\definecolor{exampleBlockColor}{RGB}{178,213,219}
+\definecolor{exampleTitleBlockColor}{RGB}{12,91,122}
+\setbeamercolor{alerted text}{fg=normalTitleBlockColor}
+
+% Stronger, fuller willow-leaf and numbered list markers.
+\definecolor{bulletColor}{HTML}{397C90}
+\setbeamercolor{itemize item}{fg=bulletColor}
+\setbeamercolor{itemize subitem}{fg=bulletColor}
+\setbeamercolor{enumerate item}{fg=bulletColor}
+\setbeamercolor{enumerate subitem}{fg=bulletColor}
