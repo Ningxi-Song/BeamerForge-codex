@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/cafe_left.png" width="520" alt="Blue Yellow cafe illustration">
   <h1>Blue Yellow</h1>
-  <p><strong>A bold blue-yellow Beamer recipe for political economy and everyday choices.</strong></p>
+  <p><strong>A restrained blue-yellow academic Beamer recipe for political economy and everyday choices.</strong></p>
   <p><em>Everyday tables. Different identities. A shared space for inquiry.</em></p>
   <p><strong>Contributor:</strong> Willie SONG</p>
 </div>
@@ -14,9 +14,9 @@
 
 ## Inspiration
 
-Designed for **Politics on the Menu**, Blue Yellow begins with a cafe: an everyday setting where identity and economic choices meet. The introduction keeps that cafe illustration, while the redesigned slides translate the dining table into a geometric plate, fork, and knife.
+Designed for **Politics on the Menu**, Blue Yellow takes its subject from everyday choices and political identity. The cafe illustration in this introduction recalls that origin; the slides use a restrained academic layout built around the research itself.
 
-The poster-inspired edition pairs saturated ultramarine with bright yellow, large sans-serif typography, and generous white space. Blue introduces the talk, yellow marks its chapters, and white gives the evidence room to breathe. Its graphic rhythm is deliberately distinct from the catalog's softer, serif-led research themes.
+White pages, deep blue headings, muted gold accents, and TeX Gyre Heros typography give the deck a consistent seminar style. A centered title page presents the paper, author, and affiliation. Small chapter numbers, fine rules, and clear evidence pages support navigation without competing with the argument. The sans-serif typography distinguishes it from the catalog's serif-led themes.
 
 ## Best For
 
@@ -27,12 +27,12 @@ Political economy seminars, consumer-behavior research, and presentations about 
 | Layer | Element |
 | --- | --- |
 | Canvas | 16:9 widescreen |
-| Colors | Ultramarine `#173BD1`, yellow `#FFD43B`, ink `#17213B`, and white |
+| Colors | Deep blue `#234564`, muted gold `#C5A451`, ink `#253340`, and white |
 | Fonts | TeX Gyre Heros sans-serif; Latin Modern mathematics |
-| Navigation | Small section label, yellow title marker, and configurable footer labels |
-| Blocks | Open subheadings and flat pale-yellow takeaway strips |
-| Title page | Solid blue with a yellow plate and white cutlery, drawn in TikZ |
-| Section dividers | Solid yellow with oversized blue chapter numbers |
+| Navigation | Small gray section label, fine divider rule, and configurable footer labels |
+| Blocks | Open subheadings and subtle warm-white takeaway strips |
+| Title page | Centered paper title, subtitle, author, affiliation, and a fine gold rule |
+| Section dividers | White background, small gold chapter numbers, and deep blue headings |
 | Evidence | Full-width trend chart and a separate, spacious results table |
 | Example | 13 slides, including five chapter dividers |
 | Theme name | `PoliticsMenu`; the catalog folder is `blue-yellow` |
@@ -68,14 +68,14 @@ blue-yellow/
 
 ## Customization
 
-Edit the title, subtitle, author, institution, and date in `demo.tex`, then replace its example frames with your own research. The following minimal example uses the theme's existing metadata commands. Keep the title frame plain and insert a deliberate line break for a two-line cover title.
+Edit the title, subtitle, author, institution, and date in `demo.tex`, then replace its example frames with your own research. The following minimal example uses the theme's existing metadata commands. Keep the title frame plain and keep the cover title concise.
 
 
 ```tex
 \documentclass[aspectratio=169,11pt]{beamer}
 \usetheme{PoliticsMenu}
 
-\title[Politics on the Menu]{Politics on\\the Menu}
+\title[Politics on the Menu]{Politics on the Menu}
 \subtitle{Political Identity, Consumer Sorting,\\and Restaurant Engagement}
 \author{Your Name}
 \institute[Your University]{Department of Economics\\Your University}
@@ -101,7 +101,7 @@ Your content.
 - `\PMassetpath{path/}` - retained for compatibility; the new artwork needs no external image assets.
 - Theme option `nosectionpages` disables automatic section-divider slides.
 
-Adjust the `PMBlue`, `PMYellow`, and `PMInk` definitions in the theme to change its palette. The cover and chapter dividers use fixed geometric compositions, so keep headings concise and check the rendered output after changing text. The original edition is preserved in `original/`; compile its `demo.tex` from that folder to reproduce it.
+Adjust the `PMBlue`, `PMYellow`, and `PMInk` definitions in the theme to change its palette. The cover and chapter dividers use fixed text positions, so keep headings concise and check the rendered output after changing text. The original edition is preserved in `original/`; compile its `demo.tex` from that folder to reproduce it.
 
 The supplied review counts, trend coordinates, and regression entries are preserved. The chart and result table now occupy separate slides; the example explicitly identifies missing units and inference details instead of inventing them.
 
