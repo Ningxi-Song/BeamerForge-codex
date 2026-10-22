@@ -8,7 +8,7 @@
 
 ## Downloads
 
-[View full PDF](main.pdf) | [Download full PDF](main.pdf?raw=true) | [Browse source files](./)
+[View full PDF](main.pdf) | [Download full PDF](https://raw.githubusercontent.com/Ningxi-Song/BeamerForge-codex/main/recipes/d-rose/main.pdf) | [Browse source files](./)
 
 The PDF contains the complete example presentation. To use the editable LaTeX template, download this repository with **Code > Download ZIP** on GitHub and open this recipe folder. Keep its supporting files together.
 
