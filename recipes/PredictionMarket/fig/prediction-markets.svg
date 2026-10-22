@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" role="img" aria-labelledby="title desc">
+  <title id="title">Prediction Markets</title>
+  <desc id="desc">An ascending price path framed by four inward-facing blue corners.</desc>
+  <g fill="none" stroke="#2855F9" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M25 10H10V25 M95 10H110V25 M10 95V110H25 M95 110H110V95"/>
+    <path d="M28 84H49V63H71V42H92"/>
+  </g>
+  <g fill="#142238">
+    <rect x="24" y="80" width="8" height="8"/>
+    <rect x="45" y="59" width="8" height="8"/>
+    <rect x="67" y="38" width="8" height="8"/>
+    <rect x="88" y="38" width="8" height="8"/>
+  </g>
+</svg>

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="page-01.png" width="520" alt="Prediction Markets cover with an outlined price staircase">
+  <img src="fig/prediction-markets.svg" width="88" alt="Prediction Markets symbol">
   <h1>Prediction Markets</h1>
   <p><strong>A geometric Beamer recipe for prediction markets, information, and market design.</strong></p>
   <p><em>Information takes shape. Markets give it a price.</em></p>
@@ -49,6 +49,7 @@ PredictionMarket/
 |-- beamerthemePredictionSteps.sty  # Shared theme and layout macros
 |-- main.tex                       # Entry point and eleven example slides
 |-- main.pdf                       # Compiled presentation
+|-- fig/                           # Independent README symbol
 |-- preview-contact-sheet.png      # Combined slide preview
 |-- page-*.png                     # Individual slide previews
 |-- VALIDATION.md                  # Compilation and visual-review notes
