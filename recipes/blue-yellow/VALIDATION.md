@@ -5,7 +5,7 @@ Validated on 2026-10-22.
 - Compiled with pdfLaTeX; final output contains 13 pages with resolved page totals.
 - Final compilation log contains no overfull/underfull boxes or LaTeX/package warnings.
 - Visually inspected all 13 final rendered pages for typography, clipping, spacing, chart labels, and table legibility.
-- Replaced the poster design with a white academic layout, centered typographic cover, deep blue headings, muted gold details, and modest chapter numbers. Removed the plate/cutlery drawing and all saturated page backgrounds.
+- Restored the creator's intended blue-yellow political tension through opposing oblique color fields, staggered cover typography, and paired rules on evidence pages. No plate or cutlery artwork is used.
 - Compiled twice to resolve TikZ page anchors and page totals.
 - Both published PDFs are byte-identical; all 13 page previews and the contact sheet were refreshed.
 - Original source, README, and PDF match the pre-redesign Git revision `3d9dbc9` (allowing Windows line endings); original image assets are archived alongside them.

@@ -1,8 +1,8 @@
 <div align="center">
   <img src="assets/cafe_left.png" width="520" alt="Blue Yellow cafe illustration">
   <h1>Blue Yellow</h1>
-  <p><strong>A restrained blue-yellow academic Beamer recipe for political economy and everyday choices.</strong></p>
-  <p><em>Everyday tables. Different identities. A shared space for inquiry.</em></p>
+  <p><strong>An academic Beamer recipe shaped by blue-yellow confrontation, political identity, and everyday choices.</strong></p>
+  <p><em>Opposing colors. Contested identities. Evidence in the space between.</em></p>
   <p><strong>Contributor:</strong> Willie SONG</p>
 </div>
 
@@ -14,9 +14,11 @@
 
 ## Inspiration
 
-Designed for **Politics on the Menu**, Blue Yellow takes its subject from everyday choices and political identity. The cafe illustration in this introduction recalls that origin; the slides use a restrained academic layout built around the research itself.
+Blue Yellow originates in the creator's interpretation of confrontation during Hong Kong's political unrest. Blue and yellow carry the central meaning of the template: opposing political identities and the tension that reaches into everyday economic choices. **Politics on the Menu** places those questions in the setting of restaurants and consumer behavior; the cafe illustration above recalls that research setting.
 
-White pages, deep blue headings, muted gold accents, and TeX Gyre Heros typography give the deck a consistent seminar style. A centered title page presents the paper, author, and affiliation. Small chapter numbers, fine rules, and clear evidence pages support navigation without competing with the argument. The sans-serif typography distinguishes it from the catalog's serif-led themes.
+The visual composition gives both colors substantial weight. Oblique blue and yellow fields flank a white interval on the cover, with the typography stepping along its edge. Chapter pages bring the fields in from above and below. The separation between them expresses tension without turning the slide into an illustration of a literal object.
+
+Evidence pages translate the same contrast into paired blue-yellow rules, clear typography, and spacious charts and tables.
 
 ## Best For
 
@@ -27,12 +29,12 @@ Political economy seminars, consumer-behavior research, and presentations about 
 | Layer | Element |
 | --- | --- |
 | Canvas | 16:9 widescreen |
-| Colors | Deep blue `#234564`, muted gold `#C5A451`, ink `#253340`, and white |
+| Colors | Blue `#1649B8`, yellow `#F4CD28`, ink `#19232F`, and white |
 | Fonts | TeX Gyre Heros sans-serif; Latin Modern mathematics |
-| Navigation | Small gray section label, fine divider rule, and configurable footer labels |
-| Blocks | Open subheadings and subtle warm-white takeaway strips |
-| Title page | Centered paper title, subtitle, author, affiliation, and a fine gold rule |
-| Section dividers | White background, small gold chapter numbers, and deep blue headings |
+| Navigation | Small gray section label, paired blue-yellow rules, and configurable footer labels |
+| Blocks | Open subheadings and pale-yellow takeaway strips |
+| Title page | Opposing oblique blue-yellow fields with staggered typography in the white interval |
+| Section dividers | Blue and yellow fields framing a white band, with modest chapter numbers |
 | Evidence | Full-width trend chart and a separate, spacious results table |
 | Example | 13 slides, including five chapter dividers |
 | Theme name | `PoliticsMenu`; the catalog folder is `blue-yellow` |
@@ -75,7 +77,7 @@ Edit the title, subtitle, author, institution, and date in `demo.tex`, then repl
 \documentclass[aspectratio=169,11pt]{beamer}
 \usetheme{PoliticsMenu}
 
-\title[Politics on the Menu]{Politics on the Menu}
+\title[Politics on the Menu]{Politics on\\the Menu}
 \subtitle{Political Identity, Consumer Sorting,\\and Restaurant Engagement}
 \author{Your Name}
 \institute[Your University]{Department of Economics\\Your University}

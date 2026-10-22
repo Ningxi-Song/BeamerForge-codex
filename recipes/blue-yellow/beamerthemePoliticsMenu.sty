@@ -1,7 +1,7 @@
-% Blue Yellow / PoliticsMenu -- academic seminar edition.
+% Blue Yellow / PoliticsMenu -- opposing fields edition.
 % Compile twice with pdfLaTeX. Layout rules are drawn in TikZ.
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{beamerthemePoliticsMenu}[2026/10/22 v4.0 Blue Yellow academic edition]
+\ProvidesPackage{beamerthemePoliticsMenu}[2026/10/22 v5.0 Blue Yellow opposing fields edition]
 \RequirePackage[T1]{fontenc}
 \RequirePackage{lmodern}
 \RequirePackage{tgheros}
@@ -17,15 +17,15 @@
 \DeclareOption{nosectionpages}{\PMsectionpagesfalse}
 \DeclareOption{sectionpages}{\PMsectionpagestrue}
 \ProcessOptions\relax
-\definecolor{PMNavy}{HTML}{234564}
-\definecolor{PMNavyDeep}{HTML}{253340}
-\definecolor{PMBlue}{HTML}{234564}
+\definecolor{PMNavy}{HTML}{1649B8}
+\definecolor{PMNavyDeep}{HTML}{19232F}
+\definecolor{PMBlue}{HTML}{1649B8}
 \definecolor{PMBlueMid}{HTML}{73899D}
 \definecolor{PMBluePale}{HTML}{EEF2F5}
-\definecolor{PMYellow}{HTML}{C5A451}
+\definecolor{PMYellow}{HTML}{F4CD28}
 \definecolor{PMYellowSoft}{HTML}{E4D5AD}
-\definecolor{PMYellowPale}{HTML}{F7F5EE}
-\definecolor{PMInk}{HTML}{253340}
+\definecolor{PMYellowPale}{HTML}{FFF8DB}
+\definecolor{PMInk}{HTML}{19232F}
 \definecolor{PMGray}{HTML}{6C7780}
 \definecolor{PMFooter}{HTML}{DEE3E7}
 \definecolor{PMWhite}{HTML}{FFFFFF}
@@ -38,7 +38,7 @@
 \setbeamercolor{PMtakeaway}{fg=PMInk,bg=PMYellowPale}
 \setbeamerfont{normal text}{family=\sffamily,size=\fontsize{18}{25}\selectfont}
 \setbeamerfont{frametitle}{family=\sffamily,series=\bfseries,size=\fontsize{28}{34}\selectfont}
-\setbeamerfont{title}{family=\sffamily,series=\bfseries,size=\fontsize{38}{46}\selectfont}
+\setbeamerfont{title}{family=\sffamily,series=\bfseries,size=\fontsize{42}{47}\selectfont}
 \setbeamerfont{subtitle}{family=\sffamily,series=\mdseries,size=\fontsize{19}{26}\selectfont}
 \setbeamerfont{block title}{series=\bfseries,size=\fontsize{18}{24}\selectfont}
 \setbeamerfont{block body}{size=\fontsize{18}{25}\selectfont}
@@ -69,7 +69,7 @@
   \vspace{0.6cm}
   {\color{PMGray}\PMlabel{\insertsectionhead}}\par\vspace{0.3cm}
   \usebeamerfont{frametitle}\color{PMBlue}\insertframetitle\par\vspace{0.25cm}
-  {\color{PMFooter}\rule{\linewidth}{0.5pt}}\par\vspace{0.2cm}
+  {\color{PMBlue}\rule{0.48\linewidth}{1.2pt}\hfill\color{PMYellow}\rule{0.48\linewidth}{1.2pt}}\par\vspace{0.2cm}
 }
 \setbeamertemplate{footline}{%
   \begin{beamercolorbox}[wd=\paperwidth,ht=0.65cm,dp=0.3cm,leftskip=1.5cm,rightskip=1.5cm]{normal text}
@@ -77,38 +77,42 @@
     \color{PMBlue}\bfseries\insertframenumber\ /\ \inserttotalframenumber}
   \end{beamercolorbox}
 }
-% Quiet typographic title page: no illustration or decorative object.
+% Opposing color fields and an oblique white interval express political tension.
 \setbeamertemplate{title page}{%
   \begin{tikzpicture}[remember picture,overlay]
     \begin{scope}[shift={(current page.north west)}]
-      \node[anchor=north,text=PMGray] at (14.222,-2.1) {\PMlabel{\PM@seminar}};
-      \node[anchor=north,text=PMBlue,text width=24cm,align=center,inner sep=0pt]
-        at (14.222,-4.5) {\usebeamerfont{title}\inserttitle};
-      \node[anchor=north,text=PMInk,text width=23cm,align=center,inner sep=0pt]
-        at (14.222,-6.6) {\usebeamerfont{subtitle}\insertsubtitle};
-      \draw[PMYellow,line width=1pt] (11.7,-9.1) -- (16.744,-9.1);
-      \node[anchor=north,text=PMInk,text width=23cm,align=center,inner sep=0pt]
-        at (14.222,-10.1) {\insertauthor\par\vspace{0.35cm}{\fontsize{13}{19}\selectfont\color{PMGray}\insertinstitute}};
-      \node[anchor=north,text=PMGray,font=\fontsize{12}{16}\selectfont]
-        at (14.222,-13.1) {\insertdate};
-      \node[anchor=south east,text=PMGray,font=\fontsize{9}{12}\selectfont]
-        at (26.9,-15.1) {\PM@topright};
+      \fill[PMBlue] (0,0) -- (8.1,0) -- (3.1,-16) -- (0,-16) -- cycle;
+      \fill[PMYellow] (28.444,0) -- (25.344,0) -- (20.344,-16) -- (28.444,-16) -- cycle;
+      \draw[PMBlue,line width=0.6pt] (8.6,0) -- (3.6,-16);
+      \draw[PMYellow,line width=0.6pt] (24.844,0) -- (19.844,-16);
+      \node[anchor=north west,text=PMGray,inner sep=0pt] at (9.1,-2) {\PMlabel{\PM@seminar}};
+      \node[anchor=north west,text=PMInk,text width=15.4cm,align=left,inner sep=0pt]
+        at (8.5,-4.1) {\usebeamerfont{title}\inserttitle};
+      \node[anchor=north west,text=PMInk,text width=15cm,align=left,inner sep=0pt]
+        at (7.5,-8.3) {\usebeamerfont{subtitle}\insertsubtitle};
+      \node[anchor=north west,text=PMInk,text width=14cm,align=left,inner sep=0pt]
+        at (6.5,-11.5) {\insertauthor\par\vspace{0.3cm}{\fontsize{12}{17}\selectfont\color{PMGray}\insertinstitute\par\insertdate}};
+      \node[anchor=south west,text=white,rotate=90,font=\fontsize{10}{13}\selectfont]
+        at (1.1,-14.5) {\PM@sectiontagline};
+      \node[anchor=south east,text=PMInk,font=\fontsize{9}{12}\selectfont]
+        at (27.2,-15.1) {\PM@topright};
     \end{scope}
   \end{tikzpicture}
 }
 \setbeamertemplate{section page}{%
   \begin{tikzpicture}[remember picture,overlay]
     \begin{scope}[shift={(current page.north west)}]
+      \fill[PMBlue] (0,0) -- (28.444,0) -- (28.444,-2.1) -- (0,-4.3) -- cycle;
+      \fill[PMYellow] (0,-13.9) -- (28.444,-11.7) -- (28.444,-16) -- (0,-16) -- cycle;
       \node[anchor=west,text=PMGray,font=\fontsize{12}{16}\selectfont,inner sep=0pt]
-        at (3.8,-5.3) {\insertshorttitle};
-      \node[anchor=west,text=PMYellow,font=\fontsize{20}{25}\selectfont,inner sep=0pt]
-        at (3.8,-7.2) {\ifnum\insertsectionnumber<10 0\fi\insertsectionnumber};
-      \node[anchor=west,text=PMBlue,text width=20cm,align=left,inner sep=0pt,font=\bfseries\fontsize{32}{39}\selectfont]
-        at (5.4,-7.2) {\insertsectionhead};
-      \draw[PMFooter,line width=0.6pt] (3.8,-8.6) -- (24.644,-8.6);
+        at (3.1,-6) {\insertshorttitle};
+      \node[anchor=west,text=PMBlue,font=\fontsize{20}{25}\selectfont,inner sep=0pt]
+        at (3.1,-8) {\ifnum\insertsectionnumber<10 0\fi\insertsectionnumber};
+      \node[anchor=west,text=PMInk,text width=21cm,align=left,inner sep=0pt,font=\bfseries\fontsize{34}{41}\selectfont]
+        at (4.7,-8) {\insertsectionhead};
       \node[anchor=west,text=PMGray,font=\fontsize{11}{15}\selectfont,inner sep=0pt]
-        at (3.8,-9.6) {\PM@sectiontagline};
-      \node[anchor=south east,text=PMGray,font=\fontsize{10}{13}\selectfont]
+        at (3.1,-10) {\PM@sectiontagline};
+      \node[anchor=south east,text=PMInk,font=\fontsize{10}{13}\selectfont]
         at (26.9,-15.1) {\insertframenumber\ /\ \inserttotalframenumber};
     \end{scope}
   \end{tikzpicture}
@@ -121,7 +125,7 @@
   \begin{beamercolorbox}[wd=\linewidth,sep=0.45cm]{PMtakeaway}\usebeamerfont{normal text}
 }{\end{beamercolorbox}}
 \newcommand{\PMhighlight}[1]{\textcolor{PMBlue}{\bfseries #1}}
-\newcommand{\PMthinrule}{\par{\color{PMFooter}\rule{\linewidth}{0.5pt}}\par}
+\newcommand{\PMthinrule}{\par{\color{PMBlue}\rule{0.48\linewidth}{1.2pt}\hfill\color{PMYellow}\rule{0.48\linewidth}{1.2pt}}\par}
 \newcommand{\PMtoprule}{\arrayrulecolor{PMBlue}\hline\arrayrulecolor{black}}
 \newcommand{\PMmidrule}{\arrayrulecolor{PMFooter}\hline\arrayrulecolor{black}}
 \newcommand{\PMbottomrule}{\arrayrulecolor{PMBlue}\hline\arrayrulecolor{black}}
