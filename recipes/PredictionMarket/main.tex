@@ -1,21 +1,188 @@
-\documentclass[11pt]{polymarket}
-
-\title{Polymarket: Turning Future Events into Tradable Assets}
-\subtitle{A Guide for Economics \& Finance Researchers}
-\author{Ningxi SONG}
-\institute{HKU Business School}
-\date{}
-
+\documentclass[aspectratio=169,11pt]{beamer}
+\usetheme{PredictionSteps}
+\title{Prediction Markets}
+\author[Presenter Name]{Presenter Name}
+\institute[Institution]{Institution Name}
+\date{Research seminar}
 \begin{document}
 
 \begin{frame}[plain]
-  \pmcover
+\begin{PMcanvas}\PMcover\end{PMcanvas}
 \end{frame}
 
-\input{content/mechanism}
-\input{content/literature}
-\input{content/foundations}
-\input{content/contributions}
-\input{content/synthesis}
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{01 / FRAMEWORK}{Markets connect information to outcomes}
+\PMpoint{6.1}{Define a verifiable event.}
+\PMpoint{9.5}{Trade a contingent claim.}
+\PMpoint{12.9}{Resolve against a stated rule.}
+\PMtier{17}{11.2}{13.2}{3.2}{PMBlue}{white}{01 / INPUT}
+\PMtier{19.3}{8}{10.9}{3.2}{PMPanel}{PMInk}{02 / AGGREGATION}
+\PMtier{21.6}{4.8}{8.6}{3.2}{PMInk}{white}{03 / RESOLUTION}
+\node[anchor=west,text=white,font=\PMbody] at (17.4,-13.1) {Private information};
+\PMtext{19.8}{9.9}{Market price}
+\node[anchor=west,text=white,font=\PMbody] at (22.0,-6.7) {Realized outcome};
+\PMnote{Conceptual structure; the stepped geometry does not represent measured data.}
+\end{PMcanvas}
+\end{frame}
 
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{02 / CONTRACT}{One dollar backs a complete outcome pair}
+\fill[PMInk] (1.8,-4.8) rectangle (30.2,-7.4);
+\node[text=white,font=\PMbody] at (16,-6.1) {1 YES\qquad +\qquad 1 NO\qquad $\rightleftarrows$\qquad \$1};
+\PMpoint{9.4}{Split collateral into complementary claims.}
+\PMpoint{11.8}{Merge a complete pair to recover collateral.}
+\PMpoint{14.2}{The winning claim pays one dollar.}
+\PMlabel{27.2}{9.4}{01 / SPLIT}
+\PMlabel{27.2}{11.8}{02 / MERGE}
+\PMlabel{27.2}{14.2}{03 / SETTLE}
+\PMnote{Illustrative fully collateralized binary contract.}
+\end{PMcanvas}
+\end{frame}
+
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{03 / MARKET LIFECYCLE}{A stated rule connects trading to settlement}
+\PMpoint{11.4}{Specify the resolution rule before trading.}
+\PMpoint{12.8}{Match orders while the market is open.}
+\PMpoint{14.2}{Pay the winning claim after resolution.}
+\foreach \x/\num/\label/\detail/\name in {1.8/01/Define event/Specify the rule/define,9.2/02/Trade claims/Match orders/trade,16.6/03/Resolve event/Verify outcome/resolve,24/04/Settle claims/Pay the winner/settle} {
+ \node[draw=PMRule,fill=white,minimum width=6.2cm,minimum height=3.8cm,inner sep=0pt] (\name) at (\x+3.1,-6.9) {};
+ \draw[PMBlue,line width=1.5pt] (\x,-5)--(\x+1.1,-5);
+ \node[anchor=west,text=PMBlue,font=\PMmono,inner sep=0pt] at (\x+0.45,-5.65) {\num};
+ \node[anchor=west,text=PMInk,font=\PMbody,inner sep=0pt] at (\x+0.45,-6.8) {\label};
+ \node[anchor=west,text=PMMuted,font=\PMmono,inner sep=0pt] at (\x+0.45,-8) {\detail};
+}
+\foreach \a/\b in {define/trade,trade/resolve,resolve/settle} {\draw[-{Stealth[length=3mm]},PMBlue,line width=1.1pt] (\a.east)--(\b.west);}
+\PMnote{Illustrative lifecycle for a fully collateralized binary market; platform procedures vary.}
+\end{PMcanvas}
+\end{frame}
+
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{04 / ORDER BOOK}{The best quotes define the trading spread}
+\PMpoint{6.1}{The ask is an offer to sell.}
+\PMpoint{9.5}{The bid is an offer to buy.}
+\PMpoint{12.9}{Their difference is the spread.}
+\fill[PMPanel] (17,-5) rectangle (30.2,-14.5);
+\fill[PMInk] (17,-5) rectangle (30.2,-6.4);
+\node[anchor=west,text=white,font=\PMmono] at (17.5,-5.7) {LIMIT ORDER BOOK\quad /\quad SNAPSHOT};
+\node[anchor=north,font=\PMbody,text=PMInk,inner sep=0pt] at (23.6,-7.1) {\centering\renewcommand{\arraystretch}{0.95}\begin{tabular}{lrr}
+\toprule Side & Price & Shares\\\midrule
+Ask & 0.62 & 1,200\\
+Ask & 0.61 & 3,500\\
+Ask & 0.60 & 5,000\\\midrule
+Bid & 0.59 & 4,200\\
+Bid & 0.58 & 2,800\\\bottomrule
+\end{tabular}};
+\fill[PMBlue] (17,-13) rectangle (30.2,-14.5);
+\node[text=white,font=\PMbody] at (23.6,-13.75) {Spread\quad 0.60 $-$ 0.59 = 0.01};
+\PMnote{Synthetic order book for demonstrating the layout; not a live market snapshot.}
+\end{PMcanvas}
+\end{frame}
+
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{05 / PRICE PATH}{New information can move the market price}
+\PMpoint{6.1}{Signals change expected payouts.}
+\PMpoint{9.5}{Orders transmit those signals.}
+\PMpoint{12.9}{Prices adjust through trading.}
+\begin{scope}[shift={(17,-13.6)},x=1cm,y=1cm]
+ \foreach \y in {0,2.5,5,7.5} {\draw[PMRule,line width=0.5pt] (0,\y)--(12.2,\y);}
+ \fill[PMBlue!7] (0,0)--(0,1.1)--(3,1.1)--(3,3)--(6,3)--(6,4.7)--(9,4.7)--(9,7.2)--(12.2,7.2)--(12.2,0)--cycle;
+ \draw[PMBlue,line width=2pt] (0,1.1)-|(3,3)-|(6,4.7)-|(9,7.2)--(12.2,7.2);
+ \foreach \x/\y in {0/1.1,3/3,6/4.7,9/7.2} {\fill[PMInk] (\x-0.09,\y-0.09) rectangle (\x+0.09,\y+0.09);}
+ \node[anchor=west,text=PMBlue,font=\PMbody] at (9.25,7.75) {0.72};
+ \node[anchor=west,text=PMMuted,font=\PMbody] at (0,0.45) {0.20};
+ \node[anchor=north west,text=PMMuted,font=\PMmono] at (0,-0.4) {EARLIER};
+ \node[anchor=north east,text=PMMuted,font=\PMmono] at (12.2,-0.4) {LATER};
+\end{scope}
+\PMnote{Schematic price path with invented values; replace with a documented series.}
+\end{PMcanvas}
+\end{frame}
+
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{06 / MARKET QUALITY}{Trading activity does not establish accuracy}
+\PMpoint{6.1}{Volume measures participation.}
+\PMpoint{9.5}{Spreads measure trading costs.}
+\PMpoint{12.9}{Calibration requires outcomes.}
+\PMtier{17}{4.8}{9}{2.8}{PMPanel}{PMMuted}{01 / ACTIVITY}
+\PMtier{19}{8.2}{9}{2.8}{PMPanel}{PMMuted}{02 / LIQUIDITY}
+\PMtier{21}{11.6}{9.2}{2.8}{PMInk}{white}{03 / ACCURACY}
+\PMtext{17.5}{6.6}{Volume}
+\PMtext{19.5}{10}{Bid--ask spread}
+\node[anchor=west,text=white,font=\PMbody] at (21.4,-13.4) {Forecast vs. outcome};
+\PMnote{Distinct measures answer distinct questions; no empirical ranking is implied.}
+\end{PMcanvas}
+\end{frame}
+
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{07 / IDENTIFICATION}{Selection complicates causal interpretation}
+\PMpoint{6.1}{Measure skill before the event.}
+\PMpoint{9.5}{Separate entry from performance.}
+\PMpoint{12.9}{Seek credible external variation.}
+\fill[PMPanel] (17,-5) rectangle (30.2,-14.4);
+\node[draw=PMRule,fill=white,minimum width=5.5cm,minimum height=1.7cm,text=PMInk,font=\PMbody] (difficulty) at (23.6,-6.5) {Market difficulty};
+\node[draw=PMRule,fill=white,minimum width=4.8cm,minimum height=1.7cm,text=PMInk,font=\PMbody] (entry) at (20,-12) {Trader entry};
+\node[draw=PMRule,fill=white,minimum width=4.8cm,minimum height=1.7cm,text=PMInk,font=\PMbody] (accuracy) at (27.2,-12) {Accuracy};
+\draw[-{Stealth},PMMuted,line width=1pt] (difficulty.south)--++(0,-1.2)-|(entry.north);
+\draw[-{Stealth},PMMuted,line width=1pt] (difficulty.south)--++(0,-1.2)-|(accuracy.north);
+\draw[-{Stealth},PMBlue,line width=1.3pt] (entry.east)--(accuracy.west);
+\PMnote{Illustrative confounding structure; arrows express a research hypothesis.}
+\end{PMcanvas}
+\end{frame}
+
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{08 / EVALUATION}{Calibration compares forecasts with outcomes}
+\PMpoint{6.1}{Group comparable forecasts.}
+\PMpoint{9.5}{Compute realized frequencies.}
+\PMpoint{12.9}{Report sampling uncertainty.}
+\begin{scope}[shift={(18.4,-13.3)},x=9cm,y=8cm]
+ \draw[PMRule,line width=0.5pt] (0,0) grid[step=0.25] (1,1);
+ \draw[PMMuted,line width=0.7pt] (0,1)--(0,0)--(1,0);
+ \draw[PMBlue,line width=1.7pt] (0,0)--(1,1);
+ \node[anchor=north,text=PMMuted,font=\PMbody] at (0,-0.04) {0};
+ \node[anchor=north,text=PMMuted,font=\PMbody] at (1,-0.04) {1};
+ \node[anchor=east,text=PMMuted,font=\PMbody] at (-0.03,1) {1};
+ \node[anchor=west,text=PMBlue,font=\PMmono] at (0.18,0.9) {PERFECT CALIBRATION};
+\end{scope}
+\PMlabel{18.4}{14.8}{FORECAST PROBABILITY}
+\PMlabel{18.4}{4.6}{REALIZED FREQUENCY}
+\PMnote{Reference diagonal only; no observations or estimated calibration curve are supplied.}
+\end{PMcanvas}
+\end{frame}
+
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{09 / RESEARCH DESIGN}{Each question needs a corresponding test}
+\foreach \y/\num/\label/\detail in {5.0/01/Information costs/Credible cost shock,8.3/02/Trader composition/Variation beyond selection,11.6/03/Forecast accuracy/Realized outcomes} {
+ \fill[PMPanel] (1.8,-\y) rectangle (30.2,-\y-2.5);
+ \fill[PMBlue] (1.8,-\y) rectangle (3.2,-\y-2.5);
+ \node[text=white,font=\PMmono] at (2.5,-\y-1.25) {\num};
+ \node[anchor=west,text=PMInk,font=\PMbody] at (3.8,-\y-1.25) {\label};
+ \node[anchor=west,text=PMMuted,font=\PMbody] at (17,-\y-1.25) {\detail};
+}
+\PMnote{Template framework; replace these candidate questions with a specific research design.}
+\end{PMcanvas}
+\end{frame}
+
+\begin{frame}[plain]
+\begin{PMcanvas}
+\PMhead{10 / TAKEAWAY}{Separate the price, the mechanism, and the evidence}
+\PMpoint{6.1}{A price summarizes a tradable claim.}
+\PMpoint{9.5}{Trading incentives shape that price.}
+\PMpoint{12.9}{Accuracy remains an empirical question.}
+\PMtier{20.6}{4.8}{9.6}{3.2}{PMInk}{white}{01 / PRICE}
+\PMtier{18.8}{8}{11.4}{3.2}{PMPanel}{PMInk}{02 / MECHANISM}
+\PMtier{17}{11.2}{13.2}{3.2}{PMBlue}{white}{03 / EVIDENCE}
+\node[anchor=west,text=white,font=\PMbody] at (21,-6.7) {Contingent value};
+\PMtext{19.3}{9.9}{Information and incentives}
+\node[anchor=west,text=white,font=\PMbody] at (17.4,-13.1) {Outcomes and identification};
+\PMnote{The example is a research scaffold, not a completed empirical study.}
+\end{PMcanvas}
+\end{frame}
 \end{document}
