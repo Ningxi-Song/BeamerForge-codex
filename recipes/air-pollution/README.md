@@ -6,11 +6,15 @@
   <p><strong>Contributor:</strong> Willie SONG</p>
 </div>
 
+## Downloads
+
+[View full PDF](main.pdf) | [Download full PDF](main.pdf?raw=true) | [Browse source files](./)
+
+The PDF contains the complete example presentation. To use the editable LaTeX template, download this repository with **Code > Download ZIP** on GitHub and open this recipe folder. Keep its supporting files together.
+
 ## Preview
 
-![Air Pollution slide preview](previews/overview.png)
-
-[View the complete PDF](main.pdf)
+![Air Pollution slide preview](preview-contact-sheet.png)
 
 ## Inspiration
 
@@ -59,7 +63,8 @@ air-pollution/
 |-- main.tex                 # Current editable template
 |-- main.pdf                 # Current compiled ten-slide deck
 |-- page01.png ... page10.png # Current catalog previews
-|-- previews/overview.png    # Contact sheet for documentation
+|-- preview-contact-sheet.png # Standard combined slide preview
+|-- previews/overview.png    # Additional copy of the contact sheet
 |-- fig/air-pollution-sketch.png # README introduction illustration
 |-- VALIDATION.md            # Build and visual inspection notes
 `-- original/                # Preserved Sharp Academic source and assets
@@ -77,7 +82,7 @@ After compiling, regenerate the root-level slide previews from the final PDF. Wi
 pdftoppm -png -r 144 main.pdf page
 ```
 
-Rename the resulting `page-01.png` through `page-10.png` to `page01.png` through `page10.png`, replacing the previous previews. Update `previews/overview.png` if the slide sequence changes.
+Rename the resulting `page-01.png` through `page-10.png` to `page01.png` through `page10.png`, replacing the previous previews. Update `preview-contact-sheet.png` and `previews/overview.png` if the slide sequence changes.
 
 ## Included Slides
 

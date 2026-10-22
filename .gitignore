@@ -16,6 +16,8 @@
 
 # Generated PDFs (keep templates, ignore build artifacts)
 *.pdf
+# Published recipe decks are required catalog assets
+!recipes/*/main.pdf
 
 # Editor files
 *.swp

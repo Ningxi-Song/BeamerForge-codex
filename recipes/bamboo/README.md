@@ -6,6 +6,12 @@
   <p><strong>Contributor:</strong> Willie SONG</p>
 </div>
 
+## Downloads
+
+[View full PDF](main.pdf) | [Download full PDF](main.pdf?raw=true) | [Browse source files](./)
+
+The PDF contains the complete example presentation. To use the editable LaTeX template, download this repository with **Code > Download ZIP** on GitHub and open this recipe folder. Keep its supporting files together.
+
 ## Preview
 
 ![Bamboo slide preview](preview-contact-sheet.png)
@@ -44,6 +50,7 @@ xelatex main.tex
 bamboo/
 |-- bamboo.cls          # Theme class adapted from the original template
 |-- main.tex            # Entry point with replaceable metadata
+|-- main.pdf            # Complete compiled presentation
 |-- content/            # Replaceable slide sections
 |   |-- overview.tex
 |   |-- figures.tex

@@ -4,7 +4,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "node --test tests",
+    "test": "node --test tests/*.test.js",
     "check": "node --check workbench/recipe-catalog.js && node --check workbench/server.js && node --check workbench/public/app.js",
     "start": "node workbench/server.js"
   },
