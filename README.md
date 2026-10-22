@@ -16,6 +16,7 @@ Open <http://localhost:5177/>.
 
 | Template | Best for | Preview | Source |
 | --- | --- | --- | --- |
+| [Air Pollution](recipes/air-pollution/README.md) | Environmental economics, pollution exposure, and policy research | [View slides](recipes/air-pollution/previews/overview.png) | [Browse files](recipes/air-pollution/) |
 | [Bamboo](recipes/bamboo/README.md) | Research talks, policy briefings, concept pitches, and analytical presentations | [View slides](recipes/bamboo/preview-contact-sheet.png) | [Browse files](recipes/bamboo/) |
 | [D Rose](recipes/d-rose/README.md) | Narratives about tension, contrast, inequality, crisis, and resilience | [View slides](recipes/d-rose/preview-contact-sheet.png) | [Browse files](recipes/d-rose/) |
 

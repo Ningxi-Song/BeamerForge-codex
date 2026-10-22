@@ -1,0 +1,379 @@
+% sharp-academic / main.tex
+% A standalone, sharp black-and-white academic Beamer template.
+% Engine: pdflatex (recommended) or xelatex
+% Compile: pdflatex main.tex
+
+\documentclass[aspectratio=169,10pt]{beamer}
+
+% ------------------------------------------------------------------
+% Encoding & fonts
+% ------------------------------------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{microtype}
+\usepackage{ebgaramond}            % classical, elegant serif for the headings
+\renewcommand{\rmdefault}{lmr}     % keep the BODY in Latin Modern Roman
+
+% Body: Latin Modern Roman + Latin Modern Math.
+% Headings (title / frame title / block title): EB Garamond — classical & elegant.
+\usefonttheme{professionalfonts}
+\renewcommand{\familydefault}{\rmdefault}
+\setbeamerfont{title}{size=\LARGE,series=\bfseries,family=\fontfamily{EBGaramond-TLF}\selectfont}
+\setbeamerfont{subtitle}{size=\normalsize,series=\mdseries,family=\fontfamily{EBGaramond-TLF}\selectfont}
+\setbeamerfont{author}{size=\small,series=\mdseries}
+\setbeamerfont{institute}{size=\footnotesize,series=\mdseries}
+\setbeamerfont{date}{size=\footnotesize,series=\mdseries}
+\setbeamerfont{frametitle}{size=\large,series=\bfseries,family=\fontfamily{EBGaramond-TLF}\selectfont}
+\setbeamerfont{framesubtitle}{size=\small,series=\mdseries,family=\fontfamily{EBGaramond-TLF}\selectfont}
+\setbeamerfont{block title}{size=\normalsize,series=\bfseries,family=\fontfamily{EBGaramond-TLF}\selectfont}
+
+% ------------------------------------------------------------------
+% Graphics
+% ------------------------------------------------------------------
+\usepackage{tikz}
+\usetikzlibrary{positioning,calc,decorations.pathmorphing}
+
+% ------------------------------------------------------------------
+% Monochrome palette
+% ------------------------------------------------------------------
+\definecolor{bfblack}{HTML}{0A0A0A}        % near-black structure
+\definecolor{bfdarkgray}{HTML}{333333}     % body emphasis
+\definecolor{bfgray}{HTML}{888888}         % muted metadata
+\definecolor{bflightgray}{HTML}{E8E8E8}    % block bodies / rules
+\definecolor{bfsilver}{HTML}{F5F5F5}        % subtle background accents
+
+% ------------------------------------------------------------------
+% Global beamer colors
+% ------------------------------------------------------------------
+\setbeamercolor{background canvas}{bg=white}
+\setbeamercolor{normal text}{fg=bfblack}
+\setbeamercolor{frametitle}{fg=bfblack,bg=white}
+\setbeamercolor{framesubtitle}{fg=bfdarkgray,bg=white}
+\setbeamercolor{title}{fg=bfblack}
+\setbeamercolor{subtitle}{fg=bfdarkgray}
+\setbeamercolor{author}{fg=bfdarkgray}
+\setbeamercolor{institute}{fg=bfgray}
+\setbeamercolor{date}{fg=bfgray}
+\setbeamercolor{structure}{fg=bfblack}
+\setbeamercolor{alerted text}{fg=bfblack}
+
+% Blocks: stark black title, light gray body
+\setbeamertemplate{blocks}[default]
+\setbeamercolor{block title}{fg=white,bg=bfblack}
+\setbeamercolor{block body}{fg=bfblack,bg=bflightgray}
+\setbeamercolor{block title alerted}{fg=white,bg=bfblack}
+\setbeamercolor{block body alerted}{fg=bfblack,bg=white}
+\setbeamercolor{block title example}{fg=bfblack,bg=bflightgray}
+\setbeamercolor{block body example}{fg=bfblack,bg=white}
+
+% ------------------------------------------------------------------
+% Fountain-pen calligraphic bullets (true thick-thin pen strokes)
+% ------------------------------------------------------------------
+\newcommand{\penbullet}{%
+  \tikz[baseline=+0.60ex, scale=2.65, line join=round, line cap=round]{
+    % Thick downstroke (filled, tapered silhouette)
+    \fill[bfblack]
+      (0.2pt,4.6pt) .. controls (0.8pt,4.95pt) and (1.25pt,4.15pt) .. (1.55pt,3.55pt)
+      -- (1.25pt,3.40pt) .. controls (0.9pt,4.05pt) and (0.4pt,4.75pt) .. (-0.15pt,4.45pt)
+      -- cycle;
+    % Thin connecting hairline that loops up and exits
+    \draw[bfblack, line width=0.40pt]
+      (1.55pt,3.55pt) .. controls (1.95pt,2.75pt) and (1.35pt,2.05pt) .. (0.65pt,2.45pt)
+      .. controls (0.15pt,2.75pt) .. (0.45pt,3.25pt)
+      .. controls (0.95pt,3.75pt) .. (2.05pt,3.35pt)
+      .. controls (2.75pt,3.05pt) .. (3.35pt,2.75pt);
+  }%
+}
+\newcommand{\pensubbullet}{%
+  \tikz[baseline=+0.40ex, scale=2.30, line join=round, line cap=round]{
+    \fill[bfblack]
+      (0.15pt,3.35pt) .. controls (0.55pt,3.55pt) and (0.90pt,2.95pt) .. (1.10pt,2.50pt)
+      -- (0.88pt,2.40pt) .. controls (0.62pt,2.90pt) and (0.28pt,3.45pt) .. (-0.10pt,3.25pt)
+      -- cycle;
+    \draw[bfblack, line width=0.34pt]
+      (1.10pt,2.50pt) .. controls (1.40pt,1.95pt) and (0.95pt,1.45pt) .. (0.45pt,1.75pt)
+      .. controls (0.10pt,1.95pt) .. (0.30pt,2.35pt)
+      .. controls (0.70pt,2.75pt) .. (1.50pt,2.40pt)
+      .. controls (2.00pt,2.20pt) .. (2.45pt,2.00pt);
+  }%
+}
+\newcommand{\pendashbullet}{%
+  \tikz[baseline=+0.20ex, scale=1.95, line join=round, line cap=round]{
+    \fill[bfblack]
+      (0.10pt,2.20pt) .. controls (0.40pt,2.35pt) and (0.65pt,1.90pt) .. (0.80pt,1.60pt)
+      -- (0.60pt,1.50pt) .. controls (0.42pt,1.85pt) and (0.18pt,2.30pt) .. (-0.10pt,2.15pt)
+      -- cycle;
+    \draw[bfblack, line width=0.30pt]
+      (0.80pt,1.60pt) .. controls (1.10pt,1.10pt) and (0.80pt,0.70pt) .. (0.35pt,0.95pt)
+      .. controls (0.10pt,1.10pt) .. (0.25pt,1.45pt)
+      .. controls (0.55pt,1.80pt) .. (1.15pt,1.55pt)
+      .. controls (1.50pt,1.40pt) .. (1.80pt,1.25pt);
+  }%
+}
+
+\setbeamertemplate{itemize item}{\penbullet}
+\setbeamertemplate{itemize subitem}{\pensubbullet}
+\setbeamertemplate{itemize subsubitem}{\pendashbullet}
+\setbeamertemplate{enumerate item}[default]
+\setbeamercolor{item}{fg=bfblack}
+
+% ------------------------------------------------------------------
+% Navigation: minimal page number
+% ------------------------------------------------------------------
+\setbeamertemplate{footline}{%
+  \hfill{\footnotesize\color{bfgray}\insertframenumber}\hspace{1.2em}\vspace{0.7em}%
+}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{mini frames}{}
+
+% ------------------------------------------------------------------
+% Draw an irregular pebble at a given coordinate.  The shape is a
+% slightly distorted ellipse with a deterministic, index-driven seed.
+\newcommand{\pebbleat}[3]{%
+  % Five radial points with random radii and angles around the center.
+  \pgfmathsetmacro{\rA}{#2*(0.72+rnd*0.56)}%
+  \pgfmathsetmacro{\rB}{#2*(0.72+rnd*0.56)}%
+  \pgfmathsetmacro{\rC}{#2*(0.72+rnd*0.56)}%
+  \pgfmathsetmacro{\rD}{#2*(0.72+rnd*0.56)}%
+  \pgfmathsetmacro{\rE}{#2*(0.72+rnd*0.56)}%
+  \pgfmathsetmacro{\aA}{rnd*50}%
+  \pgfmathsetmacro{\aB}{\aA+65+rnd*35}%
+  \pgfmathsetmacro{\aC}{\aB+65+rnd*35}%
+  \pgfmathsetmacro{\aD}{\aC+65+rnd*35}%
+  \pgfmathsetmacro{\aE}{\aD+65+rnd*35}%
+  \fill[#3] plot[smooth cycle,tension=0.9] coordinates {
+    ($(#1)+(\aA:\rA pt)$)
+    ($(#1)+(\aB:\rB pt)$)
+    ($(#1)+(\aC:\rC pt)$)
+    ($(#1)+(\aD:\rD pt)$)
+    ($(#1)+(\aE:\rE pt)$)
+  };%
+}
+
+\newcommand{\progressdots}{%
+  \begin{tikzpicture}[remember picture,overlay]
+    \ifnum\inserttotalframenumber>0
+      \pgfmathsetmacro{\progratio}{\insertframenumber/\inserttotalframenumber}%
+    \else
+      \def\progratio{0}%
+    \fi
+    % Geometry (dots hug the top edge; title is pushed down to create a gap)
+    \def\dotY{-0.20cm}
+    \def\dotL{0.06\paperwidth}
+    \def\dotR{0.94\paperwidth}
+    \pgfmathsetmacro{\totaldots}{30}
+    \pgfmathsetmacro{\currentdot}{max(1,round(\progratio*\totaldots))}
+    % Draw the pebble row
+    \foreach \i in {1,...,\totaldots} {
+      \pgfmathsetmacro{\dotx}{\dotL + (\i-1)*(\dotR-\dotL)/(\totaldots-1)}
+      \coordinate (D) at ([xshift=\dotx,yshift=\dotY]current page.north west);
+      \pgfmathsetseed{\i*137}
+      \ifnum\i=\currentdot
+        % current position: larger pebble
+        \pebbleat{D}{2.6}{bfblack}
+      \else
+        \ifnum\i<\currentdot
+          % completed: small black pebble
+          \pebbleat{D}{1.25}{bfblack}
+        \else
+          % upcoming: small gray pebble
+          \pebbleat{D}{1.25}{bfgray}
+        \fi
+      \fi
+    }
+  \end{tikzpicture}%
+}
+
+% Draw the progress indicator on the background canvas, but skip plain frames
+% (title page and section dividers are plain).
+\makeatletter
+\setbeamertemplate{background canvas}{%
+  \ifbeamer@plainframe
+  \else
+    \progressdots%
+  \fi
+}
+\makeatother
+
+% ------------------------------------------------------------------
+% Frame title: bold + thin rule
+% ------------------------------------------------------------------
+\setbeamertemplate{frametitle}{%
+  \vspace{0.75cm}%
+  {\usebeamerfont{frametitle}\insertframetitle\par}%
+  \ifx\insertframesubtitle\empty\else%
+    \vspace{0.1cm}%
+    {\usebeamerfont{framesubtitle}\insertframesubtitle\par}%
+  \fi%
+  \vspace{0.15cm}%
+  {\color{bflightgray}\rule{\textwidth}{0.5pt}\par}%
+  \vspace{0.25cm}%
+}
+
+% ------------------------------------------------------------------
+% Title page: clean centered layout, no decorative accents
+% ------------------------------------------------------------------
+\setbeamertemplate{title page}{%
+  \vfill%
+  \begin{center}
+    {\usebeamerfont{title}\MakeUppercase{\inserttitle}\par}
+    \vspace{0.45cm}
+    {\usebeamerfont{subtitle}\insertsubtitle\par}
+    \vspace{1.3cm}
+    {\usebeamerfont{author}\insertauthor\par}
+    \vspace{0.2cm}
+    {\usebeamerfont{institute}\insertinstitute\par}
+    \vspace{0.2cm}
+    {\usebeamerfont{date}\insertdate\par}
+  \end{center}
+  \vfill%
+}
+
+% ------------------------------------------------------------------
+% Section divider: centered title with thin rules
+% ------------------------------------------------------------------
+\setbeamertemplate{section page}{%
+  \begin{tikzpicture}[remember picture,overlay]
+    \node[anchor=center,text width=0.8\paperwidth,align=center]
+      at (current page.center)
+      {\usebeamerfont{frametitle}\MakeUppercase{\insertsectionhead}\par};
+    % thin rules above and below the title
+    \draw[bflightgray, line width=0.6pt]
+      ([xshift=-4cm,yshift=1.0cm]current page.center)
+      -- ([xshift=4cm,yshift=1.0cm]current page.center);
+    \draw[bflightgray, line width=0.6pt]
+      ([xshift=-4cm,yshift=-1.0cm]current page.center)
+      -- ([xshift=4cm,yshift=-1.0cm]current page.center);
+  \end{tikzpicture}%
+}
+
+% Show the section divider at each new section
+\AtBeginSection[]{%
+  \begin{frame}[plain]
+    \sectionpage
+  \end{frame}%
+}
+
+% ------------------------------------------------------------------
+% Document metadata
+% ------------------------------------------------------------------
+\title{Black--White Sharp Academic Template}
+\subtitle{A clean, mathematical, monochrome presentation style}
+\author{Presenter Name}
+\institute{Department or Institution}
+\date{\today}
+
+% ------------------------------------------------------------------
+% Content begins
+% ------------------------------------------------------------------
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+\section{Introduction}
+
+\begin{frame}{Motivation}
+  This template is designed for academic talks that demand:
+  \begin{itemize}
+    \item A strict black-and-white palette with no color noise.
+    \item Classical EB Garamond headings over Latin Modern body and math.
+    \item Arrow bullets and a clean geometric motif.
+    \item Generous whitespace and a clear visual hierarchy.
+  \end{itemize}
+  \vspace{0.5cm}
+  The title page keeps a clean centered layout, free of decorative accents.
+\end{frame}
+
+\begin{frame}{Core design decisions}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{Typography}
+      \begin{itemize}
+        \item EB Garamond (classical serif) for headings.
+        \item Latin Modern Roman for body text.
+        \item Latin Modern Math for equations.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Color}
+      \begin{itemize}
+        \item Background: pure white.
+        \item Structure: near-black.
+        \item Accents: light gray rules and block fills.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{0.6cm}
+  All bullets use a sharp arrow marker for a forceful look.
+\end{frame}
+
+\section{Mathematical content}
+
+\begin{frame}{Equations}
+  The Latin Modern math font keeps formulas visually consistent with the text:
+  \[
+    \min_{x \in \mathbb{R}^n} \; f(x)
+    \quad \text{subject to} \quad
+    g_i(x) \leq 0, \; i = 1, \dots, m.
+  \]
+  \vspace{0.3cm}
+  For a linear model, the ordinary least-squares estimator is
+  \[
+    \hat{\beta} = (X^{\top} X)^{-1} X^{\top} y.
+  \]
+\end{frame}
+
+\begin{frame}{Theorem and proof sketch}
+  \begin{block}{Theorem (Consistency)}
+    Under standard regularity conditions, the estimator \(\hat{\beta}_n\) converges in probability to the true parameter \(\beta_0\).
+  \end{block}
+  \vspace{0.3cm}
+  \begin{alertblock}{Key insight}
+    Compactness of the parameter space and uniform convergence of the objective function are sufficient.
+  \end{alertblock}
+  \vspace{0.3cm}
+  \begin{exampleblock}{Example}
+    If \(\varepsilon_i \sim \mathcal{N}(0, \sigma^2)\), inference proceeds via the usual \(t\)- and \(F\)-statistics.
+  \end{exampleblock}
+\end{frame}
+
+\section{Figures and tables}
+
+\begin{frame}{A sample figure}
+  \begin{center}
+    \begin{tikzpicture}[scale=0.9]
+      % axes
+      \draw[->, thick, bfblack] (-0.3,0) -- (5,0) node[right] {\small \(x\)};
+      \draw[->, thick, bfblack] (0,-0.3) -- (0,3.5) node[above] {\small \(y\)};
+      % function
+      \draw[very thick, bfdarkgray] plot[domain=0:4.5, samples=50] (\x, {2.5*exp(-0.5*\x)});
+      % monochrome dot markers
+      \foreach \x in {0.5,1.5,2.5,3.5} {
+        \fill[bfblack] (\x, {2.5*exp(-0.5*\x)}) circle (2pt);
+      }
+      \node[right] at (3.5,2.3) {\small \(y = 2.5 e^{-x/2}\)};
+    \end{tikzpicture}
+  \end{center}
+  \vspace{0.3cm}
+  Monochrome dot markers keep the figure clean.
+\end{frame}
+
+\begin{frame}{Summary}
+  \begin{itemize}
+    \item Strict monochrome palette avoids distraction and prints cleanly.
+    \item Latin Modern fonts provide a mathematical, academic feel.
+    \item Thin gray rules and arrow bullets unify the visual system.
+    \item The template is self-contained: only standard LaTeX packages are required.
+  \end{itemize}
+  \vspace{0.6cm}
+  \begin{center}
+    {\Large\bfseries Thank you}\par
+    \vspace{0.3cm}
+    {\small\color{bfgray} questions@example.edu}
+  \end{center}
+\end{frame}
+
+\end{document}
