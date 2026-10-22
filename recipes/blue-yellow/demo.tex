@@ -89,6 +89,78 @@ Color labels are measurement devices; White does not mean politically neutral.
 \PMnote{The design summary is retained from the supplied demonstration.}
 \end{frame}
 
+
+% Reusable layout examples; schematic, not additional empirical findings.
+\begin{frame}{From review records to reported outcomes}
+\begin{center}
+\begin{tikzpicture}
+  \node[PMflow] (records) at (0,0) {\PMstep{01 / SOURCE}{Eligible\\review records}};
+  \node[PMflow] (groups) at (6.25,0) {\PMstep{02 / CLASSIFY}{Restaurant\\color groups}};
+  \node[PMflow] (design) at (12.5,0) {\PMstep{03 / COMPARE}{Empirical\\comparisons}};
+  \node[PMflow] (outcomes) at (18.75,0) {\PMstep{04 / REPORT}{Review counts\\and ratings}};
+  \foreach \a/\b in {records/groups,groups/design,design/outcomes}
+    \draw[PMarrow] (\a.east) -- (\b.west);
+  \draw[PMBlue,line width=1pt] (records.north west) -- (records.north east);
+  \draw[PMYellow,line width=1pt] (outcomes.south west) -- (outcomes.south east);
+\end{tikzpicture}
+\end{center}
+\vspace{0.75cm}
+\begin{center}\begin{minipage}{23.9cm}
+\begin{block}{Keep the measurement chain visible}
+Separate the source, classification, comparison, and reported outcome.
+\end{block}
+\PMnote{Schematic workflow for the supplied example; arrows indicate presentation order, not causal effects.}
+\end{minipage}\end{center}
+\end{frame}
+
+\begin{frame}{Separate definitions, conditions, and interpretation}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.47\textwidth}
+\begin{block}{Definition / restaurant groups}
+Color labels classify establishments. White does not mean politically neutral.
+\end{block}
+\end{column}
+\begin{column}{0.47\textwidth}
+\begin{alertblock}{Model condition / availability}
+Make the mapping from recorded stock to feasible choices explicit.
+\end{alertblock}
+\end{column}
+\end{columns}
+\vspace{1cm}
+\begin{exampleblock}{Interpretation / observed outcomes}
+Reviews and ratings do not directly measure tastes, transactions, or welfare.
+\end{exampleblock}
+\PMnote{Standard Beamer block, alertblock, and exampleblock environments share the same typographic hierarchy.}
+\end{frame}
+
+\begin{frame}{Distinguish two questions about restaurant engagement}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.46\textwidth}
+{\color{PMBlue}\rule{\linewidth}{0.8pt}}\par\vspace{0.45cm}
+{\rmfamily\fontsize{23}{28}\selectfont Local attention}\par\vspace{0.5cm}
+\begin{itemize}\setlength{\itemsep}{0.55cm}
+\item First qualifying Yellow reviews.
+\item Matched restaurant comparisons.
+\item Review counts and ratings.
+\end{itemize}
+\end{column}
+\begin{column}{0.46\textwidth}
+\vspace{0.12cm}
+{\color{PMYellow}\rule{\linewidth}{0.8pt}}\par\vspace{0.45cm}
+{\rmfamily\fontsize{23}{28}\selectfont Conditional allocation}\par\vspace{0.5cm}
+\begin{itemize}\setlength{\itemsep}{0.55cm}
+\item Review choice across colors.
+\item District-quarter activity held fixed.
+\item Recorded restaurant stock held fixed.
+\end{itemize}
+\end{column}
+\end{columns}
+\vspace{0.75cm}
+\begin{PMtakeaway}
+Local attention gains can coexist with weaker later attraction.
+\end{PMtakeaway}
+\end{frame}
+
 \section{Results}
 \begin{frame}{Report count and rating estimates together}
 \begin{center}
