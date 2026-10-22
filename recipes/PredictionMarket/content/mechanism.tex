@@ -1,0 +1,210 @@
+% ===================== SLIDE 2 — CONCEPT =====================
+\begin{frame}[t]
+\pmheader{CONCEPT}{02 / 22}
+\par\pmtitle{Real events become tradable probabilities}
+\begin{pmbody}
+\begin{itemize}\pmspreaditems
+  \item A prediction market converts the outcome of a real-world event into tradable shares across politics, sports, economics, technology, and weather.
+  \item Each outcome share trades in [0, 1] USD and is read directly as the market's implied probability.
+  \pmnote{Why [0,1]? Each share is backed by \$1 of collateral, which pins the price into this range -- derived on the next slide.}
+  \item This is not "betting": shares map to real outcomes and pay off via a resolution rule, not a bookmaker.
+  \item Settlement is on-chain; results are certified by an oracle, improving transparency.
+  \pmnote{"On-chain" = recorded on a public blockchain. Here: the Polygon network, using USDC, a dollar-pegged stablecoin.}
+\end{itemize}
+\begin{pmcallout}[Minimal example: a binary market]
+  Question: "Will candidate X win the election?" \quad [ YES ]\quad [ NO ] \\
+  Buy YES @ 0.60; if it happens $\to$ redeem 1.00 (profit 0.40); if not $\to$ YES goes to 0. \\
+  \textcolor{pmGrey}{\fontsize{12}{16}\selectfont Scope: this deck simplifies to binary YES/NO markets; multi-outcome markets use the same collateral logic.}
+\end{pmcallout}
+\end{pmbody}
+\end{frame}
+
+% ===================== SLIDE 3 — COLLATERAL =====================
+\begin{frame}[t]
+\pmheader{MECHANICS \textperiodcentered\ COLLATERAL}{03 / 22}
+\par\pmtitle{One YES + one NO are backed by \$1}
+\begin{pmbody}
+\begin{itemize}\pmspreaditems
+  \item Built on the Gnosis Conditional Token Framework -- an open smart-contract standard that mints YES/NO tokens and locks \$1 of collateral per pair.
+  \item Every YES + NO pair is backed by \$1 of collateral -- the "fully collateralized" promise.
+  \item Users can split \$1 into 1 YES + 1 NO, or merge 1 YES + 1 NO back into \$1.
+  \item The identity guarantees that payouts sum to \$1 regardless of the outcome.
+\end{itemize}
+\begin{pmcallout}[FULL COLLATERAL / SPLIT AND MERGE]
+\centering
+\textcolor{pmGreen}{\textbf{1 YES}}\quad +\quad \textcolor{pmRed}{\textbf{1 NO}}
+\qquad $\rightleftarrows$\qquad \textbf{\$1 USDC}\\[9pt]
+{\color{pmGrey}\fontsize{15}{21}\selectfont Split: \$1 becomes a token pair.\qquad Merge: a token pair returns \$1.}
+\end{pmcallout}
+\end{pmbody}
+\end{frame}
+
+% ===================== SLIDE 4 — SETTLEMENT =====================
+\begin{frame}[t]
+\pmheader{MECHANICS \textperiodcentered\ SETTLEMENT}{04 / 22}
+\par\pmtitle{Two ways to acquire a YES share}
+\begin{pmbody}
+\begin{pmcallout}[Method 1 \textperiodcentered\ Secondary trade (buy from a holder)]
+  You post "buy 1 YES @0.60"; if a holder sells, orders match and existing tokens change hands -- no new collateral is created.
+\end{pmcallout}
+\begin{pmcallout}[Method 2 \textperiodcentered\ Co-minting (paired with a NO buyer)]
+  You buy YES@0.60 while another buys NO@0.40; the two payments sum to exactly \$1, and the system mints a fresh YES/NO pair: YES to you, NO to them. \\
+  Matching: the engine first fills against resting orders (Method 1); only unmatched flow mints new pairs (Method 2).
+\end{pmcallout}
+\end{pmbody}
+\end{frame}
+
+% ===================== SLIDE 5 -- CLOB =====================
+\begin{frame}[t]
+\pmheader{PRICE FORMATION / CLOB}{05 / 21}
+\pmtitle{The order book determines the price}
+\begin{pmbody}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.59\textwidth}
+\begin{itemize}
+  \item User limit orders form the Central Limit Order Book (CLOB).
+  \item The displayed price is usually the midpoint; when the spread exceeds \$0.10, the last trade is shown.
+  \item Trader order flow drives price discovery; the platform matches and clears.
+  \item Thin liquidity widens spreads and increases reliance on the last trade.
+\end{itemize}
+\vspace{12pt}
+{\color{pmGrey}\fontsize{15}{21}\selectfont A limit order rests at a set price. The bid is the highest buy price; the ask is the lowest sell price.\par}
+\end{column}
+\begin{column}{0.35\textwidth}
+{\fontsize{18}{24}\selectfont
+\begin{pmkey}\textcolor{pmRed}{ASK / SELL}\end{pmkey}
+0.62 \hfill 1,200\\
+0.61 \hfill 3,500\\
+\textbf{0.60} \hfill 5,000
+\begin{pmkey}\textcolor{pmGreen}{BID / BUY}\end{pmkey}
+\textbf{0.59} \hfill 4,200\\
+0.58 \hfill 2,800\\
+0.57 \hfill 1,100\par}
+\end{column}
+\end{columns}
+\vspace{10pt}
+\begin{pmcallout}[READING THE BOOK]
+Spread = 0.60 $-$ 0.59 = 0.01 \qquad Midpoint = (0.60 + 0.59) / 2 = 0.595
+\end{pmcallout}
+\end{pmbody}
+\end{frame}
+
+% ===================== SLIDE 6 — MARKET MAKER =====================
+\begin{frame}[t]
+\pmheader{PARTICIPANTS \textperiodcentered\ MARKET MAKER}{06 / 22}
+\par\pmtitle{Market makers supply liquidity and bear risk}
+\begin{pmbody}
+\begin{itemize}\pmspreaditems
+  \item Without resting orders, a buyer cannot fill instantly. Market makers continuously post bids and asks.
+  \item Typical quote: YES bid = 0.59, ask = 0.61 -- earn the spread by buying low and selling high.
+  \item But MMs bear inventory risk (wrong-way exposure in trends) and adverse selection (informed traders trade against them).
+  \item In a one-sided YES rally, the MM may be forced into a short YES position -- not a sure win.
+\end{itemize}
+\begin{pmcallout}[]
+  MM posts orders (bid 0.59 / ask 0.61) \quad $\downarrow$ \quad earn spread $-$ inventory / adverse risk
+\end{pmcallout}
+\end{pmbody}
+\end{frame}
+
+% ===================== SLIDE 7 — PROFIT =====================
+\begin{frame}[t]
+\pmheader{PROFIT STRUCTURE}{07 / 22}
+\par\pmtitle{MM Profit = Spread + Rewards $-$ Risk}
+\begin{pmbody}
+\begin{itemize}\pmspreaditems
+  \item On the surface, three revenue streams: spread + rebates + liquidity incentives.
+  \item True profit must net out inventory risk and adverse selection -- MMing is not risk-free arbitrage.
+  \pmnote{Rewards are funded by the platform's market-maker incentive program (from trading fees / grants), not taken from other traders.}
+\end{itemize}
+\begin{pmcallout}[]
+  $\Pi_{\text{MM}}$ = Spread + Rewards $-$ Inventory Risk $-$ Adverse Selection
+\end{pmcallout}
+\end{pmbody}
+\end{frame}
+
+% ===================== SLIDE 8 — INFORMATION =====================
+\begin{frame}[t]
+\pmheader{PRICE DISCOVERY \textperiodcentered\ INFORMATION}{08 / 22}
+\par\pmtitle{Information reaches prices through order flow}
+\begin{pmbody}
+\vspace{4pt}
+{\centering\fontsize{18}{24}\selectfont
+  \textcolor{pmNavy}{\textbf{Private Info}} \arr\ 
+  \textcolor{pmNavy}{\textbf{Trade}} \arr\ 
+  \textcolor{pmNavy}{\textbf{Order Flow}} \arr\ 
+  \textcolor{pmNavy}{\textbf{Quote Rev.}} \arr\ 
+  \textcolor{pmNavy}{\textbf{Price Change}}
+\par}
+\vspace{8pt}
+\begin{itemize}\pmspreaditems
+  \item Informed traders hold a private signal and act on it.
+  \item Their trading pressure moves the quote; the market maker re-prices.
+\end{itemize}
+\begin{pmcallout}[Illustrative example]
+  If an informed trader believes the true probability is 80\% but the market is at 60\%, they keep buying YES; order flow pushes the quote toward 80\%. Information itself is invisible, but information-driven trading is observable -- that is how prediction markets achieve price discovery.
+\end{pmcallout}
+\end{pmbody}
+\end{frame}
+
+% ===================== SLIDE 9 — CAVEAT =====================
+\begin{frame}[t]
+\pmheader{INTERPRETATION \textperiodcentered\ CAVEAT}{09 / 22}
+\par\pmtitle{Price reflects more than average beliefs}
+\begin{pmbody}
+\begin{itemize}\pmspreaditems
+  \item When YES = 0.70, the rigorous reading is: the market is willing to trade at $\approx$70\% implied probability -- not "everyone believes 70\%."
+  \item Beyond information, price is shaped by capital, risk appetite, positions, liquidity, fees, MM inventory, and subsidies.
+  \item Empirically, treat the price as a "weight-adjusted willingness to trade", not an unbiased probability estimate.
+\end{itemize}
+\vspace{2pt}
+\begin{itemize}
+  \item[\textcolor{pmBlue}{\textbf{1}}] \textcolor{pmBlue}{\textbf{}} Capital -- large orders move price
+  \item[\textcolor{pmBlue}{\textbf{2}}] \textcolor{pmBlue}{\textbf{}} Risk appetite -- averse traders depress tails
+  \item[\textcolor{pmBlue}{\textbf{3}}] \textcolor{pmBlue}{\textbf{}} Liquidity -- thin books amplify noise
+  \item[\textcolor{pmBlue}{\textbf{4}}] \textcolor{pmBlue}{\textbf{}} Inventory -- MM hedging effects
+  \item[\textcolor{pmBlue}{\textbf{5}}] \textcolor{pmBlue}{\textbf{}} Fees / Subsidies
+  \item[\textcolor{pmBlue}{\textbf{6}}] \textcolor{pmBlue}{\textbf{}} Positions -- e.g. a trader hedging an election book may sell YES on a correlated market
+\end{itemize}
+\end{pmbody}
+\end{frame}
+
+% ===================== SLIDE 10 — PARTICIPANTS TABLE =====================
+\begin{frame}[t]
+\pmheader{ECOSYSTEM \textperiodcentered\ PARTICIPANTS}{10 / 22}
+\par\pmtitle{Seven participants, seven sources of value}
+\begin{pmbody}
+\vspace{4pt}
+{\centering
+\fontsize{18}{23}\selectfont\begin{tabular}{>{\raggedright\arraybackslash}p{0.30\linewidth}>{\raggedright\arraybackslash}p{0.62\linewidth}}
+\toprule
+\rowcolor{pmPanel}\textcolor{pmNavy}{\textbf{Participant}} & \textcolor{pmNavy}{\textbf{Source of profit}} \\
+\midrule
+Directional trader & more accurate forecast $\to$ buy low, sell high \\
+Informed trader & information ahead of price, front-run repricing \\
+Market maker & spread + rebates + liquidity incentives (net of risk) \\
+Arbitrageur & YES+NO deviates from \$1, or cross-market mispricing \\
+Hedger & reduces risk in other positions, not necessarily profitable alone \\
+Resolver / Oracle & rewards for correct or challenged resolution -- proposers and disputers post a bond; correct calls win the bond, wrong ones are slashed \\
+Platform & infrastructure, some fees, and data value -- earns a share of trading fees and sells aggregated market data \\
+\bottomrule
+\end{tabular}\par}
+\end{pmbody}
+\end{frame}
+
+% ===================== SLIDE 11 — RESOLUTION =====================
+\begin{frame}[t]
+\pmheader{SETTLEMENT \textperiodcentered\ RESOLUTION}{11 / 22}
+\par\pmtitle{Resolution determines which token pays \$1}
+\begin{pmbody}
+\begin{itemize}\pmspreaditems
+  \item After the outcome is clear, the market resolves: winning tokens redeem \$1, losers go to 0.
+  \item Uses UMA Optimistic Oracle: anyone can propose a result, and anyone can dispute an incorrect one.
+  \pmnote{Proposers and disputers post a bond; if disputed, UMA token-holders vote. False proposals are slashed and honest disputers rewarded -- the bond + vote blocks endless or abusive challenges.}
+  \item "Optimistic" means a result passes by default unless challenged within the dispute window -- balancing efficiency and correction.
+  \item On-chain settlement + disputability make payouts transparent and auditable, unlike a bookmaker.
+\end{itemize}
+\begin{pmcallout}[Resolution steps]
+  1. Outcome determined (real-world state settles) \arr\ 2. Submit result (anyone; bond posted, oracle accepts by default) \arr\ 3. Dispute window (can be challenged $\to$ token-holder vote) \arr\ 4. YES=1 / NO=0 (winners get \$1, losers 0)
+\end{pmcallout}
+\end{pmbody}
+\end{frame}

@@ -18,7 +18,9 @@ Open <http://localhost:5177/>.
 | --- | --- | --- | --- |
 | [Air Pollution](recipes/air-pollution/README.md) | Environmental economics, pollution exposure, and policy research | [View slides](recipes/air-pollution/previews/overview.png) | [Browse files](recipes/air-pollution/) |
 | [Bamboo](recipes/bamboo/README.md) | Research talks, policy briefings, concept pitches, and analytical presentations | [View slides](recipes/bamboo/preview-contact-sheet.png) | [Browse files](recipes/bamboo/) |
+| [Blue Yellow](recipes/blue-yellow/README.md) | Political economy, consumer behavior, and everyday economic choices | [View slides](recipes/blue-yellow/preview-contact-sheet.png) | [Browse files](recipes/blue-yellow/) |
 | [D Rose](recipes/d-rose/README.md) | Narratives about tension, contrast, inequality, crisis, and resilience | [View slides](recipes/d-rose/preview-contact-sheet.png) | [Browse files](recipes/d-rose/) |
+| [Prediction Market](recipes/PredictionMarket/README.md) | Prediction markets, information aggregation, and market design | [View slides](recipes/PredictionMarket/preview-contact-sheet.png) | [Browse files](recipes/PredictionMarket/) |
 
 ## Add a template
 
@@ -35,6 +37,8 @@ recipes/my-template/
 ```
 
 The folder name may contain letters, numbers, hyphens, and underscores. The first Markdown heading becomes the catalog title; otherwise the folder name is used. Add the introduction and visual assets yourself, then refresh the catalog.
+
+Follow the introduction format used by [D Rose](recipes/d-rose/README.md): a centered image, title, one-sentence description, italic theme statement, and contributor credit. Use the same core sections in this order: Preview, Inspiration, Best For, Elements, Quick Start, File Structure, and Customization. Keep the inspiration specific to the recipe, preserve the contributor's own wording when available, and put extra provenance or technical notes after those sections. Raw HTML in this introduction is intended for GitHub rendering; the local catalog currently displays a limited Markdown subset.
 
 ## What the catalog displays
 
