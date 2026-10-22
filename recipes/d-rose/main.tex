@@ -19,7 +19,9 @@
 \ifdefined\hasSkyline
   \usebackgroundtemplate{%
     \begin{tikzpicture}[remember picture,overlay]
-      \node[anchor=north, yshift=-2.5cm] at (current page.south)
+      % Place the skyline below the title metadata; its white lower margin
+      % extends beyond the page while the complete drawing stays visible.
+      \node[anchor=south, inner sep=0pt, yshift=-1.8cm] at (current page.south)
         {\includegraphics[width=\paperwidth]{fig/hkskyline.png}};
     \end{tikzpicture}%
   }
