@@ -1,39 +1,75 @@
-# Prediction Markets — Stepwise
+<div align="center">
+  <img src="page-01.png" width="520" alt="Prediction Markets cover with an outlined price staircase">
+  <h1>Prediction Markets</h1>
+  <p><strong>A geometric Beamer recipe for prediction markets, information, and market design.</strong></p>
+  <p><em>Information takes shape. Markets give it a price.</em></p>
+  <p><strong>Contributor:</strong> Willie SONG</p>
+</div>
 
-A rebuilt academic Beamer recipe inspired by price ladders, order books, and stacked architectural planes. Square corners, stepped silhouettes, and monospaced numerical labels establish a digital visual identity.
+## Preview
 
-## Layout and typography
+![Prediction Markets slide preview](preview-contact-sheet.png)
 
-- Canvas: 32 × 18 cm, 16:9.
-- Body: Segoe UI, 18 pt with 25 pt leading; constant throughout the deck.
-- Content titles: Segoe UI Semibold, 26 pt; single line.
-- Cover title: 40 pt. Numerical cover accents: Consolas, 30 pt.
-- Metadata and source notes: 10 pt; never used for main arguments.
-- Bullets share a fixed left edge. Figures and tables are centered within their allocated visual region, independently of the text column.
-- Content occupies the upper, middle, and lower body regions. The footer and source-note zones remain separate.
-- Near-white canvas on every page, including the cover. Navy text and electric-blue accents; open staircase outlines on the cover. Never use full-page dark or saturated backgrounds.
+[View the complete PDF](main.pdf)
 
-## Files
+## Inspiration
 
-- `main.tex`: eleven editable demonstration slides.
-- `beamerthemePredictionSteps.sty`: shared theme and layout macros.
-- `main.pdf`: compiled deck.
-- `page-01.png` through `page-11.png`: full-page previews.
-- `preview-contact-sheet.png`: overview.
-- `VALIDATION.md`: compilation and visual-review record.
+Prediction Markets draws on price ladders, order books, and the layered structure of a trading terminal. Stepped forms suggest information accumulating into a market price, while square modules give mechanisms and evidence a clear place on the page. A near-white canvas, navy text, and electric-blue accents keep the visual language precise and restrained. Four inward-facing corner brackets frame the presentation; the outlined numerical staircase gives the cover its identity.
 
-## Build and edit
+## Best For
 
-Requires XeLaTeX, Segoe UI (including Semibold), and Consolas. Compile `main.tex` twice from this directory using `xelatex -interaction=nonstopmode -halt-on-error main.tex`.
+Economics and finance seminars, prediction-market introductions, market-design explanations, and research presentations about information aggregation, trading behavior, and forecast accuracy.
 
-Change the author, institution, and date in `main.tex`. `PMpoint` places a left-aligned bullet; `PMtier` creates a square visual layer. Coordinates are centimeters from the upper-left corner, with negative vertical coordinates inside `PMcanvas`. Keep bullet text short; split an overloaded slide instead of reducing its font size. The fixed layout must be rendered and visually checked after replacing text or charts.
+## Elements
 
-The contract, order book, price path, and research framework are illustrative teaching content. Numerical examples are synthetic and explicitly labeled; no empirical findings are claimed. Replace them with documented research material before presenting.
+| Layer | Element |
+|-------|---------|
+| Colors | Near-white canvas, navy text, electric-blue accents, and pale blue-gray panels |
+| Fonts | Segoe UI body, Segoe UI Semibold titles, and Consolas numerical accents |
+| Navigation | Section labels, author and institution footer, and page numbers |
+| Structure | Square modules, stacked tiers, and four symmetrical inward-facing corner brackets |
+| Bullets | Small blue squares with a consistent left-aligned text edge |
+| Diagrams | Four-stage market lifecycle, causal diagram, price path, and calibration reference |
+| Tables | Order-book example with a separate spread strip |
+| Title page | Left-aligned typography and an open numerical staircase on a light background |
 
-## Process diagram
+## Quick Start
 
-Page 4 adds a four-stage market lifecycle: define event, trade claims, resolve event, settle claims. Equal square-corner nodes, blue connectors, and consistent left-aligned labels share the theme typography.
+Requires XeLaTeX and the Segoe UI, Segoe UI Semibold, and Consolas fonts installed on your system.
 
-## Corner ornament
+```bash
+xelatex main.tex
+xelatex main.tex
+```
 
-Four mirrored, inward-facing blue L brackets sit flush with the page corners, on every slide including the cover. Each arm is 0.8 cm long and 0.12 cm thick. They replace the previous upper-right staircase logo. The shared `PMcorners` macro controls all four ornaments.
+## File Structure
+
+```text
+PredictionMarket/
+|-- beamerthemePredictionSteps.sty  # Shared theme and layout macros
+|-- main.tex                       # Entry point and eleven example slides
+|-- main.pdf                       # Compiled presentation
+|-- preview-contact-sheet.png      # Combined slide preview
+|-- page-*.png                     # Individual slide previews
+|-- VALIDATION.md                  # Compilation and visual-review notes
+`-- README.md                      # Recipe documentation
+```
+
+## Customization
+
+Edit the presenter, institution, and date in `main.tex`, then replace the example slides with your own material. The examples cover contract mechanics, a market lifecycle, an order book, price movements, and research design.
+
+The theme uses 18 pt body text and 26 pt content titles. Keep bullets short and left-aligned; center figures and tables within their allocated regions. Split crowded slides instead of reducing the body font size.
+
+To adjust the palette, edit `beamerthemePredictionSteps.sty`:
+
+```latex
+\definecolor{PMInk}{HTML}{142238}    % Main text
+\definecolor{PMBlue}{HTML}{2855F9}   % Accent
+\definecolor{PMPaper}{HTML}{F5F7FB}  % Near-white canvas
+\definecolor{PMPanel}{HTML}{E7EDF7}  % Local panels
+```
+
+`PMpoint` controls bullet placement, `PMtier` creates a visual layer, and `PMcorners` draws the four matching corner ornaments. Keep the canvas white or near-white, including on the cover, and reserve stronger colors for local elements. Recompile and inspect the slides after changing content or layout.
+
+Numerical examples are synthetic and labeled as illustrations. Replace them with documented data before presenting empirical findings.
