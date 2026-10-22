@@ -1,99 +1,55 @@
-% beamerthemePoliticsMenu.sty
-% Politics on the Menu -- Yellow / Blue / White Beamer theme
-% Compile with pdfLaTeX, LuaLaTeX, or XeLaTeX.
+% Blue Yellow / PoliticsMenu -- graphic poster edition.
+% Compile twice with pdfLaTeX. Artwork is drawn entirely in TikZ.
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{beamerthemePoliticsMenu}[2026/10/03 v2.0 Politics on the Menu theme]
-
+\ProvidesPackage{beamerthemePoliticsMenu}[2026/10/22 v3.0 Blue Yellow poster edition]
+\RequirePackage[T1]{fontenc}
+\RequirePackage{lmodern}
+\RequirePackage{tgheros}
 \RequirePackage{tikz}
-\RequirePackage{xcolor}
-\RequirePackage{graphicx}
 \RequirePackage{etoolbox}
-\RequirePackage{calc}
-\usetikzlibrary{calc,positioning}
-
-% -----------------------------------------------------------------------------
-% Options
-% -----------------------------------------------------------------------------
+\RequirePackage{colortbl}
+\usetikzlibrary{calc}
+\geometry{paperwidth=28.444cm,paperheight=16cm}
+\renewcommand{\familydefault}{\sfdefault}
+\usefonttheme{professionalfonts}
 \newif\ifPMsectionpages
 \PMsectionpagestrue
-\DeclareOption{sectionpages}{\PMsectionpagestrue}
 \DeclareOption{nosectionpages}{\PMsectionpagesfalse}
+\DeclareOption{sectionpages}{\PMsectionpagestrue}
 \ProcessOptions\relax
-
-% -----------------------------------------------------------------------------
-% Palette: muted Yellow / Blue / White
-% -----------------------------------------------------------------------------
-\definecolor{PMNavy}{HTML}{0A3555}
-\definecolor{PMNavyDeep}{HTML}{062B47}
-\definecolor{PMBlue}{HTML}{2F6689}
-\definecolor{PMBlueMid}{HTML}{7899B0}
-\definecolor{PMBluePale}{HTML}{EAF1F5}
-\definecolor{PMYellow}{HTML}{E5B51B}
-\definecolor{PMYellowSoft}{HTML}{F6E8B8}
-\definecolor{PMYellowPale}{HTML}{FBF5DF}
-\definecolor{PMInk}{HTML}{0B3150}
-\definecolor{PMGray}{HTML}{6D7E89}
-\definecolor{PMFooter}{HTML}{E7EFF4}
+\definecolor{PMNavy}{HTML}{173BD1}
+\definecolor{PMNavyDeep}{HTML}{17213B}
+\definecolor{PMBlue}{HTML}{173BD1}
+\definecolor{PMBlueMid}{HTML}{6C80BF}
+\definecolor{PMBluePale}{HTML}{EAF0FF}
+\definecolor{PMYellow}{HTML}{FFD43B}
+\definecolor{PMYellowSoft}{HTML}{FFE88C}
+\definecolor{PMYellowPale}{HTML}{FFF5CA}
+\definecolor{PMInk}{HTML}{17213B}
+\definecolor{PMGray}{HTML}{647089}
+\definecolor{PMFooter}{HTML}{D9DEEA}
 \definecolor{PMWhite}{HTML}{FFFFFF}
-
-% -----------------------------------------------------------------------------
-% Typography
-% -----------------------------------------------------------------------------
-\usefonttheme{professionalfonts}
-\IfFileExists{newtxtext.sty}{%
-  \RequirePackage{newtxtext}
-  \RequirePackage{newtxmath}
-}{%
-  \IfFileExists{mathpazo.sty}{\RequirePackage{mathpazo}}{}
-}
-
-\setbeamerfont{normal text}{family=\rmfamily,size=\normalsize}
-\setbeamerfont{title}{family=\rmfamily,series=\bfseries,size=\fontsize{26}{29}}
-\setbeamerfont{subtitle}{family=\rmfamily,series=\bfseries,size=\fontsize{17}{20}}
-\setbeamerfont{author}{family=\rmfamily,series=\bfseries,size=\fontsize{13.5}{15}}
-\setbeamerfont{institute}{family=\rmfamily,size=\fontsize{11.5}{13}}
-\setbeamerfont{date}{family=\rmfamily,size=\fontsize{11}{13}}
-\setbeamerfont{frametitle}{family=\rmfamily,series=\bfseries,size=\fontsize{15.8}{18.0}}
-\setbeamerfont{framesubtitle}{family=\rmfamily,size=\small}
-\setbeamerfont{section title}{family=\rmfamily,series=\bfseries,size=\fontsize{31}{34}}
-\setbeamerfont{headline}{family=\rmfamily,size=\fontsize{7.7}{9}}
-\setbeamerfont{footline}{family=\rmfamily,size=\fontsize{7.4}{8.5}}
-\setbeamerfont{section in head/foot}{family=\rmfamily,size=\fontsize{7.6}{9}}
-\setbeamerfont{section in head/foot shaded}{family=\rmfamily,size=\fontsize{7.6}{9}}
-\setbeamerfont{block title}{family=\rmfamily,series=\bfseries,size=\normalsize}
-\setbeamerfont{block body}{family=\rmfamily,size=\small}
-
-% -----------------------------------------------------------------------------
-% Beamer colors
-% -----------------------------------------------------------------------------
-\setbeamercolor{normal text}{fg=PMInk,bg=PMWhite}
-\setbeamercolor{structure}{fg=PMYellow}
-\setbeamercolor{title}{fg=PMNavyDeep,bg=PMWhite}
-\setbeamercolor{subtitle}{fg=PMNavyDeep,bg=PMWhite}
-\setbeamercolor{author}{fg=PMNavyDeep,bg=PMWhite}
-\setbeamercolor{institute}{fg=PMNavyDeep,bg=PMWhite}
-\setbeamercolor{date}{fg=PMNavyDeep,bg=PMWhite}
-\setbeamercolor{frametitle}{fg=PMNavyDeep,bg=PMWhite}
-\setbeamercolor{headline}{fg=PMWhite,bg=PMNavy}
-\setbeamercolor{footline}{fg=PMNavyDeep,bg=PMFooter}
-\setbeamercolor{section in head/foot}{fg=PMYellow,bg=PMNavy}
-\setbeamercolor{section in head/foot shaded}{fg=PMBluePale,bg=PMNavy}
-\setbeamercolor{block title}{fg=PMNavyDeep,bg=PMYellowPale}
-\setbeamercolor{block body}{fg=PMInk,bg=PMWhite}
-\setbeamercolor{alerted text}{fg=PMYellow}
-\setbeamercolor{itemize item}{fg=PMYellow}
-\setbeamercolor{itemize subitem}{fg=PMBlue}
-\setbeamercolor{enumerate item}{fg=PMNavyDeep,bg=PMYellow}
-
+\setbeamercolor{normal text}{fg=PMInk,bg=white}
+\setbeamercolor{structure}{fg=PMBlue}
+\setbeamercolor{frametitle}{fg=PMInk,bg=white}
+\setbeamercolor{alerted text}{fg=PMBlue}
+\setbeamercolor{block title}{fg=PMBlue,bg=white}
+\setbeamercolor{block body}{fg=PMInk,bg=white}
+\setbeamercolor{PMtakeaway}{fg=PMInk,bg=PMYellowPale}
+\setbeamerfont{normal text}{family=\sffamily,size=\fontsize{18}{25}\selectfont}
+\setbeamerfont{frametitle}{family=\sffamily,series=\bfseries,size=\fontsize{30}{35}\selectfont}
+\setbeamerfont{title}{family=\sffamily,series=\bfseries,size=\fontsize{56}{58}\selectfont}
+\setbeamerfont{subtitle}{family=\sffamily,series=\mdseries,size=\fontsize{19}{26}\selectfont}
+\setbeamerfont{block title}{series=\bfseries,size=\fontsize{18}{24}\selectfont}
+\setbeamerfont{block body}{size=\fontsize{18}{25}\selectfont}
+\setbeamerfont{itemize/enumerate body}{size=\fontsize{18}{25}\selectfont}
+\setbeamersize{text margin left=1.5cm,text margin right=1.5cm}
 \setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{headline}{}
 \setbeamertemplate{bibliography item}[text]
-
-% Slightly more breathing room than stock Beamer.
-\setbeamersize{text margin left=.55cm,text margin right=.55cm}
-
-% -----------------------------------------------------------------------------
-% Metadata helpers
-% -----------------------------------------------------------------------------
+\setbeamertemplate{itemize item}{\raisebox{0.2ex}{\color{PMBlue}\rule{6pt}{6pt}}}
+\setbeamertemplate{enumerate item}{\color{PMBlue}\bfseries\insertenumlabel.}
+\AtBeginDocument{\usebeamerfont{normal text}}
 \newcommand{\PM@seminar}{Economics Research Seminar}
 \newcommand{\PMseminar}[1]{\renewcommand{\PM@seminar}{#1}}
 \newcommand{\PM@topright}{}
@@ -103,173 +59,79 @@
 \newcommand{\PM@centerfooter}{\insertshorttitle}
 \newcommand{\PMcenterfooter}[1]{\renewcommand{\PM@centerfooter}{#1}}
 \newcommand{\PM@assets}{assets/}
-\newcommand{\PMassetpath}[1]{\renewcommand{\PM@assets}{#1}}
-\newcommand{\PM@sectiontagline}{POLITICAL IDENTITY MEETS EVERYDAY CONSUMPTION}
+\newcommand{\PMassetpath}[1]{\renewcommand{\PM@assets}{#1}} % Compatibility; no artwork dependency.
+\newcommand{\PM@sectiontagline}{IDENTITY / CHOICE / EVERYDAY LIFE}
 \newcommand{\PMsectiontagline}[1]{\renewcommand{\PM@sectiontagline}{#1}}
-
-% -----------------------------------------------------------------------------
-% Headline / navigation
-% -----------------------------------------------------------------------------
-\makeatletter
-\setbeamertemplate{section in head/foot}{%
-  \begin{tikzpicture}[baseline=(t.base)]
-    \node[inner sep=0pt,outer sep=0pt,text=PMYellow,font=\usebeamerfont{section in head/foot}] (t)
-      {\insertsectionheadnumber.\,\insertsectionhead};
-    \draw[PMYellow,line width=.65pt] ($(t.south west)+(0,-.055)$) -- ++(.62,0);
-  \end{tikzpicture}\hspace{1.20em}%
-}
-\setbeamertemplate{section in head/foot shaded}{%
-  {\color{PMBluePale}\insertsectionheadnumber.\,\insertsectionhead\hspace{1.20em}}%
-}
-
-\setbeamertemplate{headline}{%
-  \leavevmode
-  \begin{beamercolorbox}[wd=\paperwidth,ht=2.55ex,dp=.85ex,leftskip=.36cm,rightskip=.36cm]{headline}
-    \usebeamerfont{headline}%
-    \ifnum\value{framenumber}=1\relax
-      \insertshorttitle\hfill
-      \ifx\PM@topright\@empty
-        \PM@seminar\quad\textbar\quad\insertdate
-      \else
-        \PM@topright
-      \fi
-    \else
-      \insertsectionnavigationhorizontal{\dimexpr\paperwidth-.72cm\relax}{}{}
-    \fi
-  \end{beamercolorbox}%
-}
-
-\setbeamertemplate{footline}{%
-  \leavevmode
-  \begin{beamercolorbox}[wd=\paperwidth,ht=2.05ex,dp=.60ex,leftskip=.36cm,rightskip=.36cm]{footline}
-    \usebeamerfont{footline}%
-    \makebox[\dimexpr\paperwidth-.72cm\relax]{%
-      \PM@leftfooter\hfill\PM@centerfooter\hfill\insertframenumber\,/\,\inserttotalframenumber}
-  \end{beamercolorbox}%
-}
-% keep @-macros available inside the remainder of this theme
-
-% -----------------------------------------------------------------------------
-% Frame title
-% -----------------------------------------------------------------------------
+\newcommand{\PMlabel}[1]{{\fontsize{11}{14}\selectfont\bfseries\MakeUppercase{#1}}}
+\newcommand{\PMnote}[1]{\par\vspace{0.35cm}{\fontsize{11}{15}\selectfont\color{PMGray}#1\par}}
+\newcommand{\PMheading}[1]{{\color{PMBlue}\bfseries #1\par}\vspace{0.35cm}}
 \setbeamertemplate{frametitle}{%
-  \vspace{.28em}%
-  \begin{beamercolorbox}[wd=\paperwidth,leftskip=.55cm,rightskip=.55cm]{frametitle}
-    \usebeamerfont{frametitle}\insertframetitle\par
-    \ifx\insertframesubtitle\empty\else
-      \vspace{.12em}{\usebeamerfont{framesubtitle}\color{PMGray}\insertframesubtitle\par}
-    \fi
-    \vspace{.12em}{\color{PMYellow}\rule{.46cm}{1.05pt}}%
-  \end{beamercolorbox}%
-  \vspace{.18em}%
+  \vspace{0.6cm}
+  {\color{PMBlue}\PMlabel{\insertsectionhead}}\par\vspace{0.3cm}
+  \usebeamerfont{frametitle}\insertframetitle\par\vspace{0.25cm}
+  {\color{PMYellow}\rule{1.3cm}{4pt}}\par\vspace{0.2cm}
 }
-
-% -----------------------------------------------------------------------------
-% Title page -- faithful to the supplied visual target
-% -----------------------------------------------------------------------------
+\setbeamertemplate{footline}{%
+  \begin{beamercolorbox}[wd=\paperwidth,ht=0.65cm,dp=0.3cm,leftskip=1.5cm,rightskip=1.5cm]{normal text}
+    {\fontsize{10}{12}\selectfont\color{PMGray}\PM@leftfooter\hfill\PM@centerfooter\hfill
+    \color{PMBlue}\bfseries\insertframenumber\ /\ \inserttotalframenumber}
+  \end{beamercolorbox}
+}
+% A plate, fork, and knife reduced to print-like geometry.
+\newcommand{\PMplate}{%
+  \begin{scope}[shift={(21.4,-7.6)}]
+    \fill[PMYellow] (0,0) circle (3.7cm);
+    \draw[PMBlue,line width=2pt] (0,0) circle (2.65cm);
+    \draw[PMBlue,line width=1pt] (0,0) circle (2.38cm);
+    \draw[white,line width=7pt,line cap=round] (-4.65,-2.9) -- (-4.65,1.1);
+    \draw[white,line width=4pt,line cap=round] (-5.05,2.8) -- (-5.05,1.4) -- (-4.25,1.4) -- (-4.25,2.8);
+    \draw[white,line width=4pt,line cap=round] (-4.65,2.8) -- (-4.65,1.4);
+    \fill[white] (4.5,2.9) -- (4.5,-2.9) -- (4.85,-2.9) -- (4.85,0.5)
+      .. controls (5.35,1.3) and (5.15,2.5) .. (4.5,2.9);
+  \end{scope}
+}
 \setbeamertemplate{title page}{%
   \begin{tikzpicture}[remember picture,overlay]
-    % Pale cafe artwork occupying the left third, fading into the white canvas.
-    \node[anchor=south west,inner sep=0pt] at ($(current page.south west)+(0,.25)$) {%
-      \includegraphics[width=.365\paperwidth]{\PM@assets cafe_left.png}%
-    };
-
-    % Main title block lives in the right two-thirds, not centered on the whole slide.
-    \node[anchor=north,text width=.61\paperwidth,align=center,text=PMNavyDeep]
-      at ($(current page.north west)+(.675\paperwidth,-1.42cm)$) {%
-        {\usebeamerfont{title}\inserttitle\par}%
-        \vspace{.16cm}%
-        {\usebeamerfont{subtitle}\insertsubtitle\par}%
-      };
-
-    % Gold rule underneath the subtitle.
-    \draw[PMYellow,line width=1.05pt]
-      ($(current page.north west)+(.405\paperwidth,-3.88cm)$) --
-      ($(current page.north west)+(.900\paperwidth,-3.88cm)$);
-
-    % Author + affiliation.
-    \node[anchor=north,text width=.50\paperwidth,align=center,text=PMNavyDeep]
-      at ($(current page.north west)+(.675\paperwidth,-4.34cm)$) {%
-        {\usebeamerfont{author}\insertauthor\par}%
-        \vspace{.10cm}%
-        {\usebeamerfont{institute}\insertinstitute\par}%
-      };
-
-    % Seminar/date near the lower center, as in the mock-up.
-    \node[anchor=north,text width=.50\paperwidth,align=center,text=PMNavyDeep]
-      at ($(current page.north west)+(.675\paperwidth,-6.16cm)$) {%
-        {\usebeamerfont{date}\PM@seminar\par}%
-        \vspace{.06cm}%
-        {\usebeamerfont{date}\insertdate\par}%
-      };
-  \end{tikzpicture}%
-  \vphantom{\rule{1pt}{.72\paperheight}}%
+    \fill[PMBlue] (current page.south west) rectangle (current page.north east);
+    \begin{scope}[shift={(current page.north west)}]
+      \node[anchor=north west,text=PMYellow] at (1.5,-1.1) {\PMlabel{\PM@seminar}};
+      \node[anchor=north west,text=white,text width=13.4cm,align=left,inner sep=0pt]
+        at (1.5,-3.4) {\usebeamerfont{title}\inserttitle};
+      \node[anchor=north west,text=white,text width=13.4cm,align=left,inner sep=0pt]
+        at (1.5,-8.8) {\usebeamerfont{subtitle}\insertsubtitle};
+      \node[anchor=south west,text=white,text width=13.4cm,align=left,inner sep=0pt]
+        at (1.5,-14.5) {{\bfseries\insertauthor}\par\vspace{0.25cm}{\fontsize{12}{17}\selectfont\insertinstitute\par\insertdate}};
+      \node[anchor=north east,text=white,font=\fontsize{10}{13}\selectfont] at (26.9,-1.1) {\PM@topright};
+      \PMplate
+      \node[text=PMYellow] at (21.4,-13) {\PMlabel{\PM@sectiontagline}};
+    \end{scope}
+  \end{tikzpicture}
 }
-
-% -----------------------------------------------------------------------------
-% Section divider
-% -----------------------------------------------------------------------------
 \setbeamertemplate{section page}{%
   \begin{tikzpicture}[remember picture,overlay]
-    \node[anchor=south east,inner sep=0pt]
-      at ($(current page.south east)+(-.10cm,.25cm)$) {\includegraphics[height=.72\paperheight]{\PM@assets menu_corner.png}};
-
-    \node[anchor=north west,text=PMYellow,font=\usebeamerfont{section title}]
-      at ($(current page.north west)+(.72cm,-1.40cm)$) {\insertsectionnumber.};
-    \node[anchor=north west,text=PMNavyDeep,font=\usebeamerfont{section title}]
-      at ($(current page.north west)+(.72cm,-2.22cm)$) {\insertsectionhead};
-    \draw[PMYellow,line width=1.05pt]
-      ($(current page.north west)+(.72cm,-3.22cm)$) -- ++(4.45cm,0);
-    \node[anchor=north west,text=PMNavyDeep,font=\fontsize{7.2}{9}\selectfont\sffamily]
-      at ($(current page.north west)+(.72cm,-3.55cm)$) {\PM@sectiontagline};
-  \end{tikzpicture}%
-  \vphantom{\rule{1pt}{.72\paperheight}}%
+    \fill[PMYellow] (current page.south west) rectangle (current page.north east);
+    \begin{scope}[shift={(current page.north west)}]
+      \node[anchor=north west,text=PMBlue] at (1.5,-1.1) {\PMlabel{\insertshorttitle\ / \insertsectionhead}};
+      \node[anchor=north east,text=PMBlue,font=\bfseries\fontsize{150}{150}\selectfont,inner sep=0pt]
+        at (26.3,-2.5) {\ifnum\insertsectionnumber<10 0\fi\insertsectionnumber};
+      \node[anchor=west,text=PMBlue,text width=18cm,align=left,inner sep=0pt,font=\bfseries\fontsize{44}{48}\selectfont]
+        at (1.5,-8) {\insertsectionhead};
+      \fill[PMBlue] (1.5,-11.7) rectangle (26.9,-11.85);
+      \node[anchor=north west,text=PMBlue] at (1.5,-12.6) {\PMlabel{\PM@sectiontagline}};
+      \node[anchor=north east,text=PMBlue] at (26.9,-12.6) {\PMlabel{\insertframenumber\ /\ \inserttotalframenumber}};
+    \end{scope}
+  \end{tikzpicture}
 }
-
 \ifPMsectionpages
-  \AtBeginSection[]{%
-    \begin{frame}
-      \sectionpage
-    \end{frame}%
-  }
+  \AtBeginSection[]{\begin{frame}[plain]\sectionpage\end{frame}}
 \fi
-
-% -----------------------------------------------------------------------------
-% Lists and blocks
-% -----------------------------------------------------------------------------
-\setbeamertemplate{itemize item}{%
-  \raisebox{.15ex}{\tikz\fill[PMYellow] (0,0) circle (1.9pt);}%
-}
-\setbeamertemplate{itemize subitem}{%
-  \raisebox{.15ex}{\tikz\fill[PMBlue] (0,0) circle (1.35pt);}%
-}
-\setbeamertemplate{enumerate item}{%
-  \tikz[baseline=(n.base)]\node[circle,fill=PMYellow,text=PMNavyDeep,inner sep=1.8pt,font=\scriptsize\bfseries] (n) {\insertenumlabel};%
-}
-\setbeamertemplate{blocks}[rounded][shadow=false]
-
-% A soft block with the same restrained yellow header seen in the mock-up.
-\newenvironment{PMpanel}[1]{%
-  \begin{beamercolorbox}[wd=\linewidth,rounded=true,sep=.46em]{block title}%
-    \usebeamerfont{block title}#1
-  \end{beamercolorbox}%
-  \vspace{.12cm}
-  \begin{beamercolorbox}[wd=\linewidth,sep=.20em]{block body}%
-}{%
-  \end{beamercolorbox}%
-}
-
+\newenvironment{PMpanel}[1]{\PMheading{#1}}{\par}
 \newenvironment{PMtakeaway}{%
-  \begin{beamercolorbox}[wd=\linewidth,rounded=true,sep=.60em]{block title}%
-  \color{PMNavyDeep}\bfseries Takeaway.\normalfont\color{PMInk}\ }{\end{beamercolorbox}}
-
-\newcommand{\PMhighlight}[1]{\textcolor{PMYellow}{\bfseries #1}}
-\newcommand{\PMthinrule}{\par\vspace{.18em}{\color{PMYellow}\rule{.46cm}{1.05pt}}\vspace{.25em}\par}
-
-% Table-rule helpers for users who do not load booktabs.
+  \begin{beamercolorbox}[wd=\linewidth,sep=0.45cm]{PMtakeaway}\usebeamerfont{normal text}
+}{\end{beamercolorbox}}
+\newcommand{\PMhighlight}[1]{\textcolor{PMBlue}{\bfseries #1}}
+\newcommand{\PMthinrule}{\par{\color{PMYellow}\rule{1.3cm}{4pt}}\par}
 \newcommand{\PMtoprule}{\arrayrulecolor{PMBlue}\hline\arrayrulecolor{black}}
-\newcommand{\PMmidrule}{\arrayrulecolor{PMBluePale}\hline\arrayrulecolor{black}}
+\newcommand{\PMmidrule}{\arrayrulecolor{PMFooter}\hline\arrayrulecolor{black}}
 \newcommand{\PMbottomrule}{\arrayrulecolor{PMBlue}\hline\arrayrulecolor{black}}
-
-\makeatother
 \mode<all>

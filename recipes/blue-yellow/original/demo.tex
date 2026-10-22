@@ -1,0 +1,166 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+\usetheme{PoliticsMenu}
+
+\usepackage{booktabs}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\title[Politics on the Menu]{Politics on the Menu:}
+\subtitle{Political Identity, Consumer Sorting,\\and Restaurant Engagement}
+\author{Your Name}
+\institute[Your University]{Department of Economics\\Your University}
+\date{April 12, 2024}
+\PMseminar{Economics Research Seminar}
+\PMtopright{Economics Research Seminar\quad\textbar\quad Spring 2024}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\section{Motivation}
+
+\begin{frame}{Why Do Political Identities Matter in Everyday Choices?}
+\begin{columns}[T,totalwidth=\textwidth]
+  \begin{column}{0.45\textwidth}
+    \begin{itemize}
+      \item Political identity may influence not only what people think, but also where they choose to spend time and money.
+      \item Restaurants are a salient social space where political identity can shape consumer behavior beyond explicit politics.
+      \item We study restaurant choice, engagement, and consumer sorting across politically identified establishments.
+    \end{itemize}
+  \end{column}
+  \begin{column}{0.50\textwidth}
+    \begin{PMpanel}{Growth in Politically Identified Restaurant Reviews}
+    \centering
+    \begin{tikzpicture}
+      \begin{axis}[
+        width=\linewidth,height=4.15cm,
+        xmin=2016,xmax=2022,ymin=0,ymax=210,
+        axis lines=left,
+        xtick={2016,...,2022},
+        ytick={0,50,100,150,200},
+        tick label style={font=\scriptsize,text=PMInk},
+        legend style={draw=none,font=\scriptsize,at={(0.5,-0.20)},anchor=north,legend columns=2},
+        every axis plot/.append style={thick}
+      ]
+      \addplot+[PMBlue,mark=*,mark size=1.8pt] coordinates {(2016,12)(2017,24)(2018,35)(2019,47)(2020,62)(2021,89)(2022,108)};
+      \addlegendentry{Blue series}
+      \addplot+[PMYellow,mark=*,mark size=1.8pt] coordinates {(2016,16)(2017,39)(2018,57)(2019,79)(2020,104)(2021,145)(2022,183)};
+      \addlegendentry{Yellow series}
+      \end{axis}
+    \end{tikzpicture}
+    \end{PMpanel}
+  \end{column}
+\end{columns}
+\end{frame}
+
+\section{Data}
+
+\begin{frame}{Data and Measurement}
+\begin{columns}[T,totalwidth=\textwidth]
+  \begin{column}{0.52\textwidth}
+    \begin{PMpanel}{OpenRice review archive}
+      \begin{itemize}
+        \item 2,269,004 district-resolved eligible reviews.
+        \item 260,911 reviewers and 39,199 establishments.
+        \item Research window: 2016--2025.
+      \end{itemize}
+    \end{PMpanel}
+    \vspace{.28cm}
+    \begin{PMtakeaway}
+      The color labels are measurement devices. White does not mean politically neutral.
+    \end{PMtakeaway}
+  \end{column}
+  \begin{column}{0.43\textwidth}
+    \begin{PMpanel}{Three-color classification}
+      \centering
+      \begin{tabular}{lr}
+        \toprule
+        Group & Restaurants \\
+        \midrule
+        Yellow & 3,837 \\
+        Blue & 2,469 \\
+        White & 32,893 \\
+        \bottomrule
+      \end{tabular}
+    \end{PMpanel}
+  \end{column}
+\end{columns}
+\end{frame}
+
+\section{Empirical Strategy}
+
+\begin{frame}{Empirical Strategy and Main Results}
+\begin{columns}[T,totalwidth=\textwidth]
+  \begin{column}{0.48\textwidth}
+    \begin{PMpanel}{Empirical Strategy}
+      \begin{enumerate}
+        \item Compare allocation across fixed restaurant color groups.
+        \item Match restaurants around first qualifying Yellow reviews.
+        \item Estimate conditional review choice across Yellow, Blue, and White restaurants.
+      \end{enumerate}
+    \end{PMpanel}
+  \end{column}
+  \begin{column}{0.48\textwidth}
+    \begin{PMpanel}{Main Results}
+      \centering\scriptsize
+      \begin{tabular}{lcc}
+        \toprule
+        & Count & Rating \\
+        \midrule
+        Months +1 to +3  & 0.233*** & 0.983*** \\
+                         & (0.031)  & (0.242)  \\
+        Months +4 to +6  & 0.251*** & 1.289*** \\
+                         & (0.036)  & (0.258)  \\
+        Months +7 to +12 & 0.192*** & 1.031*** \\
+                         & (0.042)  & (0.243)  \\
+        \bottomrule
+      \end{tabular}
+      \vspace{.20cm}
+
+      \raggedright\tiny Notes: illustrative layout using manuscript estimates.
+    \end{PMpanel}
+  \end{column}
+\end{columns}
+\end{frame}
+
+\section{Results}
+
+\begin{frame}{Conditional Review Choice}
+\begin{PMpanel}{Main message}
+Estimated availability makes early residual Yellow attraction model-sensitive; the reopening-period decline persists.
+\end{PMpanel}
+
+\vspace{.28cm}
+\begin{columns}[T,totalwidth=\textwidth]
+  \begin{column}{0.50\textwidth}
+    \begin{itemize}
+      \item Availability differs from proportional adjustment.
+      \item Early attraction depends on supply normalization.
+      \item The late negative Yellow index remains across specifications.
+    \end{itemize}
+  \end{column}
+  \begin{column}{0.45\textwidth}
+    \begin{PMpanel}{Model object}
+      Conditional allocation across colors, holding district-quarter activity and recorded restaurant stock fixed.
+    \end{PMpanel}
+  \end{column}
+\end{columns}
+\end{frame}
+
+\section{Conclusion}
+
+\begin{frame}{Conclusion}
+\begin{itemize}
+  \item Market sorting, public identity expression, and business evaluation are related but not interchangeable.
+  \item Local attention-associated gains can coexist with weaker later aggregate attraction.
+  \item The evidence concerns recorded reviews and ratings, not political tastes, transactions, or welfare.
+\end{itemize}
+\vspace{.45cm}
+\begin{PMtakeaway}
+Use navy for structure, yellow for emphasis, and white space for the identification story.
+\end{PMtakeaway}
+\end{frame}
+
+\end{document}
